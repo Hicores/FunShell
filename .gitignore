@@ -1,0 +1,12 @@
+node_modules/
+dist/
+src-tauri/target/
+dest/
+.dev-data/
+coverage/
+*.log
+.idea/
+.vscode/
+Thumbs.db
+Desktop.ini
+
