@@ -90,6 +90,7 @@ pub fn run() {
             commands::history::list_command_history,
             commands::history::set_command_favorite,
             commands::history::clear_command_history,
+            commands::history::record_command_history,
             commands::history::list_command_presets,
             commands::history::save_command_preset,
             commands::history::delete_command_preset,

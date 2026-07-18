@@ -44,6 +44,8 @@ export function TerminalView({ tab, active }: TerminalViewProps) {
   const [search, setSearch] = useState("");
   const [history, setHistory] = useState<string[]>([]);
   const [historyIndex, setHistoryIndex] = useState<number | null>(null);
+  const inputBufferRef = useRef("");
+  const escapeSequenceRef = useRef(false);
   const [context, setContext] = useState<{ x: number; y: number; action: TerminalContextAction; text: string } | null>(null);
   const contextRequestRef = useRef(0);
 
@@ -93,7 +95,34 @@ export function TerminalView({ tab, active }: TerminalViewProps) {
       terminal.write("\x1b[32mroot@gateway-edge-01\x1b[0m:\x1b[34m~\x1b[0m# ");
     }
 
-    const input = terminal.onData((data) => void api.terminalInput(tab.sessionId, encodeBase64(data)));
+    const input = terminal.onData((data) => {
+      void api.terminalInput(tab.sessionId, encodeBase64(data));
+      let line = inputBufferRef.current;
+      let inEscapeSequence = escapeSequenceRef.current;
+      for (const character of data) {
+        if (inEscapeSequence) {
+          if (/[A-Za-z~]/.test(character)) inEscapeSequence = false;
+          continue;
+        }
+        if (character === "\x1b") { inEscapeSequence = true; continue; }
+        if (character === "\r" || character === "\n") {
+          const commandText = line.trim();
+          if (commandText) {
+            void api.recordHistory(tab.connectionId, commandText)
+              .then(() => window.dispatchEvent(new CustomEvent("funshell-command-executed", { detail: { sessionId: tab.sessionId } })))
+              .catch(() => undefined);
+          }
+          line = "";
+          continue;
+        }
+        if (character === "\u007f") { line = line.slice(0, -1); continue; }
+        if (character === "\u0003" || character === "\u0015") { line = ""; continue; }
+        if (character === "\u0017") { line = line.replace(/\s*\S+\s*$/, ""); continue; }
+        if (character === "\t" || character >= " ") line += character;
+      }
+      inputBufferRef.current = line;
+      escapeSequenceRef.current = inEscapeSequence;
+    });
     const resize = terminal.onResize(({ cols, rows }) => void api.resizeTerminal(tab.sessionId, cols, rows));
     const observer = new ResizeObserver(() => {
       fit.fit();
@@ -145,6 +174,7 @@ export function TerminalView({ tab, active }: TerminalViewProps) {
       terminalRef.current?.write("\x1b[32mroot@gateway-edge-01\x1b[0m:\x1b[34m~\x1b[0m# ");
     }
     await api.terminalCommand(tab.sessionId, value);
+    window.dispatchEvent(new CustomEvent("funshell-command-executed", { detail: { sessionId: tab.sessionId } }));
   };
 
   const openTerminalContextMenu = async (event: MouseEvent<HTMLDivElement>) => {

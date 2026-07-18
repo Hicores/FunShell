@@ -165,6 +165,11 @@ function mockCall(command: string, args?: Record<string, unknown>): unknown {
       return null;
     }
     case "clear_command_history": mockHistory.splice(0); return null;
+    case "record_command_history": {
+      const commandText = String(args?.command ?? "").trimEnd();
+      if (commandText.trim()) mockHistory.unshift({ id: String(Date.now()), connectionId: (args?.connectionId as string | null | undefined) ?? null, command: commandText, favorite: false, executedAt: new Date().toISOString() });
+      return null;
+    }
     case "submit_terminal_command": {
       const commandText = String(args?.command ?? "");
       if (commandText) mockHistory.unshift({ id: String(Date.now()), connectionId: null, command: commandText, favorite: false, executedAt: new Date().toISOString() });
@@ -230,6 +235,7 @@ export const api = {
   history: (connectionId?: string, search?: string) => call<CommandHistoryEntry[]>("list_command_history", { connectionId, search, limit: 300 }),
   favoriteHistory: (id: string, favorite: boolean) => call<void>("set_command_favorite", { id, favorite }),
   clearHistory: (connectionId?: string) => call<void>("clear_command_history", { connectionId }),
+  recordHistory: (connectionId: string | null, command: string) => call<void>("record_command_history", { connectionId, command }),
   presets: () => call<CommandPreset[]>("list_command_presets"),
   savePreset: (preset: CommandPreset) => call<CommandPreset>("save_command_preset", { preset }),
   deletePreset: (id: string) => call<void>("delete_command_preset", { id }),

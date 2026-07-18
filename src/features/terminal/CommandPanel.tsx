@@ -35,9 +35,18 @@ export function CommandPanel({ tab }: { tab: WorkspaceTab }) {
   }, [notify, search, tab.connectionId]);
   useEffect(() => { void refresh(); }, [refresh]);
 
+  useEffect(() => {
+    const onCommandExecuted = (event: Event) => {
+      const detail = (event as CustomEvent<{ sessionId: string }>).detail;
+      if (detail?.sessionId === tab.sessionId) void refresh();
+    };
+    window.addEventListener("funshell-command-executed", onCommandExecuted);
+    return () => window.removeEventListener("funshell-command-executed", onCommandExecuted);
+  }, [refresh, tab.sessionId]);
+
   const run = async (command: string) => { const resolved = resolvePresetVariables(command); if (resolved == null) return; await api.terminalCommand(tab.sessionId, resolved); await refresh(); };
-  const insert = (command: string) => {
-    const resolved = resolvePresetVariables(command);
+  const insert = (command: string, resolveVariables = true) => {
+    const resolved = resolveVariables ? resolvePresetVariables(command) : command;
     if (resolved == null) return;
     window.dispatchEvent(new CustomEvent("funshell-insert-command", { detail: { sessionId: tab.sessionId, command: resolved } }));
   };
@@ -58,7 +67,7 @@ export function CommandPanel({ tab }: { tab: WorkspaceTab }) {
         <header><label><Search size={14} /><input placeholder="搜索命令" value={search} onChange={(event) => setSearch(event.target.value)} /></label>{mode === "presets" && <button type="button" onClick={() => setEditorOpen(true)}><Plus size={14} />新建预设</button>}{mode === "history" && <button type="button" onClick={async () => { await api.clearHistory(tab.connectionId); await refresh(); }}><Trash2 size={14} />清空</button>}</header>
         <div className="command-list">
           {mode === "history" ? history.map((entry) => (
-            <div key={entry.id}><button type="button" title="收藏" onClick={async () => { await api.favoriteHistory(entry.id, !entry.favorite); await refresh(); }}><Star size={14} fill={entry.favorite ? "currentColor" : "none"} /></button><code>{entry.command}</code><span>{new Date(entry.executedAt).toLocaleString()}</span><button type="button" onClick={() => void run(entry.command)}><Play size={14} />执行</button></div>
+            <div key={entry.id}><button type="button" title="收藏" onClick={async () => { await api.favoriteHistory(entry.id, !entry.favorite); await refresh(); }}><Star size={14} fill={entry.favorite ? "currentColor" : "none"} /></button><button className="command-history-command" type="button" title="输入到命令框" onClick={() => insert(entry.command, false)}><code>{entry.command}</code></button><span>{new Date(entry.executedAt).toLocaleString()}</span><button type="button" onClick={() => void run(entry.command)}><Play size={14} />执行</button></div>
           )) : presets.filter((preset) => preset.name.includes(search) || preset.command.includes(search)).map((preset) => (
             <div key={preset.id}><Star size={14} /><strong>{preset.name}</strong><code>{preset.command}</code><span className="command-actions"><button type="button" onClick={() => insert(preset.command)}>插入</button><button type="button" onClick={() => void run(preset.command)}><Play size={14} />执行</button></span></div>
           ))}

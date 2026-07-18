@@ -38,6 +38,20 @@ pub fn clear_command_history(
 }
 
 #[tauri::command]
+pub fn record_command_history(
+    state: State<'_, AppState>,
+    connection_id: Option<String>,
+    command: String,
+) -> AppResult<()> {
+    if !command.trim().is_empty() {
+        state
+            .database
+            .add_history(connection_id.as_deref(), &command)?;
+    }
+    Ok(())
+}
+
+#[tauri::command]
 pub fn list_command_presets(state: State<'_, AppState>) -> AppResult<Vec<CommandPreset>> {
     state.database.list_presets()
 }
