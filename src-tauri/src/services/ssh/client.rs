@@ -1,17 +1,36 @@
+use russh::{
+    Channel,
+    client::{ChannelOpenHandle, Msg, Session},
+};
+use tokio::sync::mpsc;
+
 use crate::{error::AppResult, persistence::Database};
+
+pub struct ForwardedChannel {
+    pub channel: Channel<Msg>,
+    pub connected_address: String,
+    pub connected_port: u32,
+}
 
 pub struct ClientHandler {
     database: Database,
     host: String,
     port: u16,
+    forwarded: mpsc::UnboundedSender<ForwardedChannel>,
 }
 
 impl ClientHandler {
-    pub fn new(database: Database, host: String, port: u16) -> Self {
+    pub fn new(
+        database: Database,
+        host: String,
+        port: u16,
+        forwarded: mpsc::UnboundedSender<ForwardedChannel>,
+    ) -> Self {
         Self {
             database,
             host,
             port,
+            forwarded,
         }
     }
 }
@@ -43,6 +62,25 @@ impl russh::client::Handler for ClientHandler {
                 fingerprint,
             }),
         }
+    }
+
+    async fn server_channel_open_forwarded_tcpip(
+        &mut self,
+        channel: Channel<Msg>,
+        connected_address: &str,
+        connected_port: u32,
+        _originator_address: &str,
+        _originator_port: u32,
+        reply: ChannelOpenHandle,
+        _session: &mut Session,
+    ) -> Result<(), Self::Error> {
+        reply.accept().await;
+        let _ = self.forwarded.send(ForwardedChannel {
+            channel,
+            connected_address: connected_address.to_owned(),
+            connected_port,
+        });
+        Ok(())
     }
 }
 

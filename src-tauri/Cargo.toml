@@ -41,6 +41,7 @@ rusqlite = { version = "0.38", features = ["bundled"] }
 sha2 = "0.10"
 uuid = { version = "1.18", features = ["v4", "serde"] }
 tokio-socks = "0.5"
+tokio-util = { version = "0.7", features = ["rt"] }
 windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_Security_Cryptography"] }
 zeroize = "1.8"
 

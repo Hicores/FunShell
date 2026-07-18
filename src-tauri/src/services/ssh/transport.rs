@@ -1,8 +1,13 @@
-use std::time::Duration;
+use std::{
+    pin::Pin,
+    sync::Arc,
+    task::{Context, Poll},
+    time::Duration,
+};
 
 use base64::{Engine, engine::general_purpose::STANDARD};
 use tokio::{
-    io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt},
+    io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, ReadBuf},
     net::TcpStream,
     time::timeout,
 };
@@ -13,6 +18,7 @@ use crate::{
     error::{AppError, AppResult},
     persistence::Database,
     security::VaultService,
+    services::ssh::{auth::authenticate, client::ClientHandler},
 };
 
 pub trait AsyncStream: AsyncRead + AsyncWrite + Unpin + Send {}
@@ -111,9 +117,102 @@ async fn connect_candidate(
                 .ok_or_else(|| AppError::Validation("代理路线引用的代理不存在".into()))?;
             connect_proxy(profile, &proxy, vault, duration).await
         }
-        Some(RouteKind::JumpHost) => Err(AppError::Validation(
-            "SSH 跳板路线需要由会话转发层建立".into(),
-        )),
+        Some(RouteKind::JumpHost) => {
+            let jump_id = candidate
+                .and_then(|candidate| candidate.jump_connection_id.as_deref())
+                .ok_or_else(|| AppError::Validation("跳板路线没有指定连接".into()))?;
+            connect_jump(profile, jump_id, database, vault).await
+        }
+    }
+}
+
+async fn connect_jump(
+    target: &ConnectionProfile,
+    jump_id: &str,
+    database: &Database,
+    vault: &VaultService,
+) -> AppResult<BoxedStream> {
+    if jump_id == target.id {
+        return Err(AppError::Validation("连接不能将自身作为跳板".into()));
+    }
+    let jump = database
+        .connection_by_id(jump_id)?
+        .filter(|profile| !profile.deleted)
+        .ok_or_else(|| AppError::Validation("跳板连接不存在或已删除".into()))?;
+    let jump_candidate = Box::pin(select_candidate(&jump, database, vault)).await?;
+    if jump_candidate
+        .as_ref()
+        .is_some_and(|candidate| candidate.kind == RouteKind::JumpHost)
+    {
+        return Err(AppError::Validation("首版仅支持单跳 SSH 跳板".into()));
+    }
+    let stream = Box::pin(connect_candidate(
+        &jump,
+        jump_candidate.as_ref(),
+        database,
+        vault,
+    ))
+    .await?;
+    let config = russh::client::Config {
+        keepalive_interval: Some(Duration::from_secs(jump.keepalive_seconds.max(5) as u64)),
+        keepalive_max: 3,
+        nodelay: true,
+        ..Default::default()
+    };
+    let (forwarded_sender, _forwarded_receiver) = tokio::sync::mpsc::unbounded_channel();
+    let handler = ClientHandler::new(
+        database.clone(),
+        jump.host.clone(),
+        jump.port,
+        forwarded_sender,
+    );
+    let mut handle = russh::client::connect_stream(Arc::new(config), stream, handler).await?;
+    authenticate(&mut handle, &jump, database, vault).await?;
+    let channel = handle
+        .channel_open_direct_tcpip(&target.host, u32::from(target.port), "127.0.0.1", 0)
+        .await?;
+    Ok(Box::new(JumpStream {
+        stream: channel.into_stream(),
+        _handle: handle,
+    }))
+}
+
+struct JumpStream {
+    stream: russh::ChannelStream<russh::client::Msg>,
+    _handle: russh::client::Handle<ClientHandler>,
+}
+
+impl AsyncRead for JumpStream {
+    fn poll_read(
+        mut self: Pin<&mut Self>,
+        context: &mut Context<'_>,
+        buffer: &mut ReadBuf<'_>,
+    ) -> Poll<std::io::Result<()>> {
+        Pin::new(&mut self.stream).poll_read(context, buffer)
+    }
+}
+
+impl AsyncWrite for JumpStream {
+    fn poll_write(
+        mut self: Pin<&mut Self>,
+        context: &mut Context<'_>,
+        buffer: &[u8],
+    ) -> Poll<std::io::Result<usize>> {
+        Pin::new(&mut self.stream).poll_write(context, buffer)
+    }
+
+    fn poll_flush(
+        mut self: Pin<&mut Self>,
+        context: &mut Context<'_>,
+    ) -> Poll<std::io::Result<()>> {
+        Pin::new(&mut self.stream).poll_flush(context)
+    }
+
+    fn poll_shutdown(
+        mut self: Pin<&mut Self>,
+        context: &mut Context<'_>,
+    ) -> Poll<std::io::Result<()>> {
+        Pin::new(&mut self.stream).poll_shutdown(context)
     }
 }
 

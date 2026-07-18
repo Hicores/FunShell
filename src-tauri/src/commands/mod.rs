@@ -7,6 +7,7 @@ pub mod keys;
 pub mod monitor;
 pub mod paths;
 pub mod session;
+pub mod tunnels;
 pub mod vault;
 
 #[derive(Serialize)]

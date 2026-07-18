@@ -4,7 +4,10 @@ use base64::{Engine, engine::general_purpose::STANDARD};
 use dashmap::DashMap;
 use russh::{ChannelMsg, Disconnect, client::Handle};
 use tauri::{AppHandle, Emitter};
-use tokio::sync::{Mutex, mpsc};
+use tokio::{
+    net::TcpStream,
+    sync::{Mutex, mpsc},
+};
 use uuid::Uuid;
 
 use crate::{
@@ -16,7 +19,10 @@ use crate::{
     persistence::Database,
     security::VaultService,
     services::ssh::{
-        auth::authenticate, client::ClientHandler, files::open_sftp, transport::connect_for_profile,
+        auth::authenticate,
+        client::{ClientHandler, ForwardedChannel},
+        files::open_sftp,
+        transport::connect_for_profile,
     },
 };
 
@@ -30,6 +36,7 @@ pub struct ManagedSession {
     pub profile: ConnectionProfile,
     handle: Arc<Mutex<Handle<ClientHandler>>>,
     terminal: mpsc::Sender<TerminalCommand>,
+    remote_routes: Arc<DashMap<(String, u32), (String, u16)>>,
 }
 
 pub struct SessionManager {
@@ -60,7 +67,14 @@ impl SessionManager {
             nodelay: true,
             ..Default::default()
         };
-        let handler = ClientHandler::new(database.clone(), profile.host.clone(), profile.port);
+        let (forwarded_sender, mut forwarded_receiver) =
+            mpsc::unbounded_channel::<ForwardedChannel>();
+        let handler = ClientHandler::new(
+            database.clone(),
+            profile.host.clone(),
+            profile.port,
+            forwarded_sender,
+        );
         let mut handle = russh::client::connect_stream(Arc::new(config), stream, handler).await?;
         authenticate(&mut handle, &profile, &database, vault).await?;
 
@@ -74,6 +88,29 @@ impl SessionManager {
         }
 
         let session_id = Uuid::new_v4().to_string();
+        let remote_routes = Arc::new(DashMap::<(String, u32), (String, u16)>::new());
+        let forwarded_routes = remote_routes.clone();
+        tokio::spawn(async move {
+            while let Some(forwarded) = forwarded_receiver.recv().await {
+                let target = forwarded_routes
+                    .get(&(
+                        forwarded.connected_address.clone(),
+                        forwarded.connected_port,
+                    ))
+                    .or_else(|| {
+                        forwarded_routes.get(&("0.0.0.0".to_owned(), forwarded.connected_port))
+                    })
+                    .map(|entry| entry.value().clone());
+                if let Some((host, port)) = target {
+                    tokio::spawn(async move {
+                        if let Ok(mut local) = TcpStream::connect((host.as_str(), port)).await {
+                            let mut remote = forwarded.channel.into_stream();
+                            let _ = tokio::io::copy_bidirectional(&mut local, &mut remote).await;
+                        }
+                    });
+                }
+            }
+        });
         let (sender, mut receiver) = mpsc::channel::<TerminalCommand>(256);
         let event_session_id = session_id.clone();
         let event_app = app.clone();
@@ -120,6 +157,7 @@ impl SessionManager {
                 profile: profile.clone(),
                 handle: Arc::new(Mutex::new(handle)),
                 terminal: sender,
+                remote_routes,
             }),
         );
         Ok(SessionDescriptor {
@@ -198,6 +236,54 @@ impl SessionManager {
 
     pub fn profile(&self, session_id: &str) -> AppResult<ConnectionProfile> {
         Ok(self.get(session_id)?.profile.clone())
+    }
+
+    pub async fn start_remote_forward(
+        &self,
+        session_id: &str,
+        bind_host: &str,
+        bind_port: u16,
+        target_host: &str,
+        target_port: u16,
+    ) -> AppResult<u16> {
+        let session = self.get(session_id)?;
+        let handle = session.handle.lock().await;
+        let assigned = handle
+            .tcpip_forward(bind_host, u32::from(bind_port))
+            .await?;
+        let actual = if bind_port == 0 {
+            assigned as u16
+        } else {
+            bind_port
+        };
+        session.remote_routes.insert(
+            (bind_host.to_owned(), u32::from(actual)),
+            (target_host.to_owned(), target_port),
+        );
+        Ok(actual)
+    }
+
+    pub async fn stop_remote_forward(
+        &self,
+        session_id: &str,
+        bind_host: &str,
+        bind_port: u16,
+    ) -> AppResult<()> {
+        let session = self.get(session_id)?;
+        session
+            .handle
+            .lock()
+            .await
+            .cancel_tcpip_forward(bind_host, u32::from(bind_port))
+            .await?;
+        session
+            .remote_routes
+            .remove(&(bind_host.to_owned(), u32::from(bind_port)));
+        Ok(())
+    }
+
+    pub(crate) fn handle(&self, session_id: &str) -> AppResult<Arc<Mutex<Handle<ClientHandler>>>> {
+        Ok(self.get(session_id)?.handle.clone())
     }
 
     fn get(&self, session_id: &str) -> AppResult<Arc<ManagedSession>> {

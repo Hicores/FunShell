@@ -65,6 +65,9 @@ pub fn run() {
             commands::files::rename_remote_path,
             commands::files::delete_remote_path,
             commands::files::chmod_remote_path,
+            commands::files::upload_remote_file,
+            commands::files::download_remote_file,
+            commands::files::open_remote_file,
             commands::monitor::collect_server_snapshot,
             commands::monitor::get_system_info,
             commands::monitor::list_processes,
@@ -78,6 +81,12 @@ pub fn run() {
             commands::history::list_command_presets,
             commands::history::save_command_preset,
             commands::history::delete_command_preset,
+            commands::tunnels::list_tunnel_profiles,
+            commands::tunnels::save_tunnel_profile,
+            commands::tunnels::delete_tunnel_profile,
+            commands::tunnels::start_tunnel,
+            commands::tunnels::stop_tunnel,
+            commands::tunnels::list_tunnel_statuses,
         ])
         .run(tauri::generate_context!())
         .expect("failed to run FunShell");

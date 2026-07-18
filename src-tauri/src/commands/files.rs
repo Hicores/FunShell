@@ -1,9 +1,15 @@
 use russh_sftp::protocol::{FileAttributes, FileType, OpenFlags};
-use tauri::State;
-use tokio::io::AsyncWriteExt;
+use std::path::PathBuf;
+
+use tauri::{AppHandle, Emitter, State};
+use tokio::{
+    fs::File,
+    io::{AsyncReadExt, AsyncWriteExt},
+};
+use uuid::Uuid;
 
 use crate::{
-    domain::{RemoteFileEntry, RemoteFileKind, TextFileContent},
+    domain::{RemoteFileEntry, RemoteFileKind, TextFileContent, TransferProgressEvent},
     error::{AppError, AppResult},
     services::ssh::client::map_sftp,
     state::AppState,
@@ -168,6 +174,153 @@ pub async fn chmod_remote_path(
     let mut attributes = FileAttributes::empty();
     attributes.permissions = Some(mode);
     map_sftp(sftp.set_metadata(path, attributes).await)
+}
+
+#[tauri::command]
+pub async fn upload_remote_file(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    session_id: String,
+    local_path: PathBuf,
+    remote_path: String,
+) -> AppResult<String> {
+    let metadata = tokio::fs::metadata(&local_path).await?;
+    if !metadata.is_file() {
+        return Err(AppError::Validation("当前上传接口仅接收文件".into()));
+    }
+    let task_id = Uuid::new_v4().to_string();
+    let source = local_path.display().to_string();
+    let total = metadata.len();
+    let sftp = state.sessions.sftp(&session_id).await?;
+    let mut source_file = File::open(&local_path).await?;
+    let mut destination_file = map_sftp(
+        sftp.open_with_flags(
+            remote_path.clone(),
+            OpenFlags::CREATE | OpenFlags::TRUNCATE | OpenFlags::WRITE,
+        )
+        .await,
+    )?;
+    transfer(
+        &app,
+        &task_id,
+        "upload",
+        &source,
+        &remote_path,
+        total,
+        &mut source_file,
+        &mut destination_file,
+    )
+    .await?;
+    destination_file
+        .shutdown()
+        .await
+        .map_err(|error| AppError::Sftp(error.to_string()))?;
+    Ok(task_id)
+}
+
+#[tauri::command]
+pub async fn download_remote_file(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    session_id: String,
+    remote_path: String,
+    local_path: PathBuf,
+) -> AppResult<String> {
+    let task_id = Uuid::new_v4().to_string();
+    let sftp = state.sessions.sftp(&session_id).await?;
+    let metadata = map_sftp(sftp.metadata(remote_path.clone()).await)?;
+    if metadata.is_dir() {
+        return Err(AppError::Validation("当前下载接口仅接收文件".into()));
+    }
+    if let Some(parent) = local_path.parent() {
+        tokio::fs::create_dir_all(parent).await?;
+    }
+    let mut source_file = map_sftp(sftp.open(remote_path.clone()).await)?;
+    let mut destination_file = File::create(&local_path).await?;
+    transfer(
+        &app,
+        &task_id,
+        "download",
+        &remote_path,
+        &local_path.display().to_string(),
+        metadata.len(),
+        &mut source_file,
+        &mut destination_file,
+    )
+    .await?;
+    destination_file.flush().await?;
+    Ok(task_id)
+}
+
+#[tauri::command]
+pub async fn open_remote_file(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    session_id: String,
+    remote_path: String,
+) -> AppResult<PathBuf> {
+    let file_name = remote_path
+        .rsplit('/')
+        .next()
+        .filter(|name| !name.is_empty() && *name != "." && *name != "..")
+        .ok_or_else(|| AppError::Validation("远端文件名无效".into()))?;
+    let local_path = state
+        .paths
+        .temporary
+        .join(format!("{}-{file_name}", Uuid::new_v4()));
+    download_remote_file(app, state, session_id, remote_path, local_path.clone()).await?;
+    Ok(local_path)
+}
+
+async fn transfer<R, W>(
+    app: &AppHandle,
+    task_id: &str,
+    direction: &str,
+    source: &str,
+    destination: &str,
+    total: u64,
+    reader: &mut R,
+    writer: &mut W,
+) -> AppResult<()>
+where
+    R: tokio::io::AsyncRead + Unpin,
+    W: tokio::io::AsyncWrite + Unpin,
+{
+    let mut buffer = vec![0_u8; 64 * 1024];
+    let mut transferred = 0_u64;
+    loop {
+        let read = reader.read(&mut buffer).await?;
+        if read == 0 {
+            break;
+        }
+        writer.write_all(&buffer[..read]).await?;
+        transferred = transferred.saturating_add(read as u64);
+        let _ = app.emit(
+            "transfer-progress",
+            TransferProgressEvent {
+                task_id: task_id.to_owned(),
+                direction: direction.to_owned(),
+                source: source.to_owned(),
+                destination: destination.to_owned(),
+                transferred,
+                total,
+                state: "running".into(),
+            },
+        );
+    }
+    let _ = app.emit(
+        "transfer-progress",
+        TransferProgressEvent {
+            task_id: task_id.to_owned(),
+            direction: direction.to_owned(),
+            source: source.to_owned(),
+            destination: destination.to_owned(),
+            transferred,
+            total,
+            state: "completed".into(),
+        },
+    );
+    Ok(())
 }
 
 fn shell_quote(value: &str) -> String {

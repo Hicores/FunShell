@@ -29,6 +29,7 @@ pub struct SessionDescriptor {
 
 #[derive(Debug, Clone, Copy, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
+#[allow(dead_code)]
 pub enum SessionStatus {
     Connecting,
     Connected,
@@ -87,6 +88,18 @@ pub struct TextFileContent {
     pub path: String,
     pub content: String,
     pub size: usize,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TransferProgressEvent {
+    pub task_id: String,
+    pub direction: String,
+    pub source: String,
+    pub destination: String,
+    pub transferred: u64,
+    pub total: u64,
+    pub state: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
