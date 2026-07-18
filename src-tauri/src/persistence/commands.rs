@@ -1,5 +1,5 @@
 use chrono::Utc;
-use rusqlite::params;
+use rusqlite::{OptionalExtension, params};
 use uuid::Uuid;
 
 use crate::{
@@ -21,8 +21,36 @@ impl Database {
             favorite: false,
             executed_at: Utc::now().to_rfc3339(),
         };
-        self.with_connection_mut(|connection| {
+        let saved = self.with_connection_mut(|connection| {
             let transaction = connection.transaction()?;
+            let existing: Option<(String, bool)> = transaction
+                .query_row(
+                    "SELECT id,favorite FROM command_history
+                     WHERE connection_id IS ?1 AND command=?2
+                     ORDER BY executed_at DESC,id DESC LIMIT 1",
+                    params![connection_id, entry.command],
+                    |row| Ok((row.get(0)?, row.get::<_, i64>(1)? != 0)),
+                )
+                .optional()?;
+            if let Some((id, favorite)) = existing {
+                transaction.execute(
+                    "UPDATE command_history SET executed_at=?2 WHERE id=?1",
+                    params![id, entry.executed_at],
+                )?;
+                transaction.execute(
+                    "DELETE FROM command_history
+                     WHERE connection_id IS ?1 AND command=?2 AND id<>?3",
+                    params![connection_id, entry.command, id],
+                )?;
+                transaction.commit()?;
+                return Ok(CommandHistoryEntry {
+                    id,
+                    connection_id: entry.connection_id,
+                    command: entry.command,
+                    favorite,
+                    executed_at: entry.executed_at,
+                });
+            }
             transaction.execute(
                 "INSERT INTO command_history(id,connection_id,command,favorite,executed_at)
                  VALUES(?1,?2,?3,0,?4)",
@@ -41,9 +69,9 @@ impl Database {
                 [connection_id],
             )?;
             transaction.commit()?;
-            Ok(())
+            Ok(entry.clone())
         })?;
-        Ok(entry)
+        Ok(saved)
     }
 
     pub fn list_history(
@@ -57,7 +85,15 @@ impl Database {
             let mut statement = connection.prepare(
                 "SELECT id,connection_id,command,favorite,executed_at FROM command_history
                  WHERE (?1 IS NULL OR connection_id=?1) AND command LIKE ?2
-                 ORDER BY favorite DESC, executed_at DESC LIMIT ?3",
+                   AND NOT EXISTS (
+                       SELECT 1 FROM command_history AS newer
+                       WHERE newer.connection_id IS command_history.connection_id
+                         AND newer.command=command_history.command
+                         AND (newer.executed_at > command_history.executed_at
+                              OR (newer.executed_at = command_history.executed_at
+                                  AND newer.id > command_history.id))
+                   )
+                 ORDER BY executed_at DESC LIMIT ?3",
             )?;
             let rows = statement.query_map(params![connection_id, pattern, limit], |row| {
                 Ok(CommandHistoryEntry {

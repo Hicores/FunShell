@@ -230,4 +230,28 @@ mod tests {
         assert_eq!(listed[0].id, saved.id);
         assert_eq!(listed[0].secret_id.as_deref(), Some("secret-1"));
     }
+
+    #[test]
+    fn moves_duplicate_commands_to_the_front_without_duplicate_rows() {
+        let directory = tempdir().expect("tempdir");
+        let database = Database::open(&directory.path().join("test.db")).expect("database");
+
+        let first = database
+            .add_history(Some("connection-1"), "systemctl status nginx")
+            .expect("first history");
+        database
+            .add_history(Some("connection-1"), "uname -a")
+            .expect("second command");
+        let second = database
+            .add_history(Some("connection-1"), "systemctl status nginx")
+            .expect("duplicate history");
+
+        assert_eq!(first.id, second.id);
+        let history = database
+            .list_history(Some("connection-1"), None, 100)
+            .expect("list history");
+        assert_eq!(history.len(), 2);
+        assert_eq!(history[0].command, "systemctl status nginx");
+        assert_eq!(history[1].command, "uname -a");
+    }
 }
