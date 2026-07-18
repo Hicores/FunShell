@@ -58,6 +58,7 @@ pub fn run() {
             commands::session::send_terminal_input,
             commands::session::resize_terminal,
             commands::session::execute_command,
+            commands::session::submit_terminal_command,
             commands::files::list_remote_files,
             commands::files::read_remote_text,
             commands::files::write_remote_text,

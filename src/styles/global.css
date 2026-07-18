@@ -1,7 +1,7 @@
 :root {
   font-family: "Segoe UI", "Microsoft YaHei UI", sans-serif;
   color: #1c2733;
-  background: #f5f7f9;
+  background: #eef2f5;
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   letter-spacing: 0;
@@ -29,10 +29,37 @@ textarea {
 }
 
 .boot-screen {
-  display: grid;
+  display: flex;
   width: 100%;
   height: 100%;
-  place-items: center;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
   color: #52606d;
 }
 
+button {
+  color: inherit;
+}
+
+button:not(:disabled) {
+  cursor: pointer;
+}
+
+button:disabled {
+  cursor: default;
+  opacity: 0.48;
+}
+
+::selection {
+  background: #8dc4e8;
+  color: #102633;
+}
+
+.spin {
+  animation: spin 0.9s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}

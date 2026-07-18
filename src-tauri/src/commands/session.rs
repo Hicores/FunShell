@@ -77,3 +77,19 @@ pub async fn execute_command(
     }
     state.sessions.execute(&session_id, &command).await
 }
+
+#[tauri::command]
+pub async fn submit_terminal_command(
+    state: State<'_, AppState>,
+    session_id: String,
+    command: String,
+) -> AppResult<()> {
+    if command.trim().is_empty() {
+        return Ok(());
+    }
+    let profile = state.sessions.profile(&session_id)?;
+    state.database.add_history(Some(&profile.id), &command)?;
+    let mut bytes = command.into_bytes();
+    bytes.push(b'\n');
+    state.sessions.input(&session_id, bytes).await
+}
