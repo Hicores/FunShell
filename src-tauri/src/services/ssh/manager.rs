@@ -21,7 +21,7 @@ use crate::{
     services::ssh::{
         auth::authenticate,
         client::{ClientHandler, ForwardedChannel},
-        files::open_sftp,
+        files::{PipelinedSftpReader, open_pipelined_reader, open_sftp},
         transport::{client_config, connect_for_profile},
     },
 };
@@ -226,6 +226,15 @@ impl SessionManager {
     pub async fn sftp(&self, session_id: &str) -> AppResult<russh_sftp::client::SftpSession> {
         let session = self.get(session_id)?;
         open_sftp(&session.handle).await
+    }
+
+    pub async fn download_reader(
+        &self,
+        session_id: &str,
+        remote_path: String,
+    ) -> AppResult<PipelinedSftpReader> {
+        let session = self.get(session_id)?;
+        open_pipelined_reader(&session.handle, remote_path).await
     }
 
     pub fn profile(&self, session_id: &str) -> AppResult<ConnectionProfile> {

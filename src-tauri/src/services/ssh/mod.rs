@@ -4,4 +4,5 @@ mod files;
 mod manager;
 mod transport;
 
+pub(crate) use files::PipelinedSftpReader;
 pub use manager::SessionManager;

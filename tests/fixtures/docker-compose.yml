@@ -6,7 +6,7 @@ services:
     ports:
       - "2222:22"
     healthcheck: &ssh-health
-      test: ["CMD-SHELL", "ssh-keyscan -T 2 127.0.0.1 >/dev/null 2>&1"]
+      test: ["CMD-SHELL", "ss -lnt | grep -q ':22 '"]
       interval: 2s
       timeout: 3s
       retries: 20

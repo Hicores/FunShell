@@ -1,5 +1,6 @@
+use futures_util::{StreamExt, stream};
 use russh_sftp::protocol::{FileAttributes, FileType, OpenFlags};
-use std::path::PathBuf;
+use std::{path::PathBuf, time::Instant};
 
 use tauri::{AppHandle, Emitter, State};
 use tokio::{
@@ -12,11 +13,13 @@ use uuid::Uuid;
 use crate::{
     domain::{RemoteFileEntry, RemoteFileKind, TextFileContent, TransferProgressEvent},
     error::{AppError, AppResult},
-    services::ssh::client::map_sftp,
+    services::ssh::{PipelinedSftpReader, client::map_sftp},
     state::AppState,
 };
 
 const MAX_TEXT_FILE_SIZE: u64 = 5 * 1024 * 1024;
+const DOWNLOAD_CHUNK_SIZE: u64 = 128 * 1024;
+const DOWNLOAD_PIPELINE_DEPTH: usize = 32;
 
 #[tauri::command]
 pub async fn list_remote_files(
@@ -256,32 +259,39 @@ pub async fn download_remote_file(
     let task_id = Uuid::new_v4().to_string();
     let sftp = state.sessions.sftp(&session_id).await?;
     let metadata = map_sftp(sftp.metadata(remote_path.clone()).await)?;
+    drop(sftp);
     if metadata.is_dir() {
         return Err(AppError::Validation("当前下载接口仅接收文件".into()));
     }
     if let Some(parent) = local_path.parent() {
         tokio::fs::create_dir_all(parent).await?;
     }
-    let mut source_file = map_sftp(sftp.open(remote_path.clone()).await)?;
+    let source_file = state
+        .sessions
+        .download_reader(&session_id, remote_path.clone())
+        .await?;
     let mut destination_file = File::create(&local_path).await?;
     let cancellation = state.transfers.start(&task_id);
-    let result = transfer(
+    let destination = local_path.display().to_string();
+    let result = download_pipelined(
         TransferContext {
             app: &app,
             session_id: &session_id,
             task_id: &task_id,
             direction: "download",
             source: &remote_path,
-            destination: &local_path.display().to_string(),
+            destination: &destination,
             total: metadata.len(),
             cancellation,
         },
-        &mut source_file,
+        &source_file,
         &mut destination_file,
     )
     .await;
+    let close_result = source_file.close().await;
     state.transfers.finish(&task_id);
     result?;
+    close_result?;
     destination_file.flush().await?;
     Ok(task_id)
 }
@@ -365,6 +375,62 @@ where
     Ok(())
 }
 
+fn download_ranges(total: u64) -> Vec<(u64, usize)> {
+    let mut ranges = Vec::new();
+    let mut offset = 0_u64;
+    while offset < total {
+        let length = (total - offset).min(DOWNLOAD_CHUNK_SIZE) as usize;
+        ranges.push((offset, length));
+        offset += length as u64;
+    }
+    ranges
+}
+
+async fn download_pipelined(
+    context: TransferContext<'_>,
+    reader: &PipelinedSftpReader,
+    writer: &mut File,
+) -> AppResult<()> {
+    let requests = download_ranges(context.total)
+        .into_iter()
+        .map(|(offset, length)| {
+            let reader = reader.clone();
+            async move { reader.read_range(offset, length).await }
+        });
+    let mut chunks = stream::iter(requests).buffered(DOWNLOAD_PIPELINE_DEPTH);
+    let mut transferred = 0_u64;
+    let mut last_progress = Instant::now();
+    emit_transfer(&context, 0, "running");
+    loop {
+        let next = tokio::select! {
+            _ = context.cancellation.cancelled() => {
+                emit_transfer(&context, transferred, "canceled");
+                return Err(AppError::Message("文件传输已取消".into()));
+            }
+            next = chunks.next() => next,
+        };
+        let Some(chunk) = next else { break };
+        let data = match chunk {
+            Ok(data) => data,
+            Err(error) => {
+                emit_transfer(&context, transferred, "error");
+                return Err(error);
+            }
+        };
+        if let Err(error) = writer.write_all(&data).await {
+            emit_transfer(&context, transferred, "error");
+            return Err(error.into());
+        }
+        transferred = transferred.saturating_add(data.len() as u64);
+        if last_progress.elapsed().as_millis() >= 100 || transferred >= context.total {
+            emit_transfer(&context, transferred, "running");
+            last_progress = Instant::now();
+        }
+    }
+    emit_transfer(&context, transferred, "completed");
+    Ok(())
+}
+
 fn emit_transfer(context: &TransferContext<'_>, transferred: u64, state: &str) {
     let _ = context.app.emit(
         "transfer-progress",
@@ -387,11 +453,24 @@ fn shell_quote(value: &str) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::shell_quote;
+    use super::{DOWNLOAD_CHUNK_SIZE, download_ranges, shell_quote};
 
     #[test]
     fn quotes_posix_paths() {
         assert_eq!(shell_quote("/tmp/a b"), "'/tmp/a b'");
         assert_eq!(shell_quote("it's"), "'it'\\''s'");
+    }
+
+    #[test]
+    fn splits_download_into_ordered_ranges() {
+        let total = DOWNLOAD_CHUNK_SIZE * 2 + 17;
+        assert_eq!(
+            download_ranges(total),
+            vec![
+                (0, DOWNLOAD_CHUNK_SIZE as usize),
+                (DOWNLOAD_CHUNK_SIZE, DOWNLOAD_CHUNK_SIZE as usize),
+                (DOWNLOAD_CHUNK_SIZE * 2, 17),
+            ]
+        );
     }
 }

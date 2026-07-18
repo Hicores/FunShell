@@ -6,7 +6,10 @@ use russh::{
     keys::{PrivateKeyWithHashAlg, load_secret_key},
 };
 use russh_sftp::client::SftpSession;
-use tokio::io::AsyncReadExt;
+use tokio::{
+    io::{AsyncBufReadExt, BufReader},
+    time::timeout,
+};
 
 struct AcceptFixtureKey;
 
@@ -115,13 +118,13 @@ async fn validates_linux_ssh_fixtures() {
             .channel_open_direct_tcpip("127.0.0.1", 22, "127.0.0.1", 0)
             .await
             .expect("direct TCP forwarding");
-        let mut stream = forwarded.into_stream();
-        let mut banner = [0_u8; 64];
-        let read = stream
-            .read(&mut banner)
+        let mut stream = BufReader::new(forwarded.into_stream());
+        let mut banner = String::new();
+        timeout(Duration::from_secs(3), stream.read_line(&mut banner))
             .await
+            .expect("forwarded banner timeout")
             .expect("read forwarded banner");
-        assert!(String::from_utf8_lossy(&banner[..read]).starts_with("SSH-"));
+        assert!(banner.starts_with("SSH-"), "unexpected banner: {banner:?}");
         password
             .disconnect(russh::Disconnect::ByApplication, "fixture complete", "en")
             .await

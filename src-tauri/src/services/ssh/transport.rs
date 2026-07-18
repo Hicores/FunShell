@@ -243,6 +243,8 @@ pub fn client_config(profile: &ConnectionProfile) -> russh::client::Config {
         keepalive_interval: Some(Duration::from_secs(profile.keepalive_seconds.max(5) as u64)),
         keepalive_max: 3,
         nodelay: true,
+        window_size: 16 * 1024 * 1024,
+        channel_buffer_size: 512,
         ..Default::default()
     };
     config.preferred.compression = if profile.compression {
@@ -425,6 +427,8 @@ mod tests {
         let enabled = client_config(&profile(true));
         let disabled = client_config(&profile(false));
         assert_eq!(enabled.preferred.compression[0], russh::compression::ZLIB);
+        assert_eq!(enabled.window_size, 16 * 1024 * 1024);
+        assert_eq!(enabled.channel_buffer_size, 512);
         assert_eq!(
             disabled.preferred.compression.as_ref(),
             [russh::compression::NONE]
