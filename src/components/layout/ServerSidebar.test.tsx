@@ -35,4 +35,22 @@ describe("ServerSidebar", () => {
     fireEvent.click(screen.getByRole("button", { name: "打开进程管理" }));
     expect(useAppStore.getState().tabs.some((tab) => tab.kind === "processes" && tab.sessionId === terminal.sessionId)).toBe(true);
   });
+
+  it("renders resource values inside their progress frames", () => {
+    const terminal: WorkspaceTab = { id: "session-resource-sidebar", sessionId: "session-resource-sidebar", connectionId: mockConnections[0].id, title: "Gateway", kind: "terminal", state: "connected" };
+    useAppStore.setState({
+      connections: mockConnections,
+      tabs: [terminal],
+      activeTabId: terminal.id,
+      snapshots: { [terminal.sessionId]: mockSnapshot },
+    });
+    const { container } = render(<ServerSidebar />);
+
+    const rows = container.querySelectorAll(".resource-row");
+    expect(rows).toHaveLength(3);
+    expect(rows[0].querySelector(".progress-label")).toHaveTextContent("19%");
+    expect(rows[1].querySelector(".progress-label")).toHaveTextContent("55%1.0 GB/1.9 GB");
+    expect(rows[2].querySelector(".progress-label")).toHaveTextContent("14%581.7 MB/4.1 GB");
+    expect(container.querySelectorAll(".resource-row em")).toHaveLength(0);
+  });
 });

@@ -86,9 +86,9 @@ export function ServerSidebar() {
       <div className="sidebar-block metrics-block">
         <div className="metric-line"><span>运行</span><strong>{snapshot ? formatDuration(snapshot.uptimeSeconds) : "-"}</strong></div>
         <div className="metric-line"><span>负载</span><strong>{snapshot ? snapshot.loadAverage.map((item) => item.toFixed(2)).join(", ") : "-"}</strong></div>
-        <div className="resource-row"><span>CPU</span><ProgressBar value={snapshot?.cpuPercent ?? 0} /><em>{snapshot?.cpuPercent.toFixed(0) ?? 0}%</em></div>
-        <div className="resource-row"><span>内存</span><ProgressBar value={memoryPercent} tone="orange" /><em>{snapshot ? `${formatBytes(snapshot.memoryUsed)}/${formatBytes(snapshot.memoryTotal)}` : "0/0"}</em></div>
-        <div className="resource-row"><span>交换</span><ProgressBar value={swapPercent} tone="orange" /><em>{snapshot ? `${formatBytes(snapshot.swapUsed)}/${formatBytes(snapshot.swapTotal)}` : "0/0"}</em></div>
+        <div className="resource-row"><span>CPU</span><ProgressBar value={snapshot?.cpuPercent ?? 0} label={`${snapshot?.cpuPercent.toFixed(0) ?? 0}%`} /></div>
+        <div className="resource-row"><span>内存</span><ProgressBar value={memoryPercent} tone="orange" label={<><span>{memoryPercent.toFixed(0)}%</span><span className="resource-detail">{snapshot ? `${formatBytes(snapshot.memoryUsed)}/${formatBytes(snapshot.memoryTotal)}` : "0/0"}</span></>} /></div>
+        <div className="resource-row"><span>交换</span><ProgressBar value={swapPercent} tone="orange" label={<><span>{swapPercent.toFixed(0)}%</span><span className="resource-detail">{snapshot ? `${formatBytes(snapshot.swapUsed)}/${formatBytes(snapshot.swapTotal)}` : "0/0"}</span></>} /></div>
       </div>
 
       <div
