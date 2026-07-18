@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import { api } from "../../lib/ipc";
 import { mockConnections, mockFolders } from "../../lib/mock";
 import { useAppStore } from "../../stores/appStore";
+import { ConnectionEditor } from "./ConnectionEditor";
 import { ConnectionManager } from "./ConnectionManager";
 
 describe("ConnectionManager", () => {
@@ -27,5 +28,25 @@ describe("ConnectionManager", () => {
     await waitFor(() => expect(saveFolder).toHaveBeenCalledWith({ id: "", parentId: null, name: "数据库服务器", sortOrder: mockFolders.length, deleted: false }));
     expect(refresh).toHaveBeenCalledOnce();
     expect(screen.queryByRole("dialog", { name: "新建目录" })).not.toBeInTheDocument();
+  });
+
+  it("uses the selected folder for a newly created connection", () => {
+    useAppStore.setState({
+      connectionManagerOpen: true,
+      connectionEditorOpen: false,
+      editingConnection: null,
+      newConnectionFolderId: null,
+      connections: mockConnections,
+      folders: mockFolders,
+      keys: [],
+      routes: [],
+    });
+    render(<><ConnectionManager /><ConnectionEditor /></>);
+
+    fireEvent.click(screen.getByRole("button", { name: /生产环境\s*2/ }));
+    fireEvent.click(screen.getByRole("button", { name: "新建连接" }));
+
+    expect(screen.getByRole("dialog", { name: "新建连接" })).toBeInTheDocument();
+    expect(screen.getByLabelText("目录")).toHaveValue(mockFolders[0].id);
   });
 });

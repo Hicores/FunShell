@@ -43,7 +43,7 @@ export function ConnectionManager() {
     <>
     <Modal open={open} title="连接管理器" width={1000} onClose={closeManager} footer={<div className="manager-footer">双击连接立即打开终端</div>}>
       <div className="manager-toolbar">
-        <IconButton label="新建连接" onClick={() => editConnection()}><Plus size={17} /></IconButton>
+        <IconButton label="新建连接" onClick={() => editConnection(undefined, folderId)}><Plus size={17} /></IconButton>
         <IconButton label="新建目录" onClick={openFolderDialog}><FolderPlus size={17} /></IconButton>
         <IconButton label="私钥管理" onClick={() => openKeyManager(true)}><KeyRound size={17} /></IconButton>
         <IconButton label="刷新" onClick={() => void refresh()}><RefreshCw size={17} /></IconButton>

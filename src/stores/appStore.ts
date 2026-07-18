@@ -32,6 +32,7 @@ interface AppStore {
   keyManagerOpen: boolean;
   settingsOpen: boolean;
   editingConnection: ConnectionProfile | null;
+  newConnectionFolderId: string | null;
   toolsOpen: boolean;
   toast: string | null;
   initialize: () => Promise<void>;
@@ -43,7 +44,7 @@ interface AppStore {
   openWorkspace: (kind: Exclude<WorkspaceKind, "terminal">) => void;
   setSnapshot: (sessionId: string, snapshot: ServerSnapshot) => void;
   openConnectionManager: (open: boolean) => void;
-  editConnection: (connection?: ConnectionProfile) => void;
+  editConnection: (connection?: ConnectionProfile, folderId?: string | null) => void;
   closeConnectionEditor: () => void;
   openKeyManager: (open: boolean) => void;
   openSettings: (open: boolean) => void;
@@ -78,6 +79,7 @@ export const useAppStore = create<AppStore>((set, get) => ({
   keyManagerOpen: false,
   settingsOpen: false,
   editingConnection: null,
+  newConnectionFolderId: null,
   toolsOpen: false,
   toast: null,
 
@@ -202,8 +204,12 @@ export const useAppStore = create<AppStore>((set, get) => ({
 
   setSnapshot: (sessionId, snapshot) => set((state) => ({ snapshots: { ...state.snapshots, [sessionId]: snapshot } })),
   openConnectionManager: (connectionManagerOpen) => set({ connectionManagerOpen }),
-  editConnection: (editingConnection) => set({ editingConnection: editingConnection ?? null, connectionEditorOpen: true }),
-  closeConnectionEditor: () => set({ connectionEditorOpen: false, editingConnection: null }),
+  editConnection: (editingConnection, folderId = null) => set({
+    editingConnection: editingConnection ?? null,
+    newConnectionFolderId: editingConnection ? null : folderId,
+    connectionEditorOpen: true,
+  }),
+  closeConnectionEditor: () => set({ connectionEditorOpen: false, editingConnection: null, newConnectionFolderId: null }),
   openKeyManager: (keyManagerOpen) => set({ keyManagerOpen }),
   openSettings: (settingsOpen) => set({ settingsOpen }),
   toggleTools: () => set((state) => ({ toolsOpen: !state.toolsOpen })),

@@ -5,11 +5,12 @@ import { api } from "../../lib/ipc";
 import { useAppStore } from "../../stores/appStore";
 import type { AuthMethod, SaveConnectionInput } from "../../types";
 
-const createBlank = (): SaveConnectionInput => ({ name: "", host: "", port: 22, username: "root", authMethod: "password", password: "", keyId: null, routeId: null, folderId: null, startupCommand: null, keepaliveSeconds: 30, connectTimeoutSeconds: 10, compression: false, autoReconnect: true });
+const createBlank = (folderId: string | null = null): SaveConnectionInput => ({ name: "", host: "", port: 22, username: "root", authMethod: "password", password: "", keyId: null, routeId: null, folderId, startupCommand: null, keepaliveSeconds: 30, connectTimeoutSeconds: 10, compression: false, autoReconnect: true });
 
 export function ConnectionEditor() {
   const open = useAppStore((state) => state.connectionEditorOpen);
   const editing = useAppStore((state) => state.editingConnection);
+  const newConnectionFolderId = useAppStore((state) => state.newConnectionFolderId);
   const close = useAppStore((state) => state.closeConnectionEditor);
   const folders = useAppStore((state) => state.folders);
   const keys = useAppStore((state) => state.keys);
@@ -28,8 +29,8 @@ export function ConnectionEditor() {
       username: editing.username, authMethod: editing.authMethod, password: "", keyId: editing.keyId,
       routeId: editing.routeId, startupCommand: editing.startupCommand, keepaliveSeconds: editing.keepaliveSeconds,
       connectTimeoutSeconds: editing.connectTimeoutSeconds, compression: editing.compression, autoReconnect: editing.autoReconnect,
-    } : createBlank());
-  }, [editing, open]);
+    } : createBlank(newConnectionFolderId));
+  }, [editing, newConnectionFolderId, open]);
 
   const update = <K extends keyof SaveConnectionInput>(key: K, value: SaveConnectionInput[K]) => setForm((current) => ({ ...current, [key]: value }));
   const save = async () => {
