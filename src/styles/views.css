@@ -71,6 +71,10 @@
 .editor-window-actions button:disabled { cursor: default; opacity: .5; }
 .editor-window-save:not(:disabled) { border-color: #2e89b5; background: #2d8fc2; color: white; }
 .editor-window-loading { display: flex; align-items: center; justify-content: center; gap: 10px; color: #607681; }
+.editor-window-editor { display: grid; min-height: 0; grid-template-rows: minmax(0, 1fr) auto; }
+.editor-window-save-error, .editor-window-save-message { min-height: 28px; padding: 6px 12px; font-size: 12px; }
+.editor-window-save-error { border-top: 1px solid #e7b4b4; background: #fff1f1; color: #a04444; }
+.editor-window-save-message { border-top: 1px solid #b8dec6; background: #eef9f1; color: #287148; }
 .editor-window-error { display: grid; align-content: center; justify-items: center; gap: 10px; padding: 24px; color: #a04444; }
 .editor-window-error span { max-width: min(760px, 90vw); color: #6f4a4a; text-align: center; word-break: break-word; }
 .editor-window-error button { height: 30px; border: 1px solid #b3c2ca; padding: 0 12px; background: white; color: #3b6577; }
