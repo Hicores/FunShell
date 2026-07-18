@@ -19,14 +19,19 @@ export function ConnectionManager() {
   const [folderId, setFolderId] = useState<string | null>(null);
   const [selected, setSelected] = useState<ConnectionProfile | null>(null);
   const [query, setQuery] = useState("");
+  const [folderDialogOpen, setFolderDialogOpen] = useState(false);
+  const [folderName, setFolderName] = useState("");
   const filtered = useMemo(() => connections.filter((connection) => (!folderId || connection.folderId === folderId) && `${connection.name} ${connection.host} ${connection.username}`.toLowerCase().includes(query.toLowerCase())), [connections, folderId, query]);
 
   const createFolder = async () => {
-    const name = window.prompt("目录名称");
-    if (!name?.trim()) return;
-    try { await api.saveFolder({ id: "", parentId: folderId, name: name.trim(), sortOrder: folders.length, deleted: false }); await refresh(); }
+    const name = folderName.trim();
+    if (!name) return;
+    try { await api.saveFolder({ id: "", parentId: folderId, name, sortOrder: folders.length, deleted: false }); setFolderDialogOpen(false); setFolderName(""); await refresh(); }
     catch (error) { notify(String(error)); }
   };
+
+  const openFolderDialog = () => { setFolderName(""); setFolderDialogOpen(true); };
+  const closeManager = () => { setFolderDialogOpen(false); close(false); };
 
   const remove = async () => {
     if (!selected || !window.confirm(`将连接 ${selected.name} 移入已删除项目？`)) return;
@@ -35,10 +40,11 @@ export function ConnectionManager() {
   };
 
   return (
-    <Modal open={open} title="连接管理器" width={1000} onClose={() => close(false)} footer={<div className="manager-footer">双击连接立即打开终端</div>}>
+    <>
+    <Modal open={open} title="连接管理器" width={1000} onClose={closeManager} footer={<div className="manager-footer">双击连接立即打开终端</div>}>
       <div className="manager-toolbar">
         <IconButton label="新建连接" onClick={() => editConnection()}><Plus size={17} /></IconButton>
-        <IconButton label="新建目录" onClick={() => void createFolder()}><FolderPlus size={17} /></IconButton>
+        <IconButton label="新建目录" onClick={openFolderDialog}><FolderPlus size={17} /></IconButton>
         <IconButton label="私钥管理" onClick={() => openKeyManager(true)}><KeyRound size={17} /></IconButton>
         <IconButton label="刷新" onClick={() => void refresh()}><RefreshCw size={17} /></IconButton>
         <IconButton label="删除" disabled={!selected} onClick={() => void remove()}><Trash2 size={17} /></IconButton>
@@ -56,6 +62,12 @@ export function ConnectionManager() {
       </div>
       <div className="manager-actions"><button type="button" disabled={!selected} onClick={() => selected && editConnection(selected)}>编辑</button><button className="primary-button" type="button" disabled={!selected} onClick={() => { if (!selected) return; close(false); void connect(selected); }}>连接</button></div>
     </Modal>
+    <Modal open={open && folderDialogOpen} title="新建目录" width={460} onClose={() => setFolderDialogOpen(false)} footer={<><button type="button" onClick={() => setFolderDialogOpen(false)}>取消</button><button className="primary-button" type="button" disabled={!folderName.trim()} onClick={() => void createFolder()}>确定</button></>}>
+      <div className="form-grid folder-create-form">
+        <label className="wide">目录名称<input autoFocus value={folderName} onChange={(event) => setFolderName(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter" && !event.nativeEvent.isComposing && folderName.trim()) void createFolder(); }} /></label>
+        <p className="field-note wide">创建位置：{folders.find((folder) => folder.id === folderId)?.name ?? "根目录"}</p>
+      </div>
+    </Modal>
+    </>
   );
 }
-

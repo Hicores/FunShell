@@ -73,6 +73,7 @@ legend { padding: 0 6px; color: #2b566d; font-weight: 600; }
 .connection-table td:first-child svg { color: #637681; }
 .manager-actions { display: flex; justify-content: flex-end; gap: 8px; padding-top: 9px; }
 .manager-footer { margin-right: auto; color: #6d7e88; }
+.folder-create-form { padding: 5px 3px 2px; }
 
 .connection-editor { display: grid; grid-template-columns: 190px 1fr; min-height: 510px; border: 1px solid #c4ced4; background: #f7f8f9; }
 .connection-editor > aside { display: flex; flex-direction: column; border-right: 1px solid #c4ced4; background: white; }
