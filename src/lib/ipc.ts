@@ -54,6 +54,16 @@ let mockSocketTick = 0;
 let mockSnapshotTick = 0;
 const mockSessionConnections = new Map<string, string>();
 const mockNetworkTotals = new Map(mockSnapshot.interfaces.map((item) => [item.name, { receivedBytes: item.receivedBytes, transmittedBytes: item.transmittedBytes }]));
+const mockRootDirectories: RemoteFileEntry[] = ["bin", "boot", "dev", "etc", "home", "opt", "proc", "root", "run", "srv", "tmp", "usr", "var"].map((name) => ({
+  name,
+  path: `/${name}`,
+  kind: "directory",
+  size: 0,
+  modified: 1_784_000_000,
+  permissions: 0o755,
+  user: "root",
+  group: "root",
+}));
 
 function recordMockHistory(connectionId: string | null, command: string) {
   const commandText = command.trimEnd();
@@ -151,7 +161,12 @@ function mockCall(command: string, args?: Record<string, unknown>): unknown {
         ` 3:  ${String(args?.target ?? "8.8.8.8")}                     18.731ms reached`,
       ].join("\n"),
     };
-    case "list_remote_files": return mockRemoteFiles;
+    case "list_remote_files": {
+      const path = String(args?.path ?? "/root");
+      if (path === "/") return mockRootDirectories;
+      if (path === "/root") return mockRemoteFiles;
+      return [];
+    }
     case "read_remote_text": {
       const path = String(args?.path ?? "");
       return { path, content: `# FunShell demo editor\n# ${path}\n`, size: path.length };

@@ -94,7 +94,12 @@ describe("FileManager", () => {
   });
 
   it("opens an absolute remote path entered in the address field", async () => {
-    const listFiles = vi.spyOn(api, "remoteFiles").mockImplementation(async (_sessionId, remotePath) => remotePath === "/srv/apps" ? [] : mockRemoteFiles);
+    const listFiles = vi.spyOn(api, "remoteFiles").mockImplementation(async (_sessionId, remotePath) => {
+      if (remotePath === "/") return [{ ...mockRemoteFiles[0], name: "srv", path: "/srv" }];
+      if (remotePath === "/srv") return [{ ...mockRemoteFiles[0], name: "apps", path: "/srv/apps" }];
+      if (remotePath === "/srv/apps") return [];
+      return mockRemoteFiles;
+    });
     render(<FileManager tab={tab} />);
     await screen.findByText("deploy.sh");
 
@@ -104,6 +109,8 @@ describe("FileManager", () => {
 
     await waitFor(() => expect(listFiles).toHaveBeenCalledWith(tab.sessionId, "/srv/apps"));
     expect(address).toHaveValue("/srv/apps");
+    await waitFor(() => expect(screen.getByTitle("/srv/apps").closest(".remote-tree-row")).toHaveClass("active"));
+    expect(screen.getByTitle("/srv")).toBeInTheDocument();
   });
 
   it("uploads dropped local paths from the file list", async () => {

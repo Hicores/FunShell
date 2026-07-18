@@ -8,6 +8,7 @@ import { formatBytes, formatMode } from "../../lib/format";
 import { api, isTauri } from "../../lib/ipc";
 import { useAppStore } from "../../stores/appStore";
 import type { RemoteFileEntry, WorkspaceTab } from "../../types";
+import { RemoteDirectoryTree } from "./RemoteDirectoryTree";
 import { useFileDrop } from "./useFileDrop";
 
 function joinRemote(base: string, name: string) {
@@ -38,6 +39,8 @@ export function FileManager({ tab }: { tab: WorkspaceTab }) {
   const [path, setPath] = useState("/root");
   const [pathInput, setPathInput] = useState("/root");
   const [files, setFiles] = useState<RemoteFileEntry[]>([]);
+  const [filesPath, setFilesPath] = useState<string | null>(null);
+  const [filesSessionId, setFilesSessionId] = useState<string | null>(null);
   const [selected, setSelected] = useState<RemoteFileEntry | null>(null);
   const [loading, setLoading] = useState(false);
   const [editor, setEditor] = useState<{ path: string; content: string } | null>(null);
@@ -45,12 +48,23 @@ export function FileManager({ tab }: { tab: WorkspaceTab }) {
   const [createDialog, setCreateDialog] = useState<{ kind: "file" | "directory"; name: string; parentPath: string } | null>(null);
   const dropTargetRef = useRef<HTMLDivElement>(null);
   const skipNextRefreshPathRef = useRef<string | null>(null);
+  const fileRequestRef = useRef(0);
 
   const refresh = useCallback(async () => {
+    const requestId = ++fileRequestRef.current;
     setLoading(true);
-    try { setFiles(await api.remoteFiles(tab.sessionId, path)); }
-    catch (error) { notify(String(error)); }
-    finally { setLoading(false); }
+    try {
+      const nextFiles = await api.remoteFiles(tab.sessionId, path);
+      if (fileRequestRef.current === requestId) {
+        setFiles(nextFiles);
+        setFilesPath(path);
+        setFilesSessionId(tab.sessionId);
+      }
+    } catch (error) {
+      if (fileRequestRef.current === requestId) notify(String(error));
+    } finally {
+      if (fileRequestRef.current === requestId) setLoading(false);
+    }
   }, [notify, path, tab.sessionId]);
 
   useEffect(() => {
@@ -61,10 +75,16 @@ export function FileManager({ tab }: { tab: WorkspaceTab }) {
     void refresh();
   }, [path, refresh]);
   useEffect(() => { setPathInput(path); }, [path]);
+  const visibleFiles = filesSessionId === tab.sessionId && filesPath === path ? files : [];
 
   const navigateToPath = (targetPath: string) => {
+    if (targetPath === path) { setPathInput(path); setSelected(null); return; }
+    fileRequestRef.current += 1;
     setPath(targetPath);
     setPathInput(targetPath);
+    setFiles([]);
+    setFilesPath(null);
+    setFilesSessionId(null);
     setSelected(null);
   };
 
@@ -80,19 +100,22 @@ export function FileManager({ tab }: { tab: WorkspaceTab }) {
       await refresh();
       return;
     }
+    const requestId = ++fileRequestRef.current;
     setLoading(true);
     try {
       const nextFiles = await api.remoteFiles(tab.sessionId, targetPath);
+      if (fileRequestRef.current !== requestId) return;
       skipNextRefreshPathRef.current = targetPath;
       setFiles(nextFiles);
+      setFilesPath(targetPath);
+      setFilesSessionId(tab.sessionId);
       setPath(targetPath);
       setPathInput(targetPath);
       setSelected(null);
     } catch (error) {
-      setPathInput(path);
-      notify(String(error));
+      if (fileRequestRef.current === requestId) { setPathInput(path); notify(String(error)); }
     } finally {
-      setLoading(false);
+      if (fileRequestRef.current === requestId) setLoading(false);
     }
   };
 
@@ -144,7 +167,7 @@ export function FileManager({ tab }: { tab: WorkspaceTab }) {
     if (!createDialog) return;
     const name = createDialog.name.trim();
     if (!name || name.includes("/") || name === "." || name === "..") return notify("名称无效");
-    if (createDialog.parentPath === path && files.some((file) => file.name === name)) return notify("当前目录已存在同名项目");
+    if (createDialog.parentPath === path && visibleFiles.some((file) => file.name === name)) return notify("当前目录已存在同名项目");
     try {
       const parentPath = createDialog.parentPath;
       const remotePath = joinRemote(parentPath, name);
@@ -178,12 +201,15 @@ export function FileManager({ tab }: { tab: WorkspaceTab }) {
 
   return (
     <div className="file-manager">
-      <div className="file-tree" onContextMenu={(event) => { event.preventDefault(); setContext({ x: event.clientX, y: event.clientY, file: null, targetPath: path }); }}>
-        <div className="tree-title" onContextMenu={(event) => { event.preventDefault(); event.stopPropagation(); setContext({ x: event.clientX, y: event.clientY, file: null, targetPath: "/" }); }}><Folder size={15} /> /</div>
-        {["root", "etc", "home", "opt", "tmp", "var", "usr"].map((name) => (
-          <button key={name} className={path === `/${name}` ? "active" : ""} type="button" onClick={() => navigateToPath(`/${name}`)} onContextMenu={(event) => { event.preventDefault(); event.stopPropagation(); setContext({ x: event.clientX, y: event.clientY, file: null, targetPath: `/${name}` }); }}><Folder size={14} />{name}</button>
-        ))}
-      </div>
+      <RemoteDirectoryTree
+        sessionId={tab.sessionId}
+        currentPath={path}
+        loadedPath={filesSessionId === tab.sessionId ? filesPath : null}
+        loadedEntries={visibleFiles}
+        onNavigate={navigateToPath}
+        onOpenContextMenu={(targetPath, x, y) => setContext({ x, y, file: null, targetPath })}
+        onError={notify}
+      />
       <div className="file-browser">
         <div className="file-toolbar">
           <div className="file-path-input"><Folder size={14} /><input aria-label="当前目录" title="输入远程目录后按 Enter" value={pathInput} onChange={(event) => setPathInput(event.target.value)} onBlur={() => setPathInput(path)} onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); void openTypedPath(); } else if (event.key === "Escape") setPathInput(path); }} /><button type="button" aria-label="打开路径" title="打开路径" onMouseDown={(event) => event.preventDefault()} onClick={() => void openTypedPath()}><ArrowRight size={14} /></button></div>
@@ -198,7 +224,7 @@ export function FileManager({ tab }: { tab: WorkspaceTab }) {
           <table className="data-table file-table">
             <thead><tr><th>文件名</th><th>大小</th><th>类型</th><th>修改时间</th><th>权限</th><th>用户/用户组</th></tr></thead>
             <tbody>
-              {files.map((file) => (
+              {visibleFiles.map((file) => (
                 <tr key={file.path} className={selected?.path === file.path ? "selected" : ""} onClick={() => setSelected(file)} onDoubleClick={() => void openEntry(file)} onContextMenu={(event) => { event.preventDefault(); event.stopPropagation(); setSelected(file); setContext({ x: event.clientX, y: event.clientY, file, targetPath: path }); }}>
                   <td><span className={`file-icon ${file.kind}`}>{file.kind === "directory" ? <Folder size={16} /> : <File size={16} />}</span>{file.name}</td>
                   <td>{file.kind === "directory" ? "" : formatBytes(file.size)}</td><td>{file.kind === "directory" ? "文件夹" : file.kind === "symlink" ? "链接" : "文件"}</td>
