@@ -1,0 +1,28 @@
+services:
+  debian:
+    build:
+      context: .
+      dockerfile: Dockerfile.debian
+    ports:
+      - "2222:22"
+    healthcheck: &ssh-health
+      test: ["CMD-SHELL", "ssh-keyscan -T 2 127.0.0.1 >/dev/null 2>&1"]
+      interval: 2s
+      timeout: 3s
+      retries: 20
+
+  alpine:
+    build:
+      context: .
+      dockerfile: Dockerfile.alpine
+    ports:
+      - "2223:22"
+    healthcheck: *ssh-health
+
+  rocky:
+    build:
+      context: .
+      dockerfile: Dockerfile.rocky
+    ports:
+      - "2224:22"
+    healthcheck: *ssh-health

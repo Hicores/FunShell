@@ -1,0 +1,14 @@
+FROM debian:12-slim
+
+RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+    openssh-server procps iproute2 iputils-tracepath traceroute tar ca-certificates \
+    && rm -rf /var/lib/apt/lists/* \
+    && mkdir -p /run/sshd /root/.ssh \
+    && echo 'root:FunShellTest!234' | chpasswd \
+    && printf '\nPermitRootLogin yes\nPasswordAuthentication yes\nPubkeyAuthentication yes\n' >> /etc/ssh/sshd_config
+
+COPY keys/id_ed25519.pub /root/.ssh/authorized_keys
+RUN chmod 700 /root/.ssh && chmod 600 /root/.ssh/authorized_keys
+
+EXPOSE 22
+CMD ["/usr/sbin/sshd", "-D", "-e", "-o", "AllowTcpForwarding=yes", "-o", "PermitOpen=any"]
