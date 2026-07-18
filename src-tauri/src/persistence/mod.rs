@@ -4,6 +4,7 @@ mod database;
 mod geoip;
 mod keys;
 mod secrets;
+mod transfers;
 mod tunnels;
 
 pub use database::Database;

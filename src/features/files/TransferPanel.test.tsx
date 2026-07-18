@@ -12,6 +12,8 @@ const running: TransferProgressEvent = {
   transferred: 40,
   total: 100,
   state: "running",
+  updatedAt: "2026-07-18T10:00:00Z",
+  viewed: false,
 };
 
 const completed: TransferProgressEvent = { ...running, taskId: "download-1", direction: "download", source: "/root/FunShell.exe", destination: "C:\\downloads\\FunShell.exe", state: "completed", transferred: 200, total: 200 };

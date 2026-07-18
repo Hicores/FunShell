@@ -1,8 +1,9 @@
+use chrono::Utc;
 use futures_util::{StreamExt, stream};
 use russh_sftp::protocol::{FileAttributes, FileType, OpenFlags};
 use std::{path::PathBuf, time::Instant};
 
-use tauri::{AppHandle, Emitter, State};
+use tauri::{AppHandle, Emitter, Manager, State};
 use tokio::{
     fs::File,
     io::{AsyncReadExt, AsyncWriteExt},
@@ -432,19 +433,29 @@ async fn download_pipelined(
 }
 
 fn emit_transfer(context: &TransferContext<'_>, transferred: u64, state: &str) {
-    let _ = context.app.emit(
-        "transfer-progress",
-        TransferProgressEvent {
-            session_id: context.session_id.to_owned(),
-            task_id: context.task_id.to_owned(),
-            direction: context.direction.to_owned(),
-            source: context.source.to_owned(),
-            destination: context.destination.to_owned(),
-            transferred,
-            total: context.total,
-            state: state.into(),
-        },
-    );
+    let transfer = TransferProgressEvent {
+        session_id: context.session_id.to_owned(),
+        task_id: context.task_id.to_owned(),
+        direction: context.direction.to_owned(),
+        source: context.source.to_owned(),
+        destination: context.destination.to_owned(),
+        transferred,
+        total: context.total,
+        state: state.into(),
+        updated_at: Utc::now().to_rfc3339(),
+        viewed: false,
+    };
+    if state != "running" || transferred == 0 {
+        if let Err(error) = context
+            .app
+            .state::<AppState>()
+            .database
+            .save_transfer(&transfer)
+        {
+            tracing::warn!(%error, task_id = context.task_id, "failed to persist transfer history");
+        }
+    }
+    let _ = context.app.emit("transfer-progress", transfer);
 }
 
 fn shell_quote(value: &str) -> String {

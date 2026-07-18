@@ -13,16 +13,21 @@ const task: TransferProgressEvent = {
   transferred: 100,
   total: 100,
   state: "completed",
+  updatedAt: "2026-07-18T10:00:00Z",
+  viewed: false,
 };
 
 describe("TransferCenter", () => {
-  beforeEach(() => useTransferStore.setState({ bySession: { "session-global": [task] } }));
+  beforeEach(() => useTransferStore.setState({ bySession: { "session-global": [task] }, viewing: false }));
 
-  it("opens transfer history from the global app header", () => {
+  it("opens transfer history and clears its unread badge", () => {
     render(<TransferCenter />);
-    expect(screen.getByRole("button", { name: "传输记录" })).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "传输记录" }));
+    const toggle = screen.getByRole("button", { name: "传输记录" });
+    expect(toggle).toHaveTextContent("1");
+    fireEvent.click(toggle);
     expect(screen.getByRole("region", { name: "传输进度与历史" })).toBeInTheDocument();
     expect(screen.getByText("FunShell.exe")).toBeInTheDocument();
+    expect(toggle).not.toHaveTextContent("1");
+    expect(useTransferStore.getState().bySession["session-global"][0].viewed).toBe(true);
   });
 });

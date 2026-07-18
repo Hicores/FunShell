@@ -8,7 +8,7 @@ import { ConnectionEditor } from "../features/connections/ConnectionEditor";
 import { KeyManager } from "../features/connections/KeyManager";
 import { SettingsDialog } from "../features/settings/SettingsDialog";
 import { useAppStore } from "../stores/appStore";
-import { onEvent } from "../lib/ipc";
+import { api, onEvent } from "../lib/ipc";
 import type { SessionStatusEvent, TransferProgressEvent } from "../types";
 import { useDesktopGuards } from "./useDesktopGuards";
 import { useTransferStore } from "../features/files/transferStore";
@@ -25,6 +25,7 @@ export function App() {
   const notify = useAppStore((state) => state.notify);
   const reconnect = useAppStore((state) => state.reconnect);
   const recordTransfer = useTransferStore((state) => state.record);
+  const hydrateTransfers = useTransferStore((state) => state.hydrate);
 
   useEffect(() => {
     void initialize();
@@ -35,6 +36,14 @@ export function App() {
     const timer = window.setTimeout(() => notify(null), 5200);
     return () => window.clearTimeout(timer);
   }, [notify, toast]);
+
+  useEffect(() => {
+    let active = true;
+    void api.transferHistory()
+      .then((transfers) => { if (active) hydrateTransfers(transfers); })
+      .catch((error) => notify(String(error)));
+    return () => { active = false; };
+  }, [hydrateTransfers, notify]);
 
   useEffect(() => {
     let dispose: (() => void) | undefined;
@@ -67,9 +76,18 @@ export function App() {
 
   useEffect(() => {
     let dispose: (() => void) | undefined;
-    void onEvent<TransferProgressEvent>("transfer-progress", (event) => recordTransfer(event.payload)).then((unlisten) => { dispose = unlisten; });
+    void onEvent<TransferProgressEvent>("transfer-progress", (event) => {
+      const transfer = event.payload;
+      recordTransfer(transfer);
+      if (
+        useTransferStore.getState().viewing
+        && (transfer.transferred === 0 || transfer.state !== "running")
+      ) {
+        void api.markTransferHistoryViewed().catch((error) => notify(String(error)));
+      }
+    }).then((unlisten) => { dispose = unlisten; });
     return () => dispose?.();
-  }, [recordTransfer]);
+  }, [notify, recordTransfer]);
 
   if (!initialized) {
     return (

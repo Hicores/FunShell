@@ -101,6 +101,8 @@ pub struct TransferProgressEvent {
     pub transferred: u64,
     pub total: u64,
     pub state: String,
+    pub updated_at: String,
+    pub viewed: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

@@ -253,6 +253,8 @@ export interface TransferProgressEvent {
   transferred: number;
   total: number;
   state: "running" | "completed" | "error" | "canceled";
+  updatedAt: string;
+  viewed: boolean;
 }
 
 export interface VaultStatus {

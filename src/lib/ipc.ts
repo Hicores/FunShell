@@ -28,6 +28,7 @@ import type {
   SystemInfo,
   TunnelProfile,
   TunnelRuntime,
+  TransferProgressEvent,
   VaultStatus,
   GeoIpInfo,
 } from "../types";
@@ -35,6 +36,7 @@ import type {
 export const isTauri = () => "__TAURI_INTERNALS__" in window;
 
 const mockHistory: CommandHistoryEntry[] = [];
+const mockTransferHistory: TransferProgressEvent[] = [];
 const mockPresets: CommandPreset[] = [
   { id: "preset-health", scope: "global", scopeId: null, name: "服务健康检查", command: "systemctl --no-pager --failed", tags: ["systemd"], sortOrder: 0 },
   { id: "preset-disk", scope: "global", scopeId: null, name: "磁盘占用", command: "du -sh * | sort -h", tags: ["storage"], sortOrder: 1 },
@@ -131,6 +133,17 @@ function mockCall(command: string, args?: Record<string, unknown>): unknown {
     };
     case "list_remote_files": return mockRemoteFiles;
     case "list_command_history": return mockHistory;
+    case "list_transfer_history": return [...mockTransferHistory];
+    case "mark_transfer_history_viewed": {
+      mockTransferHistory.forEach((transfer) => { transfer.viewed = true; });
+      return null;
+    }
+    case "clear_transfer_history": {
+      for (let index = mockTransferHistory.length - 1; index >= 0; index -= 1) {
+        if (mockTransferHistory[index].state !== "running") mockTransferHistory.splice(index, 1);
+      }
+      return null;
+    }
     case "list_command_presets": return mockPresets;
     case "save_command_preset": {
       const preset = args?.preset as CommandPreset;
@@ -208,6 +221,9 @@ export const api = {
   uploadRemoteFile: (sessionId: string, localPath: string, remotePath: string) => call<string>("upload_remote_file", { sessionId, localPath, remotePath }),
   downloadRemoteFile: (sessionId: string, remotePath: string, localPath: string) => call<string>("download_remote_file", { sessionId, remotePath, localPath }),
   cancelTransfer: (taskId: string) => call<void>("cancel_file_transfer", { taskId }),
+  transferHistory: () => call<TransferProgressEvent[]>("list_transfer_history"),
+  markTransferHistoryViewed: () => call<void>("mark_transfer_history_viewed"),
+  clearTransferHistory: () => call<void>("clear_transfer_history"),
   openRemoteFile: (sessionId: string, remotePath: string) => call<string>("open_remote_file", { sessionId, remotePath }),
   history: (connectionId?: string, search?: string) => call<CommandHistoryEntry[]>("list_command_history", { connectionId, search, limit: 300 }),
   favoriteHistory: (id: string, favorite: boolean) => call<void>("set_command_favorite", { id, favorite }),

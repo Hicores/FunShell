@@ -6,14 +6,17 @@ import { api, isTauri } from "../../lib/ipc";
 import { useAppStore } from "../../stores/appStore";
 import type { TransferProgressEvent } from "../../types";
 import { TransferPanel } from "./TransferPanel";
-import { useTransferStore } from "./transferStore";
+import { unreadTransferCount, useTransferStore } from "./transferStore";
 
 export function TransferCenter() {
   const notify = useAppStore((state) => state.notify);
   const bySession = useTransferStore((state) => state.bySession);
+  const unreadCount = useTransferStore(unreadTransferCount);
   const clearCompleted = useTransferStore((state) => state.clearCompleted);
+  const markViewed = useTransferStore((state) => state.markViewed);
+  const setViewing = useTransferStore((state) => state.setViewing);
   const [open, setOpen] = useState(false);
-  const transfers = useMemo(() => Object.values(bySession).flat().sort((left, right) => right.taskId.localeCompare(left.taskId)), [bySession]);
+  const transfers = useMemo(() => Object.values(bySession).flat().sort((left, right) => right.updatedAt.localeCompare(left.updatedAt)), [bySession]);
 
   const retry = async (task: TransferProgressEvent) => {
     try {
@@ -34,10 +37,33 @@ export function TransferCenter() {
     }
   };
 
+  const toggle = () => {
+    const nextOpen = !open;
+    setOpen(nextOpen);
+    setViewing(nextOpen);
+    if (!nextOpen) return;
+    markViewed();
+    void api.markTransferHistoryViewed().catch((error) => notify(String(error)));
+  };
+
+  const close = () => {
+    setOpen(false);
+    setViewing(false);
+  };
+
+  const clear = async () => {
+    try {
+      await api.clearTransferHistory();
+      clearCompleted();
+    } catch (error) {
+      notify(String(error));
+    }
+  };
+
   return (
     <div className="transfer-center">
-      <IconButton label="传输记录" className="transfer-toggle" active={open} onClick={() => setOpen((value) => !value)}><ListChecks size={18} />{transfers.length > 0 && <span>{transfers.length > 99 ? "99+" : transfers.length}</span>}</IconButton>
-      {open && <TransferPanel transfers={transfers} onCancel={(taskId) => void api.cancelTransfer(taskId)} onRetry={(task) => void retry(task)} onReveal={(task) => void reveal(task)} onClear={() => Object.keys(bySession).forEach((sessionId) => clearCompleted(sessionId))} onClose={() => setOpen(false)} />}
+      <IconButton label="传输记录" className="transfer-toggle" active={open} onClick={toggle}><ListChecks size={18} />{unreadCount > 0 && <span>{unreadCount > 99 ? "99+" : unreadCount}</span>}</IconButton>
+      {open && <TransferPanel transfers={transfers} onCancel={(taskId) => void api.cancelTransfer(taskId)} onRetry={(task) => void retry(task)} onReveal={(task) => void reveal(task)} onClear={() => void clear()} onClose={close} />}
     </div>
   );
 }

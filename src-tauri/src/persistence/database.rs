@@ -164,7 +164,26 @@ impl Database {
                     payload_json TEXT NOT NULL,
                     expires_at TEXT NOT NULL
                 );
+
+                CREATE TABLE IF NOT EXISTS transfer_history (
+                    task_id TEXT PRIMARY KEY,
+                    session_id TEXT NOT NULL,
+                    direction TEXT NOT NULL,
+                    source TEXT NOT NULL,
+                    destination TEXT NOT NULL,
+                    transferred INTEGER NOT NULL,
+                    total INTEGER NOT NULL,
+                    state TEXT NOT NULL,
+                    updated_at TEXT NOT NULL,
+                    viewed INTEGER NOT NULL DEFAULT 0
+                );
+                CREATE INDEX IF NOT EXISTS idx_transfer_history_updated_at
+                    ON transfer_history(updated_at DESC);
                 "#,
+            )?;
+            connection.execute(
+                "UPDATE transfer_history SET state='canceled', updated_at=?1 WHERE state='running'",
+                [chrono::Utc::now().to_rfc3339()],
             )?;
             Ok(())
         })
