@@ -77,12 +77,20 @@ export function ServerSidebar() {
         {!snapshot && <div className="mini-empty">连接后显示进程摘要</div>}
       </div>
 
-      <div className="sidebar-block network-mini">
+      <div
+        className={`sidebar-block network-mini ${sessionTab ? "clickable" : ""}`}
+        role="button"
+        tabIndex={sessionTab ? 0 : -1}
+        aria-label="打开网络监听"
+        aria-disabled={!sessionTab}
+        onClick={() => sessionTab && openWorkspace("network")}
+        onKeyDown={(event) => { if (sessionTab && (event.key === "Enter" || event.key === " ")) { event.preventDefault(); openWorkspace("network"); } }}
+      >
         <div className="network-summary">
           <span className="upload">↑ {formatRate(selectedNetwork?.transmitBps ?? 0)}</span>
           <span className="download">↓ {formatRate(selectedNetwork?.receiveBps ?? 0)}</span>
           <label>
-            <select value={selectedNetwork?.name ?? networkName} onChange={(event) => setNetworkName(event.target.value)}>
+            <select value={selectedNetwork?.name ?? networkName} onClick={(event) => event.stopPropagation()} onChange={(event) => setNetworkName(event.target.value)}>
               {(snapshot?.interfaces ?? [{ name: "eth0" }]).map((item) => <option key={item.name}>{item.name}</option>)}
             </select><ChevronDown size={13} />
           </label>

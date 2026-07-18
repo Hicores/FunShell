@@ -79,6 +79,9 @@
 .mini-empty { display: grid; height: 80px; place-items: center; color: #84939c; }
 
 .network-mini { padding: 7px; }
+.network-mini.clickable { cursor: pointer; }
+.network-mini.clickable:hover { background: #edf6fa; box-shadow: inset 3px 0 #2d93c3; }
+.network-mini.clickable:focus-visible { outline: 2px solid #3b98c8; outline-offset: -2px; }
 .network-summary { display: flex; align-items: center; gap: 12px; }
 .network-summary .upload { color: #bf4c20; }
 .network-summary .download { color: #087b3b; }

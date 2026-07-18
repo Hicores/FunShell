@@ -96,9 +96,12 @@ export const mockRemoteFiles: RemoteFileEntry[] = [
 
 export const mockSockets: SocketInfo[] = [
   { protocol: "tcp", state: "LISTEN", localAddress: "0.0.0.0", localPort: 80, remoteAddress: "0.0.0.0", remotePort: null, pid: 488485, process: "nginx", receivedBytes: null, sentBytes: null },
+  { protocol: "tcp", state: "LISTEN", localAddress: "0.0.0.0", localPort: 22, remoteAddress: "0.0.0.0", remotePort: null, pid: 778, process: "sshd", receivedBytes: null, sentBytes: null },
+  { protocol: "tcp", state: "LISTEN", localAddress: "::", localPort: 20008, remoteAddress: "::", remotePort: null, pid: 151137, process: "java", receivedBytes: null, sentBytes: null },
+  { protocol: "tcp", state: "ESTAB", localAddress: "1.14.122.236", localPort: 80, remoteAddress: "42.48.120.32", remotePort: 48251, pid: 488485, process: "nginx", receivedBytes: 697_000, sentBytes: 1_780_000 },
+  { protocol: "tcp", state: "ESTAB", localAddress: "1.14.122.236", localPort: 80, remoteAddress: "220.167.110.204", remotePort: 56071, pid: 488485, process: "nginx", receivedBytes: 221_000, sentBytes: 480_000 },
   { protocol: "tcp", state: "ESTAB", localAddress: "1.14.122.236", localPort: 22, remoteAddress: "171.109.213.141", remotePort: 54133, pid: 778, process: "sshd", receivedBytes: 697_000, sentBytes: 1_780_000 },
   { protocol: "tcp", state: "ESTAB", localAddress: "1.14.122.236", localPort: 20008, remoteAddress: "124.163.194.176", remotePort: 62736, pid: 151137, process: "java", receivedBytes: 546, sentBytes: 36_600 },
 ];
 
 export { processes as mockProcesses };
-

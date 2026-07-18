@@ -140,21 +140,25 @@ pub fn parse_sockets(output: &str) -> Vec<SocketInfo> {
         .collect::<Vec<_>>();
 
     if let Some(lines) = values.get("TCPINFO") {
-        let mut last_key: Option<(String, String)> = None;
+        let mut last_key: Option<(String, Option<u16>, String, Option<u16>)> = None;
         for line in lines {
             if line.trim_start().starts_with("ESTAB") {
                 let fields = line.split_whitespace().collect::<Vec<_>>();
                 if fields.len() >= 5 {
-                    last_key = Some((fields[3].to_owned(), fields[4].to_owned()));
+                    let (local_address, local_port) = split_endpoint(fields[3]);
+                    let (remote_address, remote_port) = split_endpoint(fields[4]);
+                    last_key = Some((local_address, local_port, remote_address, remote_port));
                 }
                 continue;
             }
-            if let Some((local, remote)) = &last_key {
+            if let Some((local_address, local_port, remote_address, remote_port)) = &last_key {
                 let sent = metric(line, "bytes_sent:");
                 let received = metric(line, "bytes_received:");
                 if let Some(socket) = sockets.iter_mut().find(|socket| {
-                    endpoint(&socket.local_address, socket.local_port) == *local
-                        && endpoint(&socket.remote_address, socket.remote_port) == *remote
+                    socket.local_address == *local_address
+                        && socket.local_port == *local_port
+                        && socket.remote_address == *remote_address
+                        && socket.remote_port == *remote_port
                 }) {
                     socket.sent_bytes = sent;
                     socket.received_bytes = received;
@@ -351,11 +355,6 @@ fn split_endpoint(value: &str) -> (String, Option<u16>) {
     }
 }
 
-fn endpoint(address: &str, port: Option<u16>) -> String {
-    port.map(|port| format!("{address}:{port}"))
-        .unwrap_or_else(|| address.to_owned())
-}
-
 fn metric(line: &str, name: &str) -> Option<u64> {
     let rest = line.split(name).nth(1)?;
     rest.split_whitespace().next()?.parse().ok()
@@ -374,7 +373,7 @@ fn extract_number_after(value: &str, marker: &str) -> Option<u32> {
 
 #[cfg(test)]
 mod tests {
-    use super::{parse_processes, parse_snapshot};
+    use super::{parse_processes, parse_snapshot, parse_sockets};
 
     #[test]
     fn parses_core_snapshot_values() {
@@ -391,5 +390,14 @@ mod tests {
         let rows = parse_processes("42 root 2048 1.5 sshd /usr/sbin/sshd -D");
         assert_eq!(rows[0].memory_bytes, 2 * 1024 * 1024);
         assert_eq!(rows[0].command, "/usr/sbin/sshd -D");
+    }
+
+    #[test]
+    fn associates_tcp_counters_with_ipv6_socket_endpoints() {
+        let output = "__SOCKETS__\ntcp LISTEN 0 4096 [::]:80 [::]:* users:((\"nginx\",pid=10,fd=3))\ntcp ESTAB 0 0 [::1]:80 [2001:db8::2]:45120 users:((\"nginx\",pid=10,fd=4))\n__TCPINFO__\nESTAB 0 0 [::1]:80 [2001:db8::2]:45120 users:((\"nginx\",pid=10,fd=4))\n cubic bytes_sent:9000 bytes_received:5000\n";
+        let sockets = parse_sockets(output);
+        assert_eq!(sockets.len(), 2);
+        assert_eq!(sockets[1].sent_bytes, Some(9000));
+        assert_eq!(sockets[1].received_bytes, Some(5000));
     }
 }

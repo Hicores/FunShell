@@ -1,47 +1,131 @@
 import { RefreshCw, Search } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { api } from "../../lib/ipc";
-import { formatBytes } from "../../lib/format";
-import type { GeoIpInfo, SocketInfo, WorkspaceTab } from "../../types";
-import { useAppStore } from "../../stores/appStore";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { IconButton } from "../../components/common/IconButton";
+import { formatBytes, formatRate } from "../../lib/format";
+import { api } from "../../lib/ipc";
+import { useAppStore } from "../../stores/appStore";
+import type { GeoIpInfo, SocketInfo, WorkspaceTab } from "../../types";
+import { buildListeners, rateSocketSamples, socketKey, type ListenerInfo, type RatedSocket } from "./networkModel";
 
-function address(socket: SocketInfo, local: boolean) {
-  const host = local ? socket.localAddress : socket.remoteAddress;
-  const port = local ? socket.localPort : socket.remotePort;
-  return port ? `${host}:${port}` : host;
+function endpoint(host: string, port: number | null) {
+  const formattedHost = host.includes(":") && !host.startsWith("[") ? `[${host}]` : host;
+  return port == null ? formattedHost : `${formattedHost}:${port}`;
+}
+
+function rate(value: number | null) {
+  return value == null ? "-" : formatRate(value);
+}
+
+function locationText(info: GeoIpInfo | undefined, error: string | undefined) {
+  if (info?.private) return "私网/本地地址";
+  if (info) return [info.country, info.region, info.city, info.isp].filter(Boolean).join(" · ") || "位置未知";
+  return error ? "查询不可用" : "查询中...";
 }
 
 export function NetworkView({ tab }: { tab: WorkspaceTab }) {
   const notify = useAppStore((state) => state.notify);
-  const [sockets, setSockets] = useState<SocketInfo[]>([]);
+  const [sockets, setSockets] = useState<RatedSocket[]>([]);
   const [query, setQuery] = useState("");
-  const [selected, setSelected] = useState<SocketInfo | null>(null);
-  const [geoIp, setGeoIp] = useState<GeoIpInfo | null>(null);
-  const [geoError, setGeoError] = useState("");
-  const [geoLoading, setGeoLoading] = useState(false);
+  const [selectedKey, setSelectedKey] = useState<string | null>(null);
+  const [locations, setLocations] = useState<Record<string, GeoIpInfo>>({});
+  const [locationErrors, setLocationErrors] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(false);
-  const refresh = useCallback(async () => { setLoading(true); try { setSockets(await api.sockets(tab.sessionId)); } catch (error) { notify(String(error)); } finally { setLoading(false); } }, [notify, tab.sessionId]);
-  useEffect(() => { void refresh(); const timer = window.setInterval(refresh, 3000); return () => window.clearInterval(timer); }, [refresh]);
-  const filtered = useMemo(() => sockets.filter((socket) => `${socket.pid} ${socket.process} ${address(socket, true)} ${address(socket, false)} ${socket.protocol}`.toLowerCase().includes(query.toLowerCase())), [query, sockets]);
-  const choose = async (socket: SocketInfo) => {
-    setSelected(socket);
-    setGeoIp(null);
-    setGeoError("");
-    if (!socket.remoteAddress || socket.remoteAddress === "*") {
-      setGeoError("当前连接没有可查询的远端 IP");
-      return;
+  const previousRef = useRef<Map<string, SocketInfo>>(new Map());
+  const sampledAtRef = useRef<number | null>(null);
+
+  const refresh = useCallback(async () => {
+    setLoading(true);
+    try {
+      const next = await api.sockets(tab.sessionId);
+      const now = Date.now();
+      const elapsed = sampledAtRef.current == null ? 3_000 : Math.max(250, now - sampledAtRef.current);
+      setSockets(rateSocketSamples(next, previousRef.current, elapsed));
+      previousRef.current = new Map(next.map((socket) => [socketKey(socket), socket]));
+      sampledAtRef.current = now;
+    } catch (error) {
+      notify(String(error));
+    } finally {
+      setLoading(false);
     }
-    setGeoLoading(true);
-    try { setGeoIp(await api.geoIp(socket.remoteAddress)); }
-    catch (error) { setGeoError(String(error)); }
-    finally { setGeoLoading(false); }
-  };
+  }, [notify, tab.sessionId]);
+
+  useEffect(() => {
+    previousRef.current.clear();
+    sampledAtRef.current = null;
+    void refresh();
+    const timer = window.setInterval(refresh, 2_000);
+    return () => window.clearInterval(timer);
+  }, [refresh]);
+
+  const listeners = useMemo(() => buildListeners(sockets), [sockets]);
+  const filtered = useMemo(() => {
+    const value = query.toLowerCase();
+    return listeners.filter((listener) => `${listener.pid} ${listener.process} ${listener.protocol} ${listener.localAddress} ${listener.localPort}`.toLowerCase().includes(value));
+  }, [listeners, query]);
+  const selected = listeners.find((listener) => listener.key === selectedKey) ?? null;
+  const remoteIpKey = useMemo(() => selected
+    ? [...new Set(selected.connections.map((socket) => socket.remoteAddress).filter(Boolean))].sort().join("|")
+    : "", [selected]);
+
+  useEffect(() => {
+    if (!remoteIpKey) return;
+    let disposed = false;
+    const ips = remoteIpKey.split("|");
+    void Promise.all(ips.map(async (ip) => {
+      try { return { ip, info: await api.geoIp(ip), error: null }; }
+      catch (error) { return { ip, info: null, error: String(error) }; }
+    })).then((results) => {
+      if (disposed) return;
+      setLocations((current) => {
+        const next = { ...current };
+        results.forEach((result) => { if (result.info) next[result.ip] = result.info; });
+        return next;
+      });
+      setLocationErrors((current) => {
+        const next = { ...current };
+        results.forEach((result) => { if (result.error) next[result.ip] = result.error; });
+        return next;
+      });
+    });
+    return () => { disposed = true; };
+  }, [remoteIpKey]);
+
+  const choose = (listener: ListenerInfo) => setSelectedKey(listener.key);
+
   return (
     <section className="detail-view network-view">
-      <header className="view-toolbar"><strong>网络监控</strong><label><Search size={15} /><input placeholder="搜索进程、IP 或端口" value={query} onChange={(event) => setQuery(event.target.value)} /></label><IconButton label="刷新" onClick={() => void refresh()}><RefreshCw size={16} className={loading ? "spin" : ""} /></IconButton></header>
-      <div className="network-table-wrap"><table className="data-table"><thead><tr><th>PID</th><th>名称</th><th>协议</th><th>状态</th><th>监听/本地地址</th><th>远端地址</th><th>上传</th><th>下载</th></tr></thead><tbody>{filtered.map((socket, index) => <tr key={`${address(socket, true)}-${address(socket, false)}-${index}`} className={selected === socket ? "selected" : ""} onClick={() => void choose(socket)}><td>{socket.pid ?? "-"}</td><td>{socket.process ?? "-"}</td><td>{socket.protocol}</td><td>{socket.state}</td><td>{address(socket, true)}</td><td>{address(socket, false)}</td><td>{socket.sentBytes == null ? "-" : formatBytes(socket.sentBytes)}</td><td>{socket.receivedBytes == null ? "-" : formatBytes(socket.receivedBytes)}</td></tr>)}</tbody></table></div>
-      <div className="socket-details"><strong>{selected ? `${selected.process ?? "进程"} ${address(selected, true)}` : "选择连接查看明细"}</strong>{selected && <><span>远端 IP：{selected.remoteAddress}</span><span>连接状态：{selected.state}</span><span>IP 信息：{geoLoading ? "查询中" : geoIp?.private ? "私网/本地地址（未外发）" : geoIp ? [geoIp.country, geoIp.region, geoIp.city].filter(Boolean).join(" · ") || "提供方未返回位置" : geoError || "等待查询"}</span>{geoIp?.isp && <span>网络服务商：{geoIp.isp}</span>}</>}</div>
+      <header className="view-toolbar">
+        <strong>网络监听</strong>
+        <span>{listeners.length} 个监听端口 · 每 2 秒采样速率</span>
+        <label><Search size={15} /><input placeholder="搜索程序、PID、IP 或端口" value={query} onChange={(event) => setQuery(event.target.value)} /></label>
+        <IconButton label="刷新" onClick={() => void refresh()}><RefreshCw size={16} className={loading ? "spin" : ""} /></IconButton>
+      </header>
+
+      <div className="network-listener-table-wrap">
+        <table className="data-table listener-table">
+          <thead><tr><th>PID</th><th>名称</th><th>协议</th><th>监听 IP</th><th>端口</th><th>IP 数</th><th>连接数</th><th>上传速率</th><th>下载速率</th></tr></thead>
+          <tbody>{filtered.map((listener) => (
+            <tr key={listener.key} className={selectedKey === listener.key ? "selected" : ""} onClick={() => choose(listener)}>
+              <td>{listener.pid ?? "-"}</td><td>{listener.process ?? "未知程序"}</td><td>{listener.protocol.toUpperCase()}</td><td>{listener.localAddress}</td><td>{listener.localPort}</td><td>{listener.ipCount}</td><td>{listener.connectionCount}</td><td>{rate(listener.sentBps)}</td><td>{rate(listener.receivedBps)}</td>
+            </tr>
+          ))}</tbody>
+        </table>
+        {!filtered.length && <div className="empty-state">当前没有匹配的监听端口</div>}
+      </div>
+
+      <section className="listener-connections">
+        <header><strong>{selected ? endpoint(selected.localAddress, selected.localPort) : "连接明细"}</strong><span>{selected ? `${selected.process ?? "未知程序"} · ${selected.connectionCount} 个连接` : "选择上方监听程序查看连接"}</span></header>
+        <div className="listener-connections-table-wrap">
+          <table className="data-table listener-connections-table">
+            <thead><tr><th>位置</th><th>远端 IP</th><th>端口</th><th>状态</th><th>上传速率</th><th>下载速率</th><th>累计上传</th><th>累计下载</th></tr></thead>
+            <tbody>{(selected?.connections ?? []).map((socket) => (
+              <tr key={socket.key}><td title={locationErrors[socket.remoteAddress]}>{locationText(locations[socket.remoteAddress], locationErrors[socket.remoteAddress])}</td><td>{socket.remoteAddress}</td><td>{socket.remotePort ?? "-"}</td><td>{socket.state}</td><td>{rate(socket.sentBps)}</td><td>{rate(socket.receivedBps)}</td><td>{socket.sentBytes == null ? "-" : formatBytes(socket.sentBytes)}</td><td>{socket.receivedBytes == null ? "-" : formatBytes(socket.receivedBytes)}</td></tr>
+            ))}</tbody>
+          </table>
+          {selected && !selected.connections.length && <div className="empty-state">该监听端口当前没有活动连接</div>}
+          {!selected && <div className="empty-state">点击监听程序后在这里查看连接速率与 IP 信息</div>}
+        </div>
+      </section>
     </section>
   );
 }

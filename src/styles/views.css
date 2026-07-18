@@ -82,15 +82,23 @@
 .environment-table { border-left: 1px solid #c4ced4; }
 .environment-table th:first-child { width: 145px; }
 
-.network-view { grid-template-rows: 40px minmax(0, 1fr) 128px; }
-.network-view th:nth-child(1) { width: 80px; }
-.network-view th:nth-child(2) { width: 110px; }
-.network-view th:nth-child(3) { width: 65px; }
-.network-view th:nth-child(4) { width: 80px; }
-.network-view th:nth-child(7), .network-view th:nth-child(8) { width: 90px; }
-.socket-details { display: flex; align-items: flex-start; gap: 28px; border-top: 1px solid #b7c3ca; padding: 14px; background: #f5f8f9; }
-.socket-details strong { min-width: 210px; }
-.socket-details span { color: #536a77; }
+.network-view { grid-template-rows: 40px minmax(190px, 1fr) 310px; }
+.network-listener-table-wrap, .listener-connections-table-wrap { min-height: 0; overflow: auto; }
+.listener-table th:nth-child(1) { width: 82px; }
+.listener-table th:nth-child(2) { width: 130px; }
+.listener-table th:nth-child(3) { width: 70px; }
+.listener-table th:nth-child(4) { width: 135px; }
+.listener-table th:nth-child(5), .listener-table th:nth-child(6), .listener-table th:nth-child(7) { width: 76px; }
+.listener-table th:nth-child(8), .listener-table th:nth-child(9) { width: 105px; }
+.listener-connections { display: grid; min-height: 0; grid-template-rows: 38px minmax(0, 1fr); border-top: 1px solid #9eafb9; background: white; }
+.listener-connections > header { display: flex; align-items: center; gap: 16px; padding: 0 10px; border-bottom: 1px solid #c5cfd5; background: #f1f5f7; }
+.listener-connections > header strong { color: #235d7c; }
+.listener-connections > header span { color: #637984; }
+.listener-connections-table th:nth-child(1) { width: 260px; }
+.listener-connections-table th:nth-child(2) { width: 165px; }
+.listener-connections-table th:nth-child(3) { width: 82px; }
+.listener-connections-table th:nth-child(4) { width: 95px; }
+.listener-connections-table th:nth-child(n+5) { width: 108px; }
 
 .tunnel-view { overflow: auto; }
 .tunnel-table th:nth-child(1) { width: 170px; }
@@ -107,4 +115,5 @@
 @media (max-height: 760px) {
   .process-view { grid-template-rows: 40px minmax(200px, 1fr) 240px; }
   .process-details textarea { height: 70px; }
+  .network-view { grid-template-rows: 40px minmax(180px, 1fr) 250px; }
 }

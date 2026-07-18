@@ -46,6 +46,7 @@ let mockSettings: AppSettings = {
   confirmCloseActiveSessions: true,
 };
 let mockSessionSequence = 0;
+let mockSocketTick = 0;
 
 async function call<T>(command: string, args?: Record<string, unknown>): Promise<T> {
   if (isTauri()) return invoke<T>(command, args);
@@ -93,7 +94,14 @@ function mockCall(command: string, args?: Record<string, unknown>): unknown {
       const process = mockProcesses.find((item) => item.pid === args?.pid) ?? mockProcesses[0];
       return { pid: process.pid, name: process.name, executable: `/usr/bin/${process.name}`, workingDirectory: "/opt/apps", command: process.command, environment: { HOME: "/root", LANG: "en_US.UTF-8", PATH: "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin" } } satisfies ProcessDetails;
     }
-    case "list_sockets": return mockSockets;
+    case "list_sockets": {
+      mockSocketTick += 1;
+      return mockSockets.map((socket, index) => ({
+        ...socket,
+        sentBytes: socket.sentBytes == null ? null : socket.sentBytes + mockSocketTick * (index + 1) * 2_400,
+        receivedBytes: socket.receivedBytes == null ? null : socket.receivedBytes + mockSocketTick * (index + 1) * 1_700,
+      }));
+    }
     case "trace_route": return {
       target: String(args?.target ?? "8.8.8.8"),
       remote: Boolean(args?.remote ?? true),
