@@ -39,17 +39,18 @@ export function ServerSidebar() {
   }, [sessionTab?.sessionId, setSnapshot]);
 
   useEffect(() => {
-    if (!networkHistoryKey || !selectedNetwork) return;
-    const sample: NetworkRateSample = {
-      sampledAt: Date.now(),
-      receiveBps: selectedNetwork.receiveBps,
-      transmitBps: selectedNetwork.transmitBps,
-    };
-    setNetworkHistory((current) => ({
-      ...current,
-      [networkHistoryKey]: appendNetworkRateSample(current[networkHistoryKey] ?? [], sample),
-    }));
-  }, [networkHistoryKey, selectedNetwork?.receiveBps, selectedNetwork?.receivedBytes, selectedNetwork?.transmitBps, selectedNetwork?.transmittedBytes]);
+    if (!sessionTab || !snapshot) return;
+    const sampledAt = Date.now();
+    setNetworkHistory((current) => {
+      const next = { ...current };
+      snapshot.interfaces.forEach((network) => {
+        const key = `${sessionTab.sessionId}:${network.name}`;
+        const sample: NetworkRateSample = { sampledAt, receiveBps: network.receiveBps, transmitBps: network.transmitBps };
+        next[key] = appendNetworkRateSample(current[key] ?? [], sample);
+      });
+      return next;
+    });
+  }, [sessionTab?.sessionId, snapshot]);
 
   const memoryPercent = snapshot?.memoryTotal ? snapshot.memoryUsed / snapshot.memoryTotal * 100 : 0;
   const swapPercent = snapshot?.swapTotal ? snapshot.swapUsed / snapshot.swapTotal * 100 : 0;

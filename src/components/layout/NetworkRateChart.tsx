@@ -24,41 +24,44 @@ function axisLabel(value: number) {
   return formatBytes(value, value >= 1024 * 1024 ? 1 : 0);
 }
 
-function polylinePoints(samples: NetworkRateSample[], field: "receiveBps" | "transmitBps", ceiling: number) {
+function barGeometry(samples: NetworkRateSample[], field: "receiveBps" | "transmitBps", ceiling: number) {
   const left = 34;
   const right = 4;
   const top = 5;
   const bottom = 62;
   const width = 320 - left - right;
-  const step = width / (NETWORK_RATE_HISTORY_LIMIT - 1);
+  const step = width / NETWORK_RATE_HISTORY_LIMIT;
+  const wideBar = Math.max(1.5, step * 0.72);
+  const barWidth = field === "receiveBps" ? wideBar : Math.max(1, wideBar * 0.34);
   return samples.map((sample, index) => {
-    const x = left + width - (samples.length - 1 - index) * step;
-    const y = bottom - Math.min(sample[field], ceiling) / ceiling * (bottom - top);
-    return `${x.toFixed(1)},${y.toFixed(1)}`;
-  }).join(" ");
+    const slotX = left + width - (samples.length - index) * step;
+    const height = Math.min(sample[field], ceiling) / ceiling * (bottom - top);
+    return {
+      x: slotX + (step - barWidth) / 2,
+      y: bottom - height,
+      width: barWidth,
+      height,
+    };
+  });
 }
 
 export function NetworkRateChart({ samples }: { samples: NetworkRateSample[] }) {
   const peak = Math.max(0, ...samples.flatMap((sample) => [sample.receiveBps, sample.transmitBps]));
   const ceiling = rateScaleCeiling(peak);
-  const receivePoints = polylinePoints(samples, "receiveBps", ceiling);
-  const transmitPoints = polylinePoints(samples, "transmitBps", ceiling);
-  const latest = samples.at(-1);
-  const latestX = samples.length ? 316 : 0;
-  const receiveY = latest ? 62 - Math.min(latest.receiveBps, ceiling) / ceiling * 57 : 62;
-  const transmitY = latest ? 62 - Math.min(latest.transmitBps, ceiling) / ceiling * 57 : 62;
-  const gridValues = [ceiling, ceiling / 2, 0];
+  const receiveBars = barGeometry(samples, "receiveBps", ceiling);
+  const transmitBars = barGeometry(samples, "transmitBps", ceiling);
+  const gridValues = [ceiling, ceiling * 2 / 3, ceiling / 3];
 
   return (
     <div className="network-chart">
-      <svg viewBox="0 0 320 70" preserveAspectRatio="none" role="img" aria-label={`网卡实际速率曲线，峰值 ${axisLabel(peak)}/s`}>
+      <svg viewBox="0 0 320 70" preserveAspectRatio="none" role="img" aria-label={`网卡实际速率直方图，峰值 ${axisLabel(peak)}/s`}>
         {gridValues.map((value, index) => {
-          const y = 5 + index * 28.5;
+          const y = 5 + index * 19;
           return <g key={value}><text x="1" y={y + 3}>{axisLabel(value)}</text><line x1="34" y1={y} x2="316" y2={y} /></g>;
         })}
-        <polyline className="receive-line" points={receivePoints} />
-        <polyline className="transmit-line" points={transmitPoints} />
-        {latest && <><circle className="receive-dot" cx={latestX} cy={receiveY} r="2" /><circle className="transmit-dot" cx={latestX} cy={transmitY} r="2" /></>}
+        <line className="chart-baseline" x1="34" y1="62" x2="316" y2="62" />
+        {receiveBars.map((bar, index) => <rect key={`receive-${samples[index].sampledAt}-${index}`} className="receive-bar" {...bar} />)}
+        {transmitBars.map((bar, index) => <rect key={`transmit-${samples[index].sampledAt}-${index}`} className="transmit-bar" {...bar} />)}
       </svg>
       {samples.length < 2 && <span>正在采样...</span>}
     </div>

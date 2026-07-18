@@ -92,9 +92,9 @@
 .network-chart svg { display: block; width: 100%; height: 100%; }
 .network-chart line { stroke: #9fb4bf; stroke-width: 0.8; stroke-dasharray: 1 4; vector-effect: non-scaling-stroke; }
 .network-chart text { fill: #647984; font-size: 8px; }
-.network-chart polyline { fill: none; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; vector-effect: non-scaling-stroke; }
-.network-chart .receive-line, .network-chart .receive-dot { stroke: #168450; fill: #168450; }
-.network-chart .transmit-line, .network-chart .transmit-dot { stroke: #d15a25; fill: #d15a25; }
+.network-chart .chart-baseline { stroke: #77a9c0; stroke-width: 1; stroke-dasharray: none; }
+.network-chart .receive-bar { fill: #76a56f; opacity: 0.68; }
+.network-chart .transmit-bar { fill: #f09a72; opacity: 0.72; }
 .network-chart > span { position: absolute; inset: 0; display: grid; place-items: center; color: #82939c; font-size: 11px; }
 .latency-block { display: grid; grid-template-columns: 20px 1fr auto; align-items: center; min-height: 54px; border: 0; border-bottom: 1px solid #cbd4da; padding: 8px; background: #f8fafb; text-align: left; }
 .latency-block strong { color: #2379a7; }

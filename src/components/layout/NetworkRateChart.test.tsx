@@ -3,14 +3,18 @@ import { describe, expect, it } from "vitest";
 import { appendNetworkRateSample, NETWORK_RATE_HISTORY_LIMIT, NetworkRateChart, rateScaleCeiling, type NetworkRateSample } from "./NetworkRateChart";
 
 describe("NetworkRateChart", () => {
-  it("plots actual upload and download samples", () => {
+  it("plots actual upload and download samples as histogram bars", () => {
     const samples: NetworkRateSample[] = [
       { sampledAt: 1, receiveBps: 2_000, transmitBps: 1_000 },
       { sampledAt: 2, receiveBps: 8_000, transmitBps: 4_000 },
     ];
     const { container } = render(<NetworkRateChart samples={samples} />);
-    expect(screen.getByRole("img")).toHaveAttribute("aria-label", expect.stringContaining("峰值"));
-    expect(container.querySelector(".receive-line")?.getAttribute("points")).not.toBe(container.querySelector(".transmit-line")?.getAttribute("points"));
+    expect(screen.getByRole("img")).toHaveAttribute("aria-label", expect.stringContaining("实际速率直方图"));
+    const receiveBars = container.querySelectorAll<SVGRectElement>(".receive-bar");
+    const transmitBars = container.querySelectorAll<SVGRectElement>(".transmit-bar");
+    expect(receiveBars).toHaveLength(2);
+    expect(transmitBars).toHaveLength(2);
+    expect(Number(receiveBars[1].getAttribute("height"))).toBeGreaterThan(Number(transmitBars[1].getAttribute("height")));
     expect(screen.queryByText("正在采样...")).not.toBeInTheDocument();
   });
 
