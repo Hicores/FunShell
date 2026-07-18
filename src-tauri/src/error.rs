@@ -7,7 +7,19 @@ pub enum AppError {
     Message(String),
     #[error(transparent)]
     Io(#[from] std::io::Error),
+    #[error(transparent)]
+    Database(#[from] rusqlite::Error),
+    #[error(transparent)]
+    Json(#[from] serde_json::Error),
+    #[error("凭据保险库已锁定")]
+    VaultLocked,
+    #[error("凭据解密失败")]
+    Decryption,
+    #[error("{0}")]
+    Validation(String),
 }
+
+pub type AppResult<T> = Result<T, AppError>;
 
 impl Serialize for AppError {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
@@ -17,4 +29,3 @@ impl Serialize for AppError {
         serializer.serialize_str(&self.to_string())
     }
 }
-

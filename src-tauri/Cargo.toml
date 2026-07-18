@@ -23,6 +23,20 @@ thiserror = "2.0"
 tokio = { version = "1.48", features = ["macros", "rt-multi-thread", "sync", "time", "net", "io-util", "process", "fs"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+aes-gcm = "0.10"
+argon2 = "0.5"
+base64 = "0.22"
+chrono = { version = "0.4", features = ["serde"] }
+parking_lot = "0.12"
+rand = "0.8"
+rusqlite = { version = "0.38", features = ["bundled"] }
+sha2 = "0.10"
+uuid = { version = "1.18", features = ["v4", "serde"] }
+windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_Security_Cryptography"] }
+zeroize = "1.8"
+
+[dev-dependencies]
+tempfile = "3.23"
 
 [profile.release]
 codegen-units = 1
@@ -30,4 +44,3 @@ lto = true
 opt-level = "s"
 panic = "abort"
 strip = "symbols"
-
