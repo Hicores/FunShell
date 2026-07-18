@@ -1,8 +1,10 @@
 import { RefreshCw, Search } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { IconButton } from "../../components/common/IconButton";
+import { SortableHeader } from "../../components/common/SortableHeader";
 import { formatBytes, formatRate } from "../../lib/format";
 import { api } from "../../lib/ipc";
+import { nextSortState, sortRows, type SortState, type SortValue } from "../../lib/sort";
 import { useAppStore } from "../../stores/appStore";
 import type { GeoIpInfo, SocketInfo, WorkspaceTab } from "../../types";
 import { buildListeners, rateSocketSamples, socketKey, type ListenerInfo, type RatedSocket } from "./networkModel";
@@ -26,12 +28,27 @@ function locationText(info: GeoIpInfo | undefined, error: string | undefined) {
   return error ? "查询不可用" : "查询中...";
 }
 
+type ListenerSortKey = "pid" | "process" | "protocol" | "addressFamily" | "interfaceName" | "localAddress" | "localPort" | "ipCount" | "connectionCount" | "sentBps" | "receivedBps";
+type ConnectionSortKey = "interfaceName" | "localAddress" | "location" | "remoteAddress" | "remotePort" | "state" | "sentBps" | "receivedBps" | "sentBytes" | "receivedBytes";
+
+function listenerSortValue(listener: ListenerInfo, key: ListenerSortKey): SortValue {
+  if (key === "interfaceName") return interfaceText(listener.interfaceName);
+  return listener[key];
+}
+
+function connectionSortValue(socket: RatedSocket, key: ConnectionSortKey, locations: Record<string, GeoIpInfo>, errors: Record<string, string>): SortValue {
+  if (key === "location") return locationText(locations[socket.remoteAddress], errors[socket.remoteAddress]);
+  return socket[key];
+}
+
 export function NetworkView({ tab }: { tab: WorkspaceTab }) {
   const notify = useAppStore((state) => state.notify);
   const [sockets, setSockets] = useState<RatedSocket[]>([]);
   const [query, setQuery] = useState("");
   const [familyFilter, setFamilyFilter] = useState("all");
   const [interfaceFilter, setInterfaceFilter] = useState("all");
+  const [listenerSort, setListenerSort] = useState<SortState<ListenerSortKey>>({ key: "connectionCount", direction: "desc" });
+  const [connectionSort, setConnectionSort] = useState<SortState<ConnectionSortKey> | null>(null);
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
   const [locations, setLocations] = useState<Record<string, GeoIpInfo>>({});
   const [locationErrors, setLocationErrors] = useState<Record<string, string>>({});
@@ -77,7 +94,14 @@ export function NetworkView({ tab }: { tab: WorkspaceTab }) {
       return matchesFamily && matchesInterface && matchesQuery;
     });
   }, [familyFilter, interfaceFilter, listeners, query]);
+  const sortedListeners = useMemo(() => sortRows(filtered, (listener) => listenerSortValue(listener, listenerSort.key), listenerSort.direction), [filtered, listenerSort]);
   const selected = listeners.find((listener) => listener.key === selectedKey) ?? null;
+  const sortedConnections = useMemo(() => {
+    const connections = selected?.connections ?? [];
+    return connectionSort
+      ? sortRows(connections, (socket) => connectionSortValue(socket, connectionSort.key, locations, locationErrors), connectionSort.direction)
+      : connections;
+  }, [connectionSort, locationErrors, locations, selected]);
   const remoteIpKey = useMemo(() => selected
     ? [...new Set(selected.connections.map((socket) => socket.remoteAddress).filter(Boolean))].sort().join("|")
     : "", [selected]);
@@ -106,6 +130,8 @@ export function NetworkView({ tab }: { tab: WorkspaceTab }) {
   }, [remoteIpKey]);
 
   const choose = (listener: ListenerInfo) => setSelectedKey(listener.key);
+  const sortListeners = (key: ListenerSortKey, defaultDirection: "asc" | "desc") => setListenerSort((current) => nextSortState(current, key, defaultDirection));
+  const sortConnections = (key: ConnectionSortKey, defaultDirection: "asc" | "desc") => setConnectionSort((current) => nextSortState(current, key, defaultDirection));
 
   return (
     <section className="detail-view network-view">
@@ -120,8 +146,20 @@ export function NetworkView({ tab }: { tab: WorkspaceTab }) {
 
       <div className="network-listener-table-wrap">
         <table className="data-table listener-table">
-          <thead><tr><th>PID</th><th>名称</th><th>协议</th><th>IP 版本</th><th>网卡</th><th>监听 IP</th><th>端口</th><th>IP 数</th><th>连接数</th><th>上传速率</th><th>下载速率</th></tr></thead>
-          <tbody>{filtered.map((listener) => (
+          <thead><tr>
+            <SortableHeader label="PID" sortKey="pid" activeKey={listenerSort.key} direction={listenerSort.direction} onSort={sortListeners} />
+            <SortableHeader label="名称" sortKey="process" activeKey={listenerSort.key} direction={listenerSort.direction} onSort={sortListeners} />
+            <SortableHeader label="协议" sortKey="protocol" activeKey={listenerSort.key} direction={listenerSort.direction} onSort={sortListeners} />
+            <SortableHeader label="IP 版本" sortKey="addressFamily" activeKey={listenerSort.key} direction={listenerSort.direction} onSort={sortListeners} />
+            <SortableHeader label="网卡" sortKey="interfaceName" activeKey={listenerSort.key} direction={listenerSort.direction} onSort={sortListeners} />
+            <SortableHeader label="监听 IP" sortKey="localAddress" activeKey={listenerSort.key} direction={listenerSort.direction} onSort={sortListeners} />
+            <SortableHeader label="端口" sortKey="localPort" activeKey={listenerSort.key} direction={listenerSort.direction} onSort={sortListeners} />
+            <SortableHeader label="IP 数" sortKey="ipCount" activeKey={listenerSort.key} direction={listenerSort.direction} defaultDirection="desc" onSort={sortListeners} />
+            <SortableHeader label="连接数" sortKey="connectionCount" activeKey={listenerSort.key} direction={listenerSort.direction} defaultDirection="desc" onSort={sortListeners} />
+            <SortableHeader label="上传速率" sortKey="sentBps" activeKey={listenerSort.key} direction={listenerSort.direction} defaultDirection="desc" onSort={sortListeners} />
+            <SortableHeader label="下载速率" sortKey="receivedBps" activeKey={listenerSort.key} direction={listenerSort.direction} defaultDirection="desc" onSort={sortListeners} />
+          </tr></thead>
+          <tbody>{sortedListeners.map((listener) => (
             <tr key={listener.key} className={selectedKey === listener.key ? "selected" : ""} onClick={() => choose(listener)}>
               <td>{listener.pid ?? "-"}</td><td>{listener.process ?? "未知程序"}</td><td>{listener.protocol.toUpperCase()}</td><td>{listener.addressFamily}</td><td>{interfaceText(listener.interfaceName)}</td><td>{listener.localAddress}</td><td>{listener.localPort}</td><td>{listener.ipCount}</td><td>{listener.connectionCount}</td><td>{rate(listener.sentBps)}</td><td>{rate(listener.receivedBps)}</td>
             </tr>
@@ -134,8 +172,19 @@ export function NetworkView({ tab }: { tab: WorkspaceTab }) {
         <header><strong>{selected ? endpoint(selected.localAddress, selected.localPort) : "连接明细"}</strong><span>{selected ? `${selected.process ?? "未知程序"} · ${selected.addressFamily} · ${interfaceText(selected.interfaceName)} · ${selected.connectionCount} 个连接` : "选择上方监听程序查看连接"}</span></header>
         <div className="listener-connections-table-wrap">
           <table className="data-table listener-connections-table">
-            <thead><tr><th>网卡</th><th>本地 IP</th><th>位置</th><th>远端 IP</th><th>端口</th><th>状态</th><th>上传速率</th><th>下载速率</th><th>累计上传</th><th>累计下载</th></tr></thead>
-            <tbody>{(selected?.connections ?? []).map((socket) => (
+            <thead><tr>
+              <SortableHeader label="网卡" sortKey="interfaceName" activeKey={connectionSort?.key} direction={connectionSort?.direction} onSort={sortConnections} />
+              <SortableHeader label="本地 IP" sortKey="localAddress" activeKey={connectionSort?.key} direction={connectionSort?.direction} onSort={sortConnections} />
+              <SortableHeader label="位置" sortKey="location" activeKey={connectionSort?.key} direction={connectionSort?.direction} onSort={sortConnections} />
+              <SortableHeader label="远端 IP" sortKey="remoteAddress" activeKey={connectionSort?.key} direction={connectionSort?.direction} onSort={sortConnections} />
+              <SortableHeader label="端口" sortKey="remotePort" activeKey={connectionSort?.key} direction={connectionSort?.direction} onSort={sortConnections} />
+              <SortableHeader label="状态" sortKey="state" activeKey={connectionSort?.key} direction={connectionSort?.direction} onSort={sortConnections} />
+              <SortableHeader label="上传速率" sortKey="sentBps" activeKey={connectionSort?.key} direction={connectionSort?.direction} defaultDirection="desc" onSort={sortConnections} />
+              <SortableHeader label="下载速率" sortKey="receivedBps" activeKey={connectionSort?.key} direction={connectionSort?.direction} defaultDirection="desc" onSort={sortConnections} />
+              <SortableHeader label="累计上传" sortKey="sentBytes" activeKey={connectionSort?.key} direction={connectionSort?.direction} defaultDirection="desc" onSort={sortConnections} />
+              <SortableHeader label="累计下载" sortKey="receivedBytes" activeKey={connectionSort?.key} direction={connectionSort?.direction} defaultDirection="desc" onSort={sortConnections} />
+            </tr></thead>
+            <tbody>{sortedConnections.map((socket) => (
               <tr key={socket.key}><td>{socket.interfaceName ?? "-"}</td><td>{socket.localAddress}</td><td title={locationErrors[socket.remoteAddress]}>{locationText(locations[socket.remoteAddress], locationErrors[socket.remoteAddress])}</td><td>{socket.remoteAddress}</td><td>{socket.remotePort ?? "-"}</td><td>{socket.state}</td><td>{rate(socket.sentBps)}</td><td>{rate(socket.receivedBps)}</td><td>{socket.sentBytes == null ? "-" : formatBytes(socket.sentBytes)}</td><td>{socket.receivedBytes == null ? "-" : formatBytes(socket.receivedBytes)}</td></tr>
             ))}</tbody>
           </table>

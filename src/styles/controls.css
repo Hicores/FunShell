@@ -36,6 +36,13 @@
 .data-table tbody tr:hover { background: #eaf5fb; }
 .data-table tbody tr.selected { background: #d8ecf6; }
 .data-table button { border: 0; background: transparent; color: #2479a8; }
+.data-table th.sortable-column { padding: 0; }
+.sort-header { display: flex; width: 100%; height: 28px; min-width: 0; align-items: center; gap: 4px; padding: 0 8px; color: #40535e !important; font: inherit; text-align: left; cursor: pointer; }
+.sort-header span { min-width: 0; overflow: hidden; flex: 1; text-overflow: ellipsis; white-space: nowrap; }
+.sort-header svg { flex: 0 0 auto; opacity: 0.28; }
+.sort-header:hover { background: #e6eef2 !important; }
+.sort-header.active { color: #176d9b !important; }
+.sort-header.active svg { opacity: 1; }
 
 .form-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 11px 14px; }
 .form-grid label, .settings-section > label, .route-editor > label { display: grid; gap: 5px; color: #394d59; font-size: 12px; }
