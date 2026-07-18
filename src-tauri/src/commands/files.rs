@@ -1,7 +1,11 @@
 use chrono::Utc;
 use futures_util::{StreamExt, stream};
 use russh_sftp::protocol::{FileAttributes, FileType, OpenFlags};
-use std::{path::PathBuf, time::Instant};
+use std::{
+    collections::{HashMap, hash_map::Entry},
+    path::PathBuf,
+    time::Instant,
+};
 
 use tauri::{AppHandle, Emitter, Manager, State};
 use tokio::{
@@ -90,6 +94,8 @@ async fn resolve_owner_names(
     paths: &[String],
 ) -> Vec<(Option<String>, Option<String>)> {
     let mut resolved = vec![(None, None); paths.len()];
+    let mut user_cache = HashMap::<u32, Option<String>>::new();
+    let mut group_cache = HashMap::<u32, Option<String>>::new();
     for (offset, batch) in paths.chunks(OWNER_LOOKUP_BATCH_SIZE).enumerate() {
         let quoted_paths = batch
             .iter()
@@ -112,11 +118,52 @@ async fn resolve_owner_names(
                 break;
             }
             if !user.is_empty() && user != "?" && !group.is_empty() && group != "?" {
-                resolved[target] = (Some(user.to_owned()), Some(group.to_owned()));
+                let user =
+                    resolve_numeric_name(state, session_id, "passwd", user, &mut user_cache).await;
+                let group =
+                    resolve_numeric_name(state, session_id, "group", group, &mut group_cache).await;
+                resolved[target] = (Some(user), Some(group));
             }
         }
     }
     resolved
+}
+
+async fn resolve_numeric_name(
+    state: &AppState,
+    session_id: &str,
+    database: &str,
+    value: &str,
+    cache: &mut HashMap<u32, Option<String>>,
+) -> String {
+    let Ok(id) = value.parse::<u32>() else {
+        return value.to_owned();
+    };
+    if let Entry::Vacant(entry) = cache.entry(id) {
+        let database_file = match database {
+            "passwd" => "/etc/passwd",
+            "group" => "/etc/group",
+            _ => "",
+        };
+        let command = format!(
+            "name=$(getent {database} {id} 2>/dev/null | cut -d: -f1); \
+             if [ -n \"$name\" ]; then printf '%s\\n' \"$name\"; \
+             elif [ -n \"{database_file}\" ]; then awk -F: -v id={id} '$3 == id {{ print $1; exit }}' {database_file}; fi"
+        );
+        let name = state
+            .sessions
+            .execute(session_id, &command)
+            .await
+            .ok()
+            .filter(|result| result.exit_status == Some(0))
+            .map(|result| result.stdout.trim().to_owned())
+            .filter(|name| !name.is_empty());
+        entry.insert(name);
+    }
+    cache
+        .get(&id)
+        .and_then(Clone::clone)
+        .unwrap_or_else(|| value.to_owned())
 }
 
 #[tauri::command]
