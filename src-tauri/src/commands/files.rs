@@ -45,11 +45,32 @@ pub async fn list_remote_files(
                 size: metadata.len(),
                 modified: metadata.mtime.map(u64::from),
                 permissions: metadata.permissions,
-                user: metadata.user,
-                group: metadata.group,
+                user: metadata
+                    .user
+                    .or_else(|| metadata.uid.map(|uid| uid.to_string())),
+                group: metadata
+                    .group
+                    .or_else(|| metadata.gid.map(|gid| gid.to_string())),
             }
         })
         .collect::<Vec<_>>();
+    drop(sftp);
+    let paths = output
+        .iter()
+        .map(|entry| entry.path.clone())
+        .collect::<Vec<_>>();
+    for (index, (user, group)) in resolve_owner_names(&state, &session_id, &paths)
+        .await
+        .into_iter()
+        .enumerate()
+    {
+        if let Some(user) = user {
+            output[index].user = Some(user);
+        }
+        if let Some(group) = group {
+            output[index].group = Some(group);
+        }
+    }
     output.sort_by_key(|entry| {
         (
             entry.kind != RemoteFileKind::Directory,
@@ -57,6 +78,43 @@ pub async fn list_remote_files(
         )
     });
     Ok(output)
+}
+
+const OWNER_LOOKUP_BATCH_SIZE: usize = 64;
+
+async fn resolve_owner_names(
+    state: &AppState,
+    session_id: &str,
+    paths: &[String],
+) -> Vec<(Option<String>, Option<String>)> {
+    let mut resolved = vec![(None, None); paths.len()];
+    for (offset, batch) in paths.chunks(OWNER_LOOKUP_BATCH_SIZE).enumerate() {
+        let quoted_paths = batch
+            .iter()
+            .map(|path| shell_quote(path))
+            .collect::<Vec<_>>()
+            .join(" ");
+        let command = format!("stat -c '%U\\t%G' -- {quoted_paths}");
+        let Ok(result) = state.sessions.execute(session_id, &command).await else {
+            continue;
+        };
+        if result.exit_status != Some(0) {
+            continue;
+        }
+        for (index, line) in result.stdout.lines().enumerate() {
+            let Some((user, group)) = line.trim().split_once('\t') else {
+                continue;
+            };
+            let target = offset * OWNER_LOOKUP_BATCH_SIZE + index;
+            if target >= resolved.len() {
+                break;
+            }
+            if !user.is_empty() && user != "?" && !group.is_empty() && group != "?" {
+                resolved[target] = (Some(user.to_owned()), Some(group.to_owned()));
+            }
+        }
+    }
+    resolved
 }
 
 #[tauri::command]
