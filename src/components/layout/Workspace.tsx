@@ -24,14 +24,14 @@ export function Workspace() {
         </button>
         <div className="session-tabs">
           {tabs.map((tab, index) => (
-            <button key={tab.id} className={`session-tab ${tab.id === activeTabId ? "active" : ""}`} type="button" onClick={() => setActiveTab(tab.id)}>
+            <button key={tab.id} className={`session-tab ${tab.id === activeTabId ? "active" : ""}`} type="button" title={tab.title} onClick={() => setActiveTab(tab.id)}>
               <span className={`session-status ${tab.state}`} />
               <strong>{index + 1} {tab.title}</strong>
-              <span className="tab-close" role="button" tabIndex={0} onClick={(event) => { event.stopPropagation(); void closeTab(tab.id); }}><X size={14} /></span>
+              <span className="tab-close" role="button" tabIndex={0} title="关闭" onClick={(event) => { event.stopPropagation(); void closeTab(tab.id); }}><X size={12} /></span>
             </button>
           ))}
         </div>
-        <IconButton label="新建连接" className="new-tab-button" onClick={() => openConnectionManager(true)}><Plus size={19} /></IconButton>
+        <IconButton label="新建连接" className="new-tab-button" onClick={() => openConnectionManager(true)}><Plus size={17} /></IconButton>
       </nav>
 
       <div className="workspace-content">
@@ -54,4 +54,3 @@ export function Workspace() {
     </section>
   );
 }
-

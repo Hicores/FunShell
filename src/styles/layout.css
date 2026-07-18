@@ -108,20 +108,20 @@
 .filesystem-row i { position: absolute; right: 0; bottom: 0; height: 2px; background: #79bca5; }
 .sidebar-footer { height: 27px; padding-top: 6px; border-top: 1px solid #cbd4da; text-align: center; color: #697a85; }
 
-.workspace { display: grid; grid-template-rows: 39px minmax(0, 1fr); min-width: 0; min-height: 0; }
+.workspace { display: grid; grid-template-rows: 34px minmax(0, 1fr); min-width: 0; min-height: 0; }
 .workspace-tabs { display: flex; align-items: stretch; min-width: 0; border-bottom: 1px solid #aeb9c1; background: #f5f7f8; }
-.home-tab { display: grid; width: 54px; flex: 0 0 54px; place-items: center; border: 0; border-right: 1px solid #bcc6cd; background: transparent; color: #1679b8; }
+.home-tab { display: grid; width: 44px; flex: 0 0 44px; place-items: center; border: 0; border-right: 1px solid #bcc6cd; background: transparent; color: #1679b8; }
 .home-tab.active { background: white; box-shadow: inset 0 2px #258dcc; }
 .session-tabs { display: flex; min-width: 0; overflow: auto hidden; }
-.session-tab { display: flex; width: min(270px, 22vw); min-width: 155px; align-items: center; gap: 7px; border: 0; border-right: 1px solid #b6c0c7; padding: 0 8px; background: #eef1f3; white-space: nowrap; }
+.session-tab { display: flex; width: min(210px, 18vw); min-width: 118px; align-items: center; gap: 5px; border: 0; border-right: 1px solid #b6c0c7; padding: 0 5px 0 6px; background: #eef1f3; white-space: nowrap; }
 .session-tab.active { background: white; box-shadow: inset 0 2px #278ecb; }
-.session-tab strong { min-width: 0; flex: 1; overflow: hidden; font-size: 13px; text-overflow: ellipsis; }
-.session-status { width: 8px; height: 8px; flex: 0 0 8px; border-radius: 50%; background: #9aa8b0; }
+.session-tab strong { min-width: 0; flex: 1; overflow: hidden; font-size: 12px; font-weight: 600; text-overflow: ellipsis; }
+.session-status { width: 6px; height: 6px; flex: 0 0 6px; border-radius: 50%; background: #9aa8b0; }
 .session-status.connected { background: #23b75b; }
 .session-status.error { background: #d84b4b; }
-.tab-close { display: grid; width: 20px; height: 20px; place-items: center; color: #71818b; }
+.tab-close { display: grid; width: 17px; height: 17px; flex: 0 0 17px; place-items: center; color: #71818b; }
 .tab-close:hover { background: #dde3e7; color: #263842; }
-.new-tab-button { align-self: center; margin-left: 3px; }
+.new-tab-button { width: 28px; height: 28px; align-self: center; margin-left: 2px; }
 .workspace-content { position: relative; min-width: 0; min-height: 0; overflow: hidden; background: white; }
 .workspace-page { display: none; position: absolute; inset: 0; min-width: 0; min-height: 0; }
 .workspace-page.active { display: block; }
