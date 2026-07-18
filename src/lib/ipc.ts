@@ -52,7 +52,22 @@ let mockSettings: AppSettings = {
 let mockSessionSequence = 0;
 let mockSocketTick = 0;
 let mockSnapshotTick = 0;
+const mockSessionConnections = new Map<string, string>();
 const mockNetworkTotals = new Map(mockSnapshot.interfaces.map((item) => [item.name, { receivedBytes: item.receivedBytes, transmittedBytes: item.transmittedBytes }]));
+
+function recordMockHistory(connectionId: string | null, command: string) {
+  const commandText = command.trimEnd();
+  if (!commandText.trim()) return;
+  const existingIndex = mockHistory.findIndex((item) => item.connectionId === connectionId && item.command === commandText);
+  const existing = existingIndex >= 0 ? mockHistory.splice(existingIndex, 1)[0] : undefined;
+  mockHistory.unshift({
+    id: existing?.id ?? String(Date.now()),
+    connectionId,
+    command: commandText,
+    favorite: existing?.favorite ?? false,
+    executedAt: new Date().toISOString(),
+  });
+}
 
 async function call<T>(command: string, args?: Record<string, unknown>): Promise<T> {
   if (isTauri()) return invoke<T>(command, args);
@@ -91,7 +106,9 @@ function mockCall(command: string, args?: Record<string, unknown>): unknown {
     }
     case "connect_session": {
       const connection = mockConnections.find((item) => item.id === args?.connectionId) ?? mockConnections[0];
-      return { id: `mock-${Date.now()}-${++mockSessionSequence}`, connectionId: connection.id, title: connection.name, state: "connected" } satisfies SessionDescriptor;
+      const session = { id: `mock-${Date.now()}-${++mockSessionSequence}`, connectionId: connection.id, title: connection.name, state: "connected" } satisfies SessionDescriptor;
+      mockSessionConnections.set(session.id, connection.id);
+      return session;
     }
     case "collect_server_snapshot": {
       mockSnapshotTick += 1;
@@ -139,7 +156,11 @@ function mockCall(command: string, args?: Record<string, unknown>): unknown {
       const path = String(args?.path ?? "");
       return { path, content: `# FunShell demo editor\n# ${path}\n`, size: path.length };
     }
-    case "list_command_history": return mockHistory;
+    case "list_command_history": {
+      const connectionId = args?.connectionId as string | undefined;
+      const search = String(args?.search ?? "").toLocaleLowerCase();
+      return mockHistory.filter((entry) => (connectionId == null || entry.connectionId === connectionId) && entry.command.toLocaleLowerCase().includes(search));
+    }
     case "list_transfer_history": return [...mockTransferHistory];
     case "mark_transfer_history_viewed": {
       mockTransferHistory.forEach((transfer) => { transfer.viewed = true; });
@@ -170,15 +191,20 @@ function mockCall(command: string, args?: Record<string, unknown>): unknown {
       if (entry) entry.favorite = Boolean(args?.favorite);
       return null;
     }
-    case "clear_command_history": mockHistory.splice(0); return null;
+    case "clear_command_history": {
+      const connectionId = args?.connectionId as string | undefined;
+      for (let index = mockHistory.length - 1; index >= 0; index -= 1) {
+        const entry = mockHistory[index];
+        if (!entry.favorite && (connectionId == null || entry.connectionId === connectionId)) mockHistory.splice(index, 1);
+      }
+      return null;
+    }
     case "record_command_history": {
-      const commandText = String(args?.command ?? "").trimEnd();
-      if (commandText.trim()) mockHistory.unshift({ id: String(Date.now()), connectionId: (args?.connectionId as string | null | undefined) ?? null, command: commandText, favorite: false, executedAt: new Date().toISOString() });
+      recordMockHistory((args?.connectionId as string | null | undefined) ?? null, String(args?.command ?? ""));
       return null;
     }
     case "submit_terminal_command": {
-      const commandText = String(args?.command ?? "");
-      if (commandText) mockHistory.unshift({ id: String(Date.now()), connectionId: null, command: commandText, favorite: false, executedAt: new Date().toISOString() });
+      recordMockHistory(mockSessionConnections.get(String(args?.sessionId ?? "")) ?? null, String(args?.command ?? ""));
       return null;
     }
     case "save_connection": return { ...mockConnections[0], ...(args?.input as object), id: (args?.input as SaveConnectionInput)?.id ?? `connection-${Date.now()}` };

@@ -49,9 +49,11 @@
 .command-panel > section > header { display: flex; align-items: center; gap: 7px; padding: 0 7px; border-bottom: 1px solid #cbd4d9; }
 .command-panel > section > header label { display: flex; min-width: 200px; flex: 1; align-items: center; gap: 6px; }
 .command-panel > section > header input { width: 100%; border: 1px solid #bdc8cf; padding: 4px 7px; }
+.command-panel > section > header select { width: min(230px, 28vw); height: 27px; min-width: 150px; border: 1px solid #bdc8cf; padding: 0 7px; background: white; color: #40535e; }
 .command-panel > section > header button { display: flex; height: 27px; align-items: center; gap: 5px; border: 1px solid #bdc8cf; background: white; }
 .command-list { min-height: 0; overflow: auto; }
 .command-list > div:not(.empty-state) { display: grid; grid-template-columns: 30px minmax(180px, 1fr) 160px 74px; align-items: center; min-height: 34px; border-bottom: 1px solid #e3e8eb; padding: 0 7px; }
+.command-list > .history-row:not(.empty-state) { grid-template-columns: 30px minmax(180px, 1fr) minmax(110px, 150px) 160px 74px; }
 .command-list > div:nth-child(even) { background: #f7f9fa; }
 .command-list code { overflow: hidden; color: #243d4a; font: 12px "Cascadia Mono", Consolas, monospace; text-overflow: ellipsis; white-space: nowrap; }
 .command-list span { color: #73838c; font-size: 11px; }
@@ -59,6 +61,7 @@
 .command-list .command-history-command { display: block; min-width: 0; overflow: hidden; padding: 0; color: #243d4a; text-align: left; }
 .command-list .command-history-command:hover { color: #176d9b; text-decoration: underline; }
 .command-list .command-history-command code { display: block; }
+.command-list .history-server { overflow: hidden; padding-right: 10px; color: #476b7d; text-overflow: ellipsis; white-space: nowrap; }
 .command-actions { display: flex; justify-content: flex-end; gap: 5px; }
 .preset-editor textarea { height: 180px; resize: vertical; font: 12px/1.5 "Cascadia Mono", Consolas, monospace; }
 

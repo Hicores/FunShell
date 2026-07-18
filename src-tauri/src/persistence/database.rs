@@ -254,4 +254,32 @@ mod tests {
         assert_eq!(history[0].command, "systemctl status nginx");
         assert_eq!(history[1].command, "uname -a");
     }
+
+    #[test]
+    fn lists_all_command_history_and_filters_by_connection() {
+        let directory = tempdir().expect("tempdir");
+        let database = Database::open(&directory.path().join("test.db")).expect("database");
+
+        database
+            .add_history(Some("connection-1"), "hostname")
+            .expect("first server history");
+        database
+            .add_history(Some("connection-2"), "docker ps")
+            .expect("second server history");
+
+        let all = database.list_history(None, None, 100).expect("all history");
+        assert_eq!(all.len(), 2);
+        assert!(all.iter().any(|entry| {
+            entry.connection_id.as_deref() == Some("connection-1") && entry.command == "hostname"
+        }));
+        assert!(all.iter().any(|entry| {
+            entry.connection_id.as_deref() == Some("connection-2") && entry.command == "docker ps"
+        }));
+
+        let second = database
+            .list_history(Some("connection-2"), None, 100)
+            .expect("second server history");
+        assert_eq!(second.len(), 1);
+        assert_eq!(second[0].command, "docker ps");
+    }
 }
