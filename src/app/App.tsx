@@ -52,11 +52,14 @@ export function App() {
       const payload = event.payload;
       const state = useAppStore.getState();
       const previous = state.tabs.find((tab) => tab.sessionId === payload.sessionId)?.state;
+      const terminal = state.tabs.find((tab) => tab.sessionId === payload.sessionId && tab.kind === "terminal");
       useAppStore.setState({
         tabs: state.tabs.map((tab) => tab.sessionId === payload.sessionId ? { ...tab, state: payload.state } : tab),
       });
+      if (terminal && payload.state === "disconnected") {
+        window.dispatchEvent(new CustomEvent("funshell-terminal-status", { detail: { tabId: terminal.id, state: "disconnected", message: "连接断开" } }));
+      }
       if (payload.state !== "disconnected" || previous !== "connected") return;
-      const terminal = state.tabs.find((tab) => tab.sessionId === payload.sessionId && tab.kind === "terminal");
       const connection = state.connections.find((item) => item.id === terminal?.connectionId);
       if (!terminal || !connection?.autoReconnect) return;
       notify("连接已中断，正在自动重连");

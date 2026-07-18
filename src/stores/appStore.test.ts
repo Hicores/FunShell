@@ -14,9 +14,15 @@ describe("appStore tab lifecycle", () => {
     useAppStore.getState().openWorkspace("processes");
     expect(useAppStore.getState().tabs.filter((tab) => tab.kind === "processes")).toHaveLength(1);
 
+    const reconnectEvents: CustomEvent[] = [];
+    const onReconnectStatus = (event: Event) => reconnectEvents.push(event as CustomEvent);
+    window.addEventListener("funshell-terminal-status", onReconnectStatus);
     await useAppStore.getState().reconnect(terminal!.sessionId);
+    window.removeEventListener("funshell-terminal-status", onReconnectStatus);
     const reconnectedTerminal = useAppStore.getState().tabs.find((tab) => tab.kind === "terminal");
     expect(reconnectedTerminal?.sessionId).not.toBe(terminal!.sessionId);
+    expect(reconnectedTerminal?.id).toBe(terminal!.id);
+    expect(reconnectEvents.map((event) => event.detail.state)).toEqual(["reconnecting", "reconnected"]);
     expect(useAppStore.getState().tabs.find((tab) => tab.kind === "processes")?.sessionId).toBe(reconnectedTerminal?.sessionId);
 
     const processTab = useAppStore.getState().tabs.find((tab) => tab.kind === "processes");

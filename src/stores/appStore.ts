@@ -61,6 +61,12 @@ function parseHostKey(error: unknown) {
   return { changed: marker.startsWith("HOST_KEY_CHANGED"), host, port: Number(port), algorithm, fingerprint };
 }
 
+function emitTerminalStatus(tabId: string, state: "disconnected" | "reconnecting" | "reconnected" | "error", message: string) {
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new CustomEvent("funshell-terminal-status", { detail: { tabId, state, message } }));
+  }
+}
+
 export const useAppStore = create<AppStore>((set, get) => ({
   initialized: false,
   busy: false,
@@ -145,28 +151,29 @@ export const useAppStore = create<AppStore>((set, get) => ({
     const terminal = related.find((tab) => tab.kind === "terminal");
     const connection = state.connections.find((item) => item.id === terminal?.connectionId);
     if (!terminal || !connection) return;
+    emitTerminalStatus(terminal.id, "reconnecting", "正在重连...");
     set((current) => ({ tabs: current.tabs.map((tab) => tab.sessionId === sessionId ? { ...tab, state: "connecting" } : tab), toast: null }));
     try {
       await api.disconnectSession(sessionId).catch(() => undefined);
       const session = await api.connectSession(connection.id);
-      const idMap = new Map(related.map((tab) => [tab.id, tab.kind === "terminal" ? session.id : `${session.id}:${tab.kind}`]));
       set((current) => {
         const snapshots = { ...current.snapshots };
         delete snapshots[sessionId];
         if (!isTauri()) snapshots[session.id] = mockSnapshot;
         return {
           sessions: [...current.sessions.filter((item) => item.id !== sessionId), session],
-          tabs: current.tabs.map((tab) => tab.sessionId === sessionId ? { ...tab, id: idMap.get(tab.id)!, sessionId: session.id, state: session.state } : tab),
-          activeTabId: current.activeTabId ? idMap.get(current.activeTabId) ?? current.activeTabId : null,
+          tabs: current.tabs.map((tab) => tab.sessionId === sessionId ? { ...tab, sessionId: session.id, state: session.state } : tab),
           snapshots,
           toast: "服务器已重新连接",
         };
       });
+      emitTerminalStatus(terminal.id, "reconnected", "已重新连接");
     } catch (error) {
       set((current) => ({
         tabs: current.tabs.map((tab) => tab.sessionId === sessionId ? { ...tab, state: "error" } : tab),
         toast: `重新连接失败: ${String(error)}`,
       }));
+      emitTerminalStatus(terminal.id, "error", `重连失败: ${String(error)}`);
     }
   },
 
@@ -192,7 +199,7 @@ export const useAppStore = create<AppStore>((set, get) => ({
       set({ toast: "请先连接服务器" });
       return;
     }
-    const id = `${terminal.sessionId}:${kind}`;
+    const id = `${terminal.id}:${kind}`;
     if (state.tabs.some((tab) => tab.id === id)) {
       set({ activeTabId: id });
       return;

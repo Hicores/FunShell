@@ -37,6 +37,8 @@ export function terminalContextAction(selection: string, clipboard: string): Ter
 export function TerminalView({ tab, active }: TerminalViewProps) {
   const notify = useAppStore((state) => state.notify);
   const hostRef = useRef<HTMLDivElement>(null);
+  const sessionIdRef = useRef(tab.sessionId);
+  const connectionIdRef = useRef(tab.connectionId);
   const terminalRef = useRef<Terminal | null>(null);
   const fitRef = useRef<FitAddon | null>(null);
   const searchRef = useRef<SearchAddon | null>(null);
@@ -53,6 +55,8 @@ export function TerminalView({ tab, active }: TerminalViewProps) {
   const [terminalFontSize, setTerminalFontSize] = useState(13);
   const [terminalSettingsOpen, setTerminalSettingsOpen] = useState(false);
   const [savingTerminalSettings, setSavingTerminalSettings] = useState(false);
+  sessionIdRef.current = tab.sessionId;
+  connectionIdRef.current = tab.connectionId;
 
   useEffect(() => {
     if (!hostRef.current) return;
@@ -101,7 +105,7 @@ export function TerminalView({ tab, active }: TerminalViewProps) {
     }
 
     const input = terminal.onData((data) => {
-      void api.terminalInput(tab.sessionId, encodeBase64(data));
+      void api.terminalInput(sessionIdRef.current, encodeBase64(data));
       let line = inputBufferRef.current;
       let inEscapeSequence = escapeSequenceRef.current;
       for (const character of data) {
@@ -113,8 +117,8 @@ export function TerminalView({ tab, active }: TerminalViewProps) {
         if (character === "\r" || character === "\n") {
           const commandText = line.trim();
           if (commandText) {
-            void api.recordHistory(tab.connectionId, commandText)
-              .then(() => window.dispatchEvent(new CustomEvent("funshell-command-executed", { detail: { sessionId: tab.sessionId } })))
+            void api.recordHistory(connectionIdRef.current, commandText)
+              .then(() => window.dispatchEvent(new CustomEvent("funshell-command-executed", { detail: { sessionId: sessionIdRef.current } })))
               .catch(() => undefined);
           }
           line = "";
@@ -128,16 +132,16 @@ export function TerminalView({ tab, active }: TerminalViewProps) {
       inputBufferRef.current = line;
       escapeSequenceRef.current = inEscapeSequence;
     });
-    const resize = terminal.onResize(({ cols, rows }) => void api.resizeTerminal(tab.sessionId, cols, rows));
+    const resize = terminal.onResize(({ cols, rows }) => void api.resizeTerminal(sessionIdRef.current, cols, rows));
     const observer = new ResizeObserver(() => {
       fit.fit();
-      void api.resizeTerminal(tab.sessionId, terminal.cols, terminal.rows);
+      void api.resizeTerminal(sessionIdRef.current, terminal.cols, terminal.rows);
     });
     observer.observe(hostRef.current);
 
     let unlisten: (() => void) | undefined;
     void onEvent<TerminalOutputEvent>("terminal-output", (event) => {
-      if (event.payload.sessionId === tab.sessionId) terminal.write(decodeBase64(event.payload.dataBase64));
+      if (event.payload.sessionId === sessionIdRef.current) terminal.write(decodeBase64(event.payload.dataBase64));
     }).then((dispose) => { unlisten = dispose; });
 
     return () => {
@@ -148,7 +152,7 @@ export function TerminalView({ tab, active }: TerminalViewProps) {
       terminal.dispose();
       terminalRef.current = null;
     };
-  }, [tab.sessionId]);
+  }, []);
 
   const applyTerminalSettings = (fontFamily: string, fontSize: number) => {
     setTerminalFontFamily(fontFamily);
@@ -160,6 +164,17 @@ export function TerminalView({ tab, active }: TerminalViewProps) {
       fitRef.current?.fit();
     }
   };
+
+  useEffect(() => {
+    const onTerminalStatus = (event: Event) => {
+      const detail = (event as CustomEvent<{ tabId: string; state: string; message: string }>).detail;
+      if (detail?.tabId !== tab.id || !detail.message || !terminalRef.current) return;
+      const color = detail.state === "reconnected" ? "32" : detail.state === "error" ? "31" : "33";
+      terminalRef.current.writeln(`\r\n\x1b[${color}m${detail.message}\x1b[0m`);
+    };
+    window.addEventListener("funshell-terminal-status", onTerminalStatus);
+    return () => window.removeEventListener("funshell-terminal-status", onTerminalStatus);
+  }, [tab.id]);
 
   useEffect(() => {
     let active = true;
@@ -182,7 +197,7 @@ export function TerminalView({ tab, active }: TerminalViewProps) {
     void api.history(tab.connectionId).then((entries) => setHistory(entries.map((entry) => entry.command))).catch(() => undefined);
     const insert = (event: Event) => {
       const detail = (event as CustomEvent<{ sessionId: string; command: string }>).detail;
-      if (detail?.sessionId === tab.sessionId) {
+      if (detail?.sessionId === sessionIdRef.current) {
         setCommand(detail.command);
         setHistoryIndex(null);
       }
@@ -206,8 +221,8 @@ export function TerminalView({ tab, active }: TerminalViewProps) {
       terminalRef.current?.writeln(`\x1b[90m[demo] command accepted: ${value}\x1b[0m`);
       terminalRef.current?.write("\x1b[32mroot@gateway-edge-01\x1b[0m:\x1b[34m~\x1b[0m# ");
     }
-    await api.terminalCommand(tab.sessionId, value);
-    window.dispatchEvent(new CustomEvent("funshell-command-executed", { detail: { sessionId: tab.sessionId } }));
+    await api.terminalCommand(sessionIdRef.current, value);
+    window.dispatchEvent(new CustomEvent("funshell-command-executed", { detail: { sessionId: sessionIdRef.current } }));
   };
 
   const openTerminalContextMenu = async (event: MouseEvent<HTMLDivElement>) => {

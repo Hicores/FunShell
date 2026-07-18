@@ -34,3 +34,4 @@
 - `rusqlite 0.38` does not implement `ToSql` or `FromSql` for `u64`. Persist file byte counts as saturating non-negative `i64` values and convert them back explicitly; binding `u64` fields directly fails compilation.
 - Importing `TerminalView` in Vitest's jsdom environment can print `HTMLCanvasElement.getContext()` as not implemented because xterm probes canvas support; the terminal context-action tests remain valid and avoid mounting xterm until a canvas test shim is intentionally added.
 - The installed Testing Library typings reject `exact` in `findByRole` options even though the runtime supports exact matching; use a unique string `name` and verify uniqueness instead of adding `exact` to async role queries.
+- Terminal reconnects must keep each workspace tab's stable `id` and replace only `sessionId`; changing the React key remounts xterm and loses scrollback, current input, and terminal context.
