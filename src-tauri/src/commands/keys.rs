@@ -1,6 +1,7 @@
 use rand_chacha::ChaCha20Rng;
 use rand_core::SeedableRng;
 use russh::keys::{decode_secret_key, ssh_key};
+use std::path::{Path, PathBuf};
 use tauri::State;
 
 use crate::{
@@ -27,6 +28,17 @@ pub fn import_private_key(
     let decoded = decode_secret_key(&private_key, passphrase.as_deref())
         .map_err(|error| AppError::Validation(format!("私钥格式或口令错误: {error}")))?;
     save_decoded_key(&state, &name, private_key, passphrase, &decoded)
+}
+
+#[tauri::command]
+pub fn import_private_key_file(
+    state: State<'_, AppState>,
+    name: String,
+    path: PathBuf,
+    passphrase: Option<String>,
+) -> AppResult<KeyProfile> {
+    let private_key = read_private_key_file(&path)?;
+    import_private_key(state, name, private_key, passphrase)
 }
 
 #[tauri::command]
@@ -65,6 +77,20 @@ pub fn delete_key(state: State<'_, AppState>, id: String) -> AppResult<()> {
     state.database.delete_key(&id)
 }
 
+fn read_private_key_file(path: &Path) -> AppResult<String> {
+    const MAX_PRIVATE_KEY_SIZE: u64 = 1024 * 1024;
+    let metadata = std::fs::metadata(path)
+        .map_err(|error| AppError::Message(format!("读取私钥文件信息失败: {error}")))?;
+    if !metadata.is_file() {
+        return Err(AppError::Validation("选择的路径不是文件".into()));
+    }
+    if metadata.len() > MAX_PRIVATE_KEY_SIZE {
+        return Err(AppError::Validation("私钥文件不能超过 1 MB".into()));
+    }
+    std::fs::read_to_string(path)
+        .map_err(|error| AppError::Message(format!("读取私钥文件失败: {error}")))
+}
+
 fn save_decoded_key(
     state: &State<'_, AppState>,
     name: &str,
@@ -89,4 +115,22 @@ fn save_decoded_key(
     state
         .database
         .save_key(name, &algorithm, &fingerprint, &public, &secret_id)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::read_private_key_file;
+
+    #[test]
+    fn reads_a_local_private_key_file() {
+        let path = std::env::temp_dir().join(format!("funshell-key-{}.pem", uuid::Uuid::new_v4()));
+        std::fs::write(
+            &path,
+            "-----BEGIN TEST PRIVATE KEY-----\nfixture\n-----END TEST PRIVATE KEY-----\n",
+        )
+        .expect("write fixture");
+        let content = read_private_key_file(&path).expect("read fixture");
+        std::fs::remove_file(&path).expect("remove fixture");
+        assert!(content.contains("fixture"));
+    }
 }

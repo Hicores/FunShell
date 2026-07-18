@@ -95,6 +95,11 @@ legend { padding: 0 6px; color: #2b566d; font-weight: 600; }
 .key-table td:first-child { display: flex; align-items: center; gap: 7px; }
 .key-table code { font-size: 11px; }
 .key-import-form textarea { height: 280px; font: 12px Consolas, monospace; }
+.key-file-picker { display: grid; grid-template-columns: 132px minmax(0, 1fr) auto; align-items: center; gap: 8px; }
+.key-file-picker button { display: inline-flex; height: 30px; align-items: center; justify-content: center; gap: 6px; border: 1px solid #afbdc6; border-radius: 2px; padding: 0 10px; background: #f8fafb; color: #2d617c; }
+.key-file-picker span { overflow: hidden; color: #687b86; font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
+.key-file-picker button:last-of-type { color: #9b4545; }
+.key-file-input { display: none; }
 
 .settings-layout { display: grid; min-height: 500px; grid-template-columns: 190px 1fr; border: 1px solid #c3cdd3; background: white; }
 .settings-layout > aside { display: flex; flex-direction: column; border-right: 1px solid #c3cdd3; padding: 7px; background: #f3f6f7; }

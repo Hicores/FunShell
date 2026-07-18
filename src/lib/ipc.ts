@@ -178,6 +178,7 @@ export const api = {
   deleteFolder: (id: string, deleted = true) => call<void>("delete_folder", { id, deleted }),
   listKeys: () => call<KeyProfile[]>("list_keys"),
   importKey: (name: string, privateKey: string, passphrase?: string) => call<KeyProfile>("import_private_key", { name, privateKey, passphrase }),
+  importKeyFile: (name: string, path: string, passphrase?: string) => call<KeyProfile>("import_private_key_file", { name, path, passphrase }),
   generateKey: (name: string, algorithm: string) => call<KeyProfile>("generate_private_key", { name, algorithm }),
   deleteKey: (id: string) => call<void>("delete_key", { id }),
   listProxies: () => call<ProxyProfile[]>("list_proxies"),

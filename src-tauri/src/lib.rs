@@ -54,6 +54,7 @@ pub fn run() {
             commands::vault::change_vault_mode,
             commands::keys::list_keys,
             commands::keys::import_private_key,
+            commands::keys::import_private_key_file,
             commands::keys::generate_private_key,
             commands::keys::delete_key,
             commands::session::trust_host_key,
