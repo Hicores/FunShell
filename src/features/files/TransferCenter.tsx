@@ -1,6 +1,6 @@
 import { revealItemInDir } from "@tauri-apps/plugin-opener";
 import { ListChecks } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { IconButton } from "../../components/common/IconButton";
 import { api, isTauri } from "../../lib/ipc";
 import { useAppStore } from "../../stores/appStore";
@@ -16,6 +16,7 @@ export function TransferCenter() {
   const markViewed = useTransferStore((state) => state.markViewed);
   const setViewing = useTransferStore((state) => state.setViewing);
   const [open, setOpen] = useState(false);
+  const centerRef = useRef<HTMLDivElement>(null);
   const transfers = useMemo(() => Object.values(bySession).flat().sort((left, right) => right.updatedAt.localeCompare(left.updatedAt)), [bySession]);
 
   const retry = async (task: TransferProgressEvent) => {
@@ -51,6 +52,21 @@ export function TransferCenter() {
     setViewing(false);
   };
 
+  useEffect(() => {
+    if (!open) return;
+    const closeOnOutsideClick = (event: MouseEvent) => {
+      const target = event.target;
+      if (target instanceof Node && !centerRef.current?.contains(target)) close();
+    };
+    const closeOnWindowBlur = () => close();
+    document.addEventListener("click", closeOnOutsideClick);
+    window.addEventListener("blur", closeOnWindowBlur);
+    return () => {
+      document.removeEventListener("click", closeOnOutsideClick);
+      window.removeEventListener("blur", closeOnWindowBlur);
+    };
+  }, [open]);
+
   const clear = async () => {
     try {
       await api.clearTransferHistory();
@@ -61,7 +77,7 @@ export function TransferCenter() {
   };
 
   return (
-    <div className="transfer-center">
+    <div ref={centerRef} className="transfer-center">
       <IconButton label="传输记录" className="transfer-toggle" active={open} onClick={toggle}><ListChecks size={18} />{unreadCount > 0 && <span>{unreadCount > 99 ? "99+" : unreadCount}</span>}</IconButton>
       {open && <TransferPanel transfers={transfers} onCancel={(taskId) => void api.cancelTransfer(taskId)} onRetry={(task) => void retry(task)} onReveal={(task) => void reveal(task)} onClear={() => void clear()} onClose={close} />}
     </div>

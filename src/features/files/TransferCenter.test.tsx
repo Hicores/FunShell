@@ -30,4 +30,20 @@ describe("TransferCenter", () => {
     expect(toggle).not.toHaveTextContent("1");
     expect(useTransferStore.getState().bySession["session-global"][0].viewed).toBe(true);
   });
+
+  it("closes when focus leaves the transfer center but stays open for internal clicks", () => {
+    render(<TransferCenter />);
+    const toggle = screen.getByRole("button", { name: "传输记录" });
+    fireEvent.click(toggle);
+    const panel = screen.getByRole("region", { name: "传输进度与历史" });
+
+    fireEvent.click(panel);
+    expect(screen.getByRole("region", { name: "传输进度与历史" })).toBeInTheDocument();
+    fireEvent.click(document.body);
+    expect(screen.queryByRole("region", { name: "传输进度与历史" })).not.toBeInTheDocument();
+
+    fireEvent.click(toggle);
+    fireEvent.blur(window);
+    expect(screen.queryByRole("region", { name: "传输进度与历史" })).not.toBeInTheDocument();
+  });
 });
