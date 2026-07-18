@@ -8,6 +8,7 @@ import type { RemoteFileEntry, TransferProgressEvent, WorkspaceTab } from "../..
 import { useAppStore } from "../../stores/appStore";
 import { IconButton } from "../../components/common/IconButton";
 import { Modal } from "../../components/common/Modal";
+import { ContextMenu } from "../../components/common/ContextMenu";
 
 function joinRemote(base: string, name: string) {
   return base === "/" ? `/${name}` : `${base.replace(/\/$/, "")}/${name}`;
@@ -37,11 +38,6 @@ export function FileManager({ tab }: { tab: WorkspaceTab }) {
   }, [notify, path, tab.sessionId]);
 
   useEffect(() => { void refresh(); }, [refresh]);
-  useEffect(() => {
-    const close = () => setContext(null);
-    window.addEventListener("click", close);
-    return () => window.removeEventListener("click", close);
-  }, []);
   useEffect(() => {
     let dispose: (() => void) | undefined;
     void onEvent<TransferProgressEvent>("transfer-progress", (event) => {
@@ -165,7 +161,7 @@ export function FileManager({ tab }: { tab: WorkspaceTab }) {
         </div>}
       </div>
       {context && (
-        <div className="context-menu" style={{ left: context.x, top: context.y }} onClick={(event) => event.stopPropagation()}>
+        <ContextMenu x={context.x} y={context.y} onClose={() => setContext(null)}>
           <button type="button" onClick={() => void refresh()}><RefreshCw size={14} />刷新</button>
           <button type="button" onClick={() => void openEntry(context.file)}>打开</button>
           {context.file.kind === "file" && <button type="button" onClick={() => void editEntry(context.file)}><Edit3 size={14} />文本编辑</button>}
@@ -176,7 +172,7 @@ export function FileManager({ tab }: { tab: WorkspaceTab }) {
           <button type="button" onClick={() => void rename(context.file)}>重命名</button>
           <button type="button" className="danger" onClick={() => void remove(context.file)}>删除</button>
           <button type="button" onClick={() => void chmod(context.file)}>文件权限...</button>
-        </div>
+        </ContextMenu>
       )}
       <Modal open={editor != null} title={`远程编辑 - ${editor?.path ?? ""}`} width={900} onClose={() => setEditor(null)} footer={<><button type="button" onClick={() => setEditor(null)}>取消</button><button className="primary-button" type="button" onClick={async () => { if (!editor) return; await api.writeRemoteText(tab.sessionId, editor.path, editor.content); setEditor(null); notify("文件已保存"); }}>保存</button></>}>
         <textarea className="remote-editor" value={editor?.content ?? ""} onChange={(event) => setEditor((current) => current ? { ...current, content: event.target.value } : null)} spellCheck={false} />
