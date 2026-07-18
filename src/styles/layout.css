@@ -134,10 +134,14 @@
 .quick-connect-panel > header input, .manager-search input, .view-toolbar label input { width: 230px; border: 0; outline: 0; }
 .quick-connect-panel > header button { height: 29px; border: 1px solid #b9c5cc; background: white; }
 .quick-connect-list { padding: 8px 10px 20px; }
-.quick-group-title { display: flex; align-items: center; gap: 7px; height: 31px; color: #536773; font-weight: 600; }
-.quick-group > button, .quick-connect-list > button { display: grid; width: 100%; grid-template-columns: 24px minmax(160px, 1fr) minmax(130px, 1fr) 100px 20px; align-items: center; min-height: 35px; border: 0; padding: 0 8px 0 25px; background: white; text-align: left; }
-.quick-group > button:hover, .quick-connect-list > button:hover { background: #eaf5fb; }
-.quick-group > button span { color: #5e707b; }
+.quick-group-title { display: grid; width: 100%; grid-template-columns: 16px 18px minmax(0, 1fr) auto; align-items: center; gap: 6px; min-height: 31px; border: 0; padding: 0 9px 0 4px; color: #536773; background: white; text-align: left; }
+.quick-group-title:hover { background: #f2f7fa; }
+.quick-group-title strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.quick-group-title span { min-width: 22px; color: #84949d; font-size: 11px; text-align: right; }
+.quick-group-title .folder-chevron { color: #758791; }
+.quick-group > button:not(.quick-group-title), .quick-connect-list > button { display: grid; width: 100%; grid-template-columns: 24px minmax(160px, 1fr) minmax(130px, 1fr) 100px 20px; align-items: center; min-height: 35px; border: 0; padding: 0 8px 0 25px; background: white; text-align: left; }
+.quick-group > button:not(.quick-group-title):hover, .quick-connect-list > button:hover { background: #eaf5fb; }
+.quick-group > button:not(.quick-group-title) span { color: #5e707b; }
 
 .terminal-workspace { position: absolute; inset: 0; min-height: 0; background: #183446; }
 .terminal-region { position: absolute; inset: 0 0 auto; top: 0; transition: bottom 120ms ease; }

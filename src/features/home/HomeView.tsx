@@ -1,4 +1,4 @@
-import { ChevronRight, Folder, Search, Server } from "lucide-react";
+import { ChevronDown, ChevronRight, Folder, Search, Server } from "lucide-react";
 import { useMemo, useState } from "react";
 import { useAppStore } from "../../stores/appStore";
 
@@ -8,7 +8,15 @@ export function HomeView() {
   const connect = useAppStore((state) => state.connect);
   const openManager = useAppStore((state) => state.openConnectionManager);
   const [query, setQuery] = useState("");
+  const [collapsedFolders, setCollapsedFolders] = useState<Set<string>>(() => new Set());
   const filtered = useMemo(() => connections.filter((item) => `${item.name} ${item.host} ${item.username}`.toLowerCase().includes(query.toLowerCase())), [connections, query]);
+  const searchActive = Boolean(query.trim());
+  const toggleFolder = (id: string) => setCollapsedFolders((current) => {
+    const next = new Set(current);
+    if (next.has(id)) next.delete(id);
+    else next.add(id);
+    return next;
+  });
 
   return (
     <section className="home-view">
@@ -22,10 +30,14 @@ export function HomeView() {
           {folders.map((folder) => {
             const children = filtered.filter((connection) => connection.folderId === folder.id);
             if (!children.length) return null;
+            const expanded = searchActive || !collapsedFolders.has(folder.id);
             return (
               <div key={folder.id} className="quick-group">
-                <div className="quick-group-title"><Folder size={15} />{folder.name}</div>
-                {children.map((connection) => (
+                <button className="quick-group-title" type="button" aria-expanded={expanded} aria-label={`${folder.name}，${children.length} 个连接`} onClick={() => toggleFolder(folder.id)}>
+                  {expanded ? <ChevronDown className="folder-chevron" size={14} /> : <ChevronRight className="folder-chevron" size={14} />}
+                  <Folder size={15} /><strong>{folder.name}</strong><span>{children.length}</span>
+                </button>
+                {expanded && children.map((connection) => (
                   <button key={connection.id} type="button" onDoubleClick={() => void connect(connection)} onClick={() => undefined}>
                     <Server size={15} /><strong>{connection.name}</strong><span>{connection.host}</span><span>{connection.username}</span><ChevronRight size={14} />
                   </button>

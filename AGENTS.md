@@ -11,6 +11,7 @@
 
 ## Verified environment notes
 
+- The repository root has no Cargo workspace manifest. Run `cargo fmt`, `cargo test`, and `cargo clippy` from `src-tauri`; running them from the root fails before checking the Rust code.
 - Tauri builds require the MSVC target and WebView2 Evergreen Runtime. The development machine uses `stable-x86_64-pc-windows-msvc` and has WebView2 installed.
 - The repository started with reference screenshots only; `PIC/` is source material and must remain unchanged.
 - Vite 8 requires `@vitejs/plugin-react` 6 and its additional compiler peers. The project deliberately pins Vite 7.3 with plugin-react 5.1 to keep a stable, conflict-free React toolchain; do not upgrade one without the other.
