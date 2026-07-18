@@ -1,5 +1,6 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { describe, expect, it, vi } from "vitest";
+import { api } from "../../lib/ipc";
 import type { WorkspaceTab } from "../../types";
 import { ProcessView } from "./ProcessView";
 
@@ -23,5 +24,27 @@ describe("ProcessView", () => {
 
     expect(screen.getByText("nginx")).toBeInTheDocument();
     expect(screen.queryByText("java")).not.toBeInTheDocument();
+  });
+
+  it("sorts process columns and exposes force stop from the row context menu", async () => {
+    const terminate = vi.spyOn(api, "terminateProcess").mockResolvedValue(undefined);
+    const confirm = vi.spyOn(window, "confirm").mockReturnValue(true);
+    const { container } = render(<ProcessView tab={tab} />);
+    const table = container.querySelector<HTMLTableElement>(".process-table")!;
+    await waitFor(() => expect(within(table).getAllByRole("row")).toHaveLength(5));
+
+    const memoryHeader = within(table).getByRole("columnheader", { name: "内存" });
+    fireEvent.click(within(memoryHeader).getByRole("button"));
+    expect(memoryHeader).toHaveAttribute("aria-sort", "descending");
+    expect(within(table).getAllByRole("row")[1]).toHaveTextContent("java");
+
+    expect(screen.queryByRole("button", { name: "强制停止" })).not.toBeInTheDocument();
+    const nginxRow = within(table).getAllByRole("row").find((row) => row.textContent?.includes("nginx"))!;
+    fireEvent.contextMenu(nginxRow, { clientX: 80, clientY: 90 });
+    expect(screen.getByRole("menu")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "强制停止" }));
+
+    await waitFor(() => expect(terminate).toHaveBeenCalledWith(tab.sessionId, 488485, true));
+    expect(confirm).toHaveBeenCalledTimes(2);
   });
 });
