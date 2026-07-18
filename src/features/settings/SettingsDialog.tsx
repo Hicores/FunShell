@@ -48,7 +48,12 @@ export function SettingsDialog() {
   const saveGeneral = async () => {
     if (!appSettings) return;
     try {
-      setAppSettings(await api.saveSettings(appSettings));
+      const current = await api.getSettings();
+      setAppSettings(await api.saveSettings({
+        ...appSettings,
+        terminalFontFamily: current.terminalFontFamily,
+        terminalFontSize: current.terminalFontSize,
+      }));
       notify("设置已保存");
     } catch (error) {
       notify(String(error));

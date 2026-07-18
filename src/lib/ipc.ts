@@ -46,6 +46,8 @@ let mockSettings: AppSettings = {
   geoipEnabled: true,
   geoipProviderUrl: "https://ipwho.is/{ip}",
   confirmCloseActiveSessions: true,
+  terminalFontFamily: '"Cascadia Mono", Consolas, "Microsoft YaHei UI", monospace',
+  terminalFontSize: 13,
 };
 let mockSessionSequence = 0;
 let mockSocketTick = 0;

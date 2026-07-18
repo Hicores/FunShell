@@ -8,6 +8,7 @@ import { ContextMenu } from "../../components/common/ContextMenu";
 import { api, isTauri, onEvent } from "../../lib/ipc";
 import { useAppStore } from "../../stores/appStore";
 import type { TerminalOutputEvent, WorkspaceTab } from "../../types";
+import { DEFAULT_TERMINAL_FONT_FAMILY, TerminalSettingsDialog } from "./TerminalSettingsDialog";
 
 function encodeBase64(value: string) {
   const bytes = new TextEncoder().encode(value);
@@ -48,6 +49,10 @@ export function TerminalView({ tab, active }: TerminalViewProps) {
   const escapeSequenceRef = useRef(false);
   const [context, setContext] = useState<{ x: number; y: number; action: TerminalContextAction; text: string } | null>(null);
   const contextRequestRef = useRef(0);
+  const [terminalFontFamily, setTerminalFontFamily] = useState(DEFAULT_TERMINAL_FONT_FAMILY);
+  const [terminalFontSize, setTerminalFontSize] = useState(13);
+  const [terminalSettingsOpen, setTerminalSettingsOpen] = useState(false);
+  const [savingTerminalSettings, setSavingTerminalSettings] = useState(false);
 
   useEffect(() => {
     if (!hostRef.current) return;
@@ -56,8 +61,8 @@ export function TerminalView({ tab, active }: TerminalViewProps) {
       cursorStyle: "block",
       allowProposedApi: false,
       convertEol: false,
-      fontFamily: '"Cascadia Mono", Consolas, "Microsoft YaHei UI", monospace',
-      fontSize: 15,
+      fontFamily: terminalFontFamily,
+      fontSize: terminalFontSize,
       lineHeight: 1.18,
       scrollback: 10000,
       theme: {
@@ -145,6 +150,34 @@ export function TerminalView({ tab, active }: TerminalViewProps) {
     };
   }, [tab.sessionId]);
 
+  const applyTerminalSettings = (fontFamily: string, fontSize: number) => {
+    setTerminalFontFamily(fontFamily);
+    setTerminalFontSize(fontSize);
+    const terminal = terminalRef.current;
+    if (terminal) {
+      terminal.options.fontFamily = fontFamily;
+      terminal.options.fontSize = fontSize;
+      fitRef.current?.fit();
+    }
+  };
+
+  useEffect(() => {
+    let active = true;
+    void api.getSettings().then((settings) => {
+      if (active) applyTerminalSettings(settings.terminalFontFamily, settings.terminalFontSize);
+    }).catch((error) => notify(String(error)));
+    return () => { active = false; };
+  }, [notify, tab.sessionId]);
+
+  useEffect(() => {
+    const onSettingsChanged = (event: Event) => {
+      const detail = (event as CustomEvent<{ fontFamily: string; fontSize: number }>).detail;
+      if (detail?.fontFamily && Number.isFinite(detail.fontSize)) applyTerminalSettings(detail.fontFamily, detail.fontSize);
+    };
+    window.addEventListener("funshell-terminal-settings-changed", onSettingsChanged);
+    return () => window.removeEventListener("funshell-terminal-settings-changed", onSettingsChanged);
+  }, [tab.sessionId]);
+
   useEffect(() => {
     void api.history(tab.connectionId).then((entries) => setHistory(entries.map((entry) => entry.command))).catch(() => undefined);
     const insert = (event: Event) => {
@@ -213,6 +246,28 @@ export function TerminalView({ tab, active }: TerminalViewProps) {
     if (context?.text) terminalRef.current?.paste(context.text);
   };
 
+  const saveTerminalSettings = async () => {
+    const fontFamily = terminalFontFamily.trim();
+    const fontSize = Math.round(terminalFontSize);
+    if (!fontFamily || !Number.isFinite(fontSize) || fontSize < 9 || fontSize > 32) {
+      notify("终端字体大小必须在 9 到 32 之间，字体名称不能为空");
+      return;
+    }
+    setSavingTerminalSettings(true);
+    try {
+      const current = await api.getSettings();
+      const saved = await api.saveSettings({ ...current, terminalFontFamily: fontFamily, terminalFontSize: fontSize });
+      applyTerminalSettings(saved.terminalFontFamily, saved.terminalFontSize);
+      window.dispatchEvent(new CustomEvent("funshell-terminal-settings-changed", { detail: { fontFamily: saved.terminalFontFamily, fontSize: saved.terminalFontSize } }));
+      setTerminalSettingsOpen(false);
+      notify("终端设置已保存");
+    } catch (error) {
+      notify(String(error));
+    } finally {
+      setSavingTerminalSettings(false);
+    }
+  };
+
   return (
     <div className="terminal-view">
       <div ref={hostRef} className="xterm-host" onContextMenu={(event) => void openTerminalContextMenu(event)} />
@@ -221,6 +276,16 @@ export function TerminalView({ tab, active }: TerminalViewProps) {
           <button type="button" onClick={() => void (context.action === "copy" ? copySelection() : pasteClipboard())}>{context.action === "copy" ? "复制文本" : "粘贴"}</button>
         </ContextMenu>
       )}
+      <TerminalSettingsDialog
+        open={terminalSettingsOpen}
+        fontFamily={terminalFontFamily}
+        fontSize={terminalFontSize}
+        saving={savingTerminalSettings}
+        onFontFamilyChange={setTerminalFontFamily}
+        onFontSizeChange={setTerminalFontSize}
+        onClose={() => setTerminalSettingsOpen(false)}
+        onSave={() => void saveTerminalSettings()}
+      />
       {searchOpen && (
         <div className="terminal-search">
           <input autoFocus placeholder="查找终端内容" value={search} onChange={(event) => { setSearch(event.target.value); searchRef.current?.findNext(event.target.value); }} />
@@ -250,7 +315,7 @@ export function TerminalView({ tab, active }: TerminalViewProps) {
         />
         <button type="button" title="执行" onClick={() => void submit()}><Zap size={17} /></button>
         <button type="button" title="搜索" onClick={() => setSearchOpen((value) => !value)}><Search size={17} /></button>
-        <button type="button" title="终端设置"><Settings size={17} /></button>
+        <button type="button" aria-label="终端设置" title="终端设置" onClick={() => setTerminalSettingsOpen(true)}><Settings size={17} /></button>
       </div>
     </div>
   );

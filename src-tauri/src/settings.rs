@@ -11,6 +11,8 @@ pub struct AppSettings {
     pub geoip_enabled: bool,
     pub geoip_provider_url: String,
     pub confirm_close_active_sessions: bool,
+    pub terminal_font_family: String,
+    pub terminal_font_size: u16,
 }
 
 impl Default for AppSettings {
@@ -19,6 +21,9 @@ impl Default for AppSettings {
             geoip_enabled: true,
             geoip_provider_url: "https://ipwho.is/{ip}".into(),
             confirm_close_active_sessions: true,
+            terminal_font_family: "\"Cascadia Mono\", Consolas, \"Microsoft YaHei UI\", monospace"
+                .into(),
+            terminal_font_size: 13,
         }
     }
 }
@@ -73,6 +78,20 @@ fn validate(value: &AppSettings) -> AppResult<()> {
             "GeoIP 提供方必须使用 HTTPS 并包含 {ip} 占位符".into(),
         ));
     }
+    if value.terminal_font_family.trim().is_empty()
+        || value.terminal_font_family.len() > 240
+        || value
+            .terminal_font_family
+            .chars()
+            .any(|character| character.is_control() || "{};".contains(character))
+    {
+        return Err(AppError::Validation("终端字体名称无效".into()));
+    }
+    if !(9..=32).contains(&value.terminal_font_size) {
+        return Err(AppError::Validation(
+            "终端字体大小必须在 9 到 32 之间".into(),
+        ));
+    }
     Ok(())
 }
 
@@ -105,6 +124,27 @@ mod tests {
         let settings = SettingsService::load(path).expect("load");
         let value = AppSettings {
             geoip_provider_url: "http://example.test/{ip}".into(),
+            ..AppSettings::default()
+        };
+        assert!(settings.save(value).is_err());
+    }
+
+    #[test]
+    fn defaults_to_a_compact_terminal_font_size() {
+        assert_eq!(AppSettings::default().terminal_font_size, 13);
+        assert!(
+            AppSettings::default()
+                .terminal_font_family
+                .contains("Cascadia Mono")
+        );
+    }
+
+    #[test]
+    fn rejects_terminal_font_sizes_outside_the_supported_range() {
+        let directory = tempdir().expect("tempdir");
+        let settings = SettingsService::load(directory.path().join("settings.json")).expect("load");
+        let value = AppSettings {
+            terminal_font_size: 8,
             ..AppSettings::default()
         };
         assert!(settings.save(value).is_err());
