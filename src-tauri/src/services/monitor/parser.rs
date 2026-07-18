@@ -132,11 +132,17 @@ pub fn parse_process_details(output: &str, pid: u32) -> ProcessDetails {
 
 pub fn parse_sockets(output: &str) -> Vec<SocketInfo> {
     let values = sections(output);
+    let address_interfaces = values
+        .get("ADDRESSES")
+        .into_iter()
+        .flatten()
+        .filter_map(|line| parse_interface_address(line))
+        .collect::<HashMap<_, _>>();
     let mut sockets = values
         .get("SOCKETS")
         .into_iter()
         .flatten()
-        .filter_map(|line| parse_socket_line(line))
+        .filter_map(|line| parse_socket_line(line, &address_interfaces))
         .collect::<Vec<_>>();
 
     if let Some(lines) = values.get("TCPINFO") {
@@ -317,7 +323,10 @@ fn parse_filesystems(lines: Option<&Vec<String>>) -> Vec<FilesystemInfo> {
         .collect()
 }
 
-fn parse_socket_line(line: &str) -> Option<SocketInfo> {
+fn parse_socket_line(
+    line: &str,
+    address_interfaces: &HashMap<String, String>,
+) -> Option<SocketInfo> {
     let fields = line.split_whitespace().collect::<Vec<_>>();
     if fields.len() < 6 {
         return None;
@@ -331,8 +340,12 @@ fn parse_socket_line(line: &str) -> Option<SocketInfo> {
         .nth(1)
         .and_then(|value| value.split('"').next())
         .map(str::to_owned);
+    let address_family = socket_address_family(&local_address, &remote_address).to_owned();
+    let interface_name = socket_interface(&local_address, address_interfaces);
     Some(SocketInfo {
         protocol: fields[0].to_owned(),
+        address_family,
+        interface_name,
         state: fields[1].to_owned(),
         local_address,
         local_port,
@@ -343,6 +356,48 @@ fn parse_socket_line(line: &str) -> Option<SocketInfo> {
         received_bytes: None,
         sent_bytes: None,
     })
+}
+
+fn parse_interface_address(line: &str) -> Option<(String, String)> {
+    let fields = line.split_whitespace().collect::<Vec<_>>();
+    if fields.len() < 4 || !matches!(fields[2], "inet" | "inet6") {
+        return None;
+    }
+    let address = fields[3].split('/').next()?.split('%').next()?.to_owned();
+    let interface = fields[1].split('@').next()?.to_owned();
+    Some((address, interface))
+}
+
+fn socket_address_family(local_address: &str, remote_address: &str) -> &'static str {
+    let address = if matches!(local_address, "*" | "") {
+        remote_address
+    } else {
+        local_address
+    };
+    if address.contains(':') {
+        "IPv6"
+    } else if address.contains('.') {
+        "IPv4"
+    } else {
+        "未知"
+    }
+}
+
+fn socket_interface(
+    local_address: &str,
+    address_interfaces: &HashMap<String, String>,
+) -> Option<String> {
+    if matches!(local_address, "0.0.0.0" | "::" | "*") {
+        return None;
+    }
+    if let Some((_, interface)) = local_address.rsplit_once('%') {
+        return Some(interface.to_owned());
+    }
+    let address = local_address.split('%').next().unwrap_or(local_address);
+    address_interfaces
+        .get(address)
+        .cloned()
+        .or_else(|| matches!(address, "127.0.0.1" | "::1").then(|| "lo".to_owned()))
 }
 
 fn split_endpoint(value: &str) -> (String, Option<u16>) {
@@ -394,10 +449,23 @@ mod tests {
 
     #[test]
     fn associates_tcp_counters_with_ipv6_socket_endpoints() {
-        let output = "__SOCKETS__\ntcp LISTEN 0 4096 [::]:80 [::]:* users:((\"nginx\",pid=10,fd=3))\ntcp ESTAB 0 0 [::1]:80 [2001:db8::2]:45120 users:((\"nginx\",pid=10,fd=4))\n__TCPINFO__\nESTAB 0 0 [::1]:80 [2001:db8::2]:45120 users:((\"nginx\",pid=10,fd=4))\n cubic bytes_sent:9000 bytes_received:5000\n";
+        let output = "__ADDRESSES__\n1: lo    inet6 ::1/128 scope host lo\n__SOCKETS__\ntcp LISTEN 0 4096 [::]:80 [::]:* users:((\"nginx\",pid=10,fd=3))\ntcp ESTAB 0 0 [::1]:80 [2001:db8::2]:45120 users:((\"nginx\",pid=10,fd=4))\n__TCPINFO__\nESTAB 0 0 [::1]:80 [2001:db8::2]:45120 users:((\"nginx\",pid=10,fd=4))\n cubic bytes_sent:9000 bytes_received:5000\n";
         let sockets = parse_sockets(output);
         assert_eq!(sockets.len(), 2);
+        assert_eq!(sockets[0].address_family, "IPv6");
+        assert_eq!(sockets[0].interface_name, None);
+        assert_eq!(sockets[1].interface_name.as_deref(), Some("lo"));
         assert_eq!(sockets[1].sent_bytes, Some(9000));
         assert_eq!(sockets[1].received_bytes, Some(5000));
+    }
+
+    #[test]
+    fn maps_bound_addresses_to_network_interfaces() {
+        let output = "__ADDRESSES__\n2: eth0@if9    inet 10.0.0.2/24 brd 10.0.0.255 scope global eth0\n3: eth1    inet6 2001:db8::10/64 scope global\n__SOCKETS__\ntcp LISTEN 0 4096 10.0.0.2:443 0.0.0.0:* users:((\"nginx\",pid=10,fd=3))\ntcp LISTEN 0 4096 [2001:db8::10]:443 [::]:* users:((\"nginx\",pid=10,fd=4))\n__TCPINFO__\n";
+        let sockets = parse_sockets(output);
+        assert_eq!(sockets[0].address_family, "IPv4");
+        assert_eq!(sockets[0].interface_name.as_deref(), Some("eth0"));
+        assert_eq!(sockets[1].address_family, "IPv6");
+        assert_eq!(sockets[1].interface_name.as_deref(), Some("eth1"));
     }
 }

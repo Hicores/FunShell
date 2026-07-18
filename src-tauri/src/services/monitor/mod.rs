@@ -35,6 +35,8 @@ ps -eo pid=,user=,rss=,pcpu=,comm=,args= --sort=-pcpu 2>/dev/null || ps 2>/dev/n
 "#;
 
 pub const SOCKET_SCRIPT: &str = r#"LC_ALL=C
+echo __ADDRESSES__
+ip -o addr show 2>/dev/null
 echo __SOCKETS__
 ss -H -tunap 2>/dev/null
 echo __TCPINFO__

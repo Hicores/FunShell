@@ -22,3 +22,4 @@
 - PowerShell's `$ErrorActionPreference = "Stop"` does not convert native executable failures into terminating errors. Build/test scripts must check `$LASTEXITCODE` immediately after `npm`, `cargo`, and `docker` commands or a later cleanup command can mask the failure.
 - OpenSSH forwarding defaults differ across Linux images. Docker SSH fixtures pass `AllowTcpForwarding=yes` and `PermitOpen=any` as `sshd` command-line options so direct-channel tests are deterministic across Debian, Alpine, and Rocky.
 - Rust string `"\033"` is a NUL escape followed by `33`, not a shell ESC escape. SSH fixture commands that use POSIX `printf` must contain the literal shell sequence `"\\033"`.
+- Linux `ss` socket rows do not reliably include a network-interface name. Resolve bound local addresses with `ip -o addr show`; treat `0.0.0.0` and `::` as all-interface listeners, and keep IPv4/IPv6 families separate when associating established connections to wildcard listeners.

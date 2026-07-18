@@ -11,6 +11,8 @@ export interface ListenerInfo {
   pid: number | null;
   process: string | null;
   protocol: string;
+  addressFamily: string;
+  interfaceName: string | null;
   localAddress: string;
   localPort: number;
   ipCount: number;
@@ -21,7 +23,7 @@ export interface ListenerInfo {
 }
 
 export function socketKey(socket: SocketInfo) {
-  return [socket.protocol, socket.localAddress, socket.localPort ?? "", socket.remoteAddress, socket.remotePort ?? "", socket.pid ?? ""].join("|");
+  return [socket.protocol, socket.addressFamily, socket.interfaceName ?? "", socket.localAddress, socket.localPort ?? "", socket.remoteAddress, socket.remotePort ?? "", socket.pid ?? ""].join("|");
 }
 
 export function rateSocketSamples(
@@ -56,6 +58,7 @@ function isListener(socket: SocketInfo) {
 function accepts(listener: RatedSocket, connection: RatedSocket) {
   if (isListener(connection) || connection.remotePort == null) return false;
   if (listener.protocol.toLowerCase() !== connection.protocol.toLowerCase()) return false;
+  if (listener.addressFamily !== connection.addressFamily) return false;
   if (listener.localPort !== connection.localPort) return false;
   const wildcard = ["0.0.0.0", "::", "*"].includes(listener.localAddress);
   return wildcard || listener.localAddress === connection.localAddress;
@@ -76,6 +79,8 @@ export function buildListeners(sockets: RatedSocket[]): ListenerInfo[] {
         pid: listener.pid,
         process: listener.process,
         protocol: listener.protocol,
+        addressFamily: listener.addressFamily,
+        interfaceName: listener.interfaceName,
         localAddress: listener.localAddress,
         localPort: listener.localPort!,
         ipCount: new Set(connections.map((socket) => socket.remoteAddress).filter((ip) => ip && !["0.0.0.0", "::", "*"].includes(ip))).size,

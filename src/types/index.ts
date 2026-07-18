@@ -168,6 +168,8 @@ export interface SystemInfo {
 
 export interface SocketInfo {
   protocol: string;
+  addressFamily: string;
+  interfaceName: string | null;
   state: string;
   localAddress: string;
   localPort: number | null;

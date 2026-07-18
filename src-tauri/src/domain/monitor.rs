@@ -79,6 +79,8 @@ pub struct ProcessDetails {
 #[serde(rename_all = "camelCase")]
 pub struct SocketInfo {
     pub protocol: String,
+    pub address_family: String,
+    pub interface_name: Option<String>,
     pub state: String,
     pub local_address: String,
     pub local_port: Option<u16>,
