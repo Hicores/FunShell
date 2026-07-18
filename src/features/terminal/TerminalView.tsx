@@ -32,6 +32,8 @@ export function TerminalView({ tab, active }: TerminalViewProps) {
   const [command, setCommand] = useState("");
   const [searchOpen, setSearchOpen] = useState(false);
   const [search, setSearch] = useState("");
+  const [history, setHistory] = useState<string[]>([]);
+  const [historyIndex, setHistoryIndex] = useState<number | null>(null);
 
   useEffect(() => {
     if (!hostRef.current) return;
@@ -103,6 +105,19 @@ export function TerminalView({ tab, active }: TerminalViewProps) {
   }, [tab.sessionId]);
 
   useEffect(() => {
+    void api.history(tab.connectionId).then((entries) => setHistory(entries.map((entry) => entry.command))).catch(() => undefined);
+    const insert = (event: Event) => {
+      const detail = (event as CustomEvent<{ sessionId: string; command: string }>).detail;
+      if (detail?.sessionId === tab.sessionId) {
+        setCommand(detail.command);
+        setHistoryIndex(null);
+      }
+    };
+    window.addEventListener("funshell-insert-command", insert);
+    return () => window.removeEventListener("funshell-insert-command", insert);
+  }, [tab.connectionId, tab.sessionId]);
+
+  useEffect(() => {
     if (active) window.setTimeout(() => fitRef.current?.fit(), 0);
   }, [active]);
 
@@ -110,6 +125,8 @@ export function TerminalView({ tab, active }: TerminalViewProps) {
     const value = command.trimEnd();
     if (!value) return;
     setCommand("");
+    setHistory((current) => [value, ...current.filter((item) => item !== value)].slice(0, 300));
+    setHistoryIndex(null);
     if (!isTauri()) {
       terminalRef.current?.writeln(value);
       terminalRef.current?.writeln(`\x1b[90m[demo] command accepted: ${value}\x1b[0m`);
@@ -133,8 +150,20 @@ export function TerminalView({ tab, active }: TerminalViewProps) {
         <input
           value={command}
           placeholder="命令输入（Enter 执行，终端区域支持完整交互）"
-          onChange={(event) => setCommand(event.target.value)}
-          onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); void submit(); } }}
+          onChange={(event) => { setCommand(event.target.value); setHistoryIndex(null); }}
+          onKeyDown={(event) => {
+            if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); void submit(); return; }
+            if (event.key === "ArrowUp" && history.length) {
+              event.preventDefault();
+              const next = Math.min((historyIndex ?? -1) + 1, history.length - 1);
+              setHistoryIndex(next); setCommand(history[next]);
+            }
+            if (event.key === "ArrowDown" && historyIndex != null) {
+              event.preventDefault();
+              const next = historyIndex - 1;
+              setHistoryIndex(next >= 0 ? next : null); setCommand(next >= 0 ? history[next] : "");
+            }
+          }}
         />
         <button type="button" title="执行" onClick={() => void submit()}><Zap size={17} /></button>
         <button type="button" title="搜索" onClick={() => setSearchOpen((value) => !value)}><Search size={17} /></button>

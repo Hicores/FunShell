@@ -38,6 +38,7 @@ const mockHistory: CommandHistoryEntry[] = [];
 const mockPresets: CommandPreset[] = [
   { id: "preset-health", scope: "global", scopeId: null, name: "服务健康检查", command: "systemctl --no-pager --failed", tags: ["systemd"], sortOrder: 0 },
   { id: "preset-disk", scope: "global", scopeId: null, name: "磁盘占用", command: "du -sh * | sort -h", tags: ["storage"], sortOrder: 1 },
+  { id: "preset-restart", scope: "global", scopeId: null, name: "重启服务", command: "systemctl restart ${service}", tags: ["systemd"], sortOrder: 2 },
 ];
 let mockSettings: AppSettings = {
   geoipEnabled: true,
@@ -107,6 +108,25 @@ function mockCall(command: string, args?: Record<string, unknown>): unknown {
     case "list_remote_files": return mockRemoteFiles;
     case "list_command_history": return mockHistory;
     case "list_command_presets": return mockPresets;
+    case "save_command_preset": {
+      const preset = args?.preset as CommandPreset;
+      const saved = { ...preset, id: preset.id || `preset-${Date.now()}` };
+      const index = mockPresets.findIndex((item) => item.id === saved.id);
+      if (index >= 0) mockPresets[index] = saved;
+      else mockPresets.push(saved);
+      return saved;
+    }
+    case "delete_command_preset": {
+      const index = mockPresets.findIndex((item) => item.id === args?.id);
+      if (index >= 0) mockPresets.splice(index, 1);
+      return null;
+    }
+    case "set_command_favorite": {
+      const entry = mockHistory.find((item) => item.id === args?.id);
+      if (entry) entry.favorite = Boolean(args?.favorite);
+      return null;
+    }
+    case "clear_command_history": mockHistory.splice(0); return null;
     case "submit_terminal_command": {
       const commandText = String(args?.command ?? "");
       if (commandText) mockHistory.unshift({ id: String(Date.now()), connectionId: null, command: commandText, favorite: false, executedAt: new Date().toISOString() });

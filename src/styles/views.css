@@ -42,6 +42,8 @@
 .command-list code { overflow: hidden; color: #243d4a; font: 12px "Cascadia Mono", Consolas, monospace; text-overflow: ellipsis; white-space: nowrap; }
 .command-list span { color: #73838c; font-size: 11px; }
 .command-list button { display: inline-flex; align-items: center; gap: 4px; border: 0; background: transparent; color: #277aa7; }
+.command-actions { display: flex; justify-content: flex-end; gap: 5px; }
+.preset-editor textarea { height: 180px; resize: vertical; font: 12px/1.5 "Cascadia Mono", Consolas, monospace; }
 
 .detail-view { display: grid; position: absolute; inset: 0; min-width: 0; min-height: 0; grid-template-rows: 40px minmax(0, 1fr); background: white; }
 .view-toolbar { display: flex; min-width: 0; align-items: center; gap: 9px; border-bottom: 1px solid #bdc8cf; padding: 0 8px; background: #f4f7f8; }
