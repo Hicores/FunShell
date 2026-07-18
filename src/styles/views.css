@@ -59,6 +59,22 @@
 .editor-file-picker > button > span { display: grid; min-width: 0; gap: 2px; }
 .editor-file-picker > button strong, .editor-file-picker > button small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .editor-file-picker > button small { color: #738791; font: 10px "Cascadia Mono", Consolas, monospace; }
+.editor-window-shell { display: grid; height: 100vh; min-width: 0; min-height: 0; grid-template-rows: 52px minmax(0, 1fr); background: #edf2f4; color: #263f4d; }
+.editor-window-header { display: flex; min-width: 0; align-items: center; gap: 12px; border-bottom: 1px solid #bcc9cf; padding: 0 12px; background: #f7f9fa; }
+.editor-window-heading { display: flex; min-width: 0; flex: 1; align-items: center; gap: 9px; color: #2c718f; }
+.editor-window-heading > div { display: grid; min-width: 0; gap: 2px; }
+.editor-window-heading strong, .editor-window-heading span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.editor-window-heading strong { color: #294b5d; font-size: 14px; }
+.editor-window-heading span { color: #71828c; font: 11px "Cascadia Mono", Consolas, monospace; }
+.editor-window-actions { display: flex; flex: 0 0 auto; gap: 6px; }
+.editor-window-actions button { display: inline-flex; height: 30px; align-items: center; gap: 5px; border: 1px solid #b3c2ca; padding: 0 10px; background: white; color: #3b6577; }
+.editor-window-actions button:disabled { cursor: default; opacity: .5; }
+.editor-window-save:not(:disabled) { border-color: #2e89b5; background: #2d8fc2; color: white; }
+.editor-window-loading { display: flex; align-items: center; justify-content: center; gap: 10px; color: #607681; }
+.editor-window-error { display: grid; align-content: center; justify-items: center; gap: 10px; padding: 24px; color: #a04444; }
+.editor-window-error span { max-width: min(760px, 90vw); color: #6f4a4a; text-align: center; word-break: break-word; }
+.editor-window-error button { height: 30px; border: 1px solid #b3c2ca; padding: 0 12px; background: white; color: #3b6577; }
+.editor-window-textarea { width: 100%; height: 100%; min-height: 0; resize: none; border: 0; padding: 14px 16px; outline: 0; background: #132c3d; color: #eef5f7; font: 13px/1.55 "Cascadia Mono", Consolas, monospace; tab-size: 4; }
 .permission-dialog { display: grid; gap: 10px; }
 .permission-target { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 3px 12px; padding: 1px 3px 5px; }
 .permission-target strong { overflow: hidden; font-size: 14px; text-overflow: ellipsis; white-space: nowrap; }

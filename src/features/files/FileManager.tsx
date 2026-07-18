@@ -10,6 +10,7 @@ import { useAppStore } from "../../stores/appStore";
 import type { RemoteFileEntry, WorkspaceTab } from "../../types";
 import { PermissionDialog } from "./PermissionDialog";
 import { RemoteDirectoryTree } from "./RemoteDirectoryTree";
+import { openRemoteEditorWindow } from "./openEditorWindow";
 import { useFileDrop } from "./useFileDrop";
 
 function joinRemote(base: string, name: string) {
@@ -145,6 +146,11 @@ export function FileManager({ tab }: { tab: WorkspaceTab }) {
   };
 
   const editEntry = async (file: RemoteFileEntry) => {
+    if (isTauri()) {
+      setContext(null);
+      await openRemoteEditorWindow(tab.sessionId, file.path, file.name, notify);
+      return;
+    }
     if (editorDocuments.some((document) => document.path === file.path)) {
       setActiveEditorPath(file.path);
       setEditorOpen(true);
