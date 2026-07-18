@@ -190,6 +190,8 @@ export interface RemoteFileEntry {
   permissions: number | null;
   user: string | null;
   group: string | null;
+  userId?: number | null;
+  groupId?: number | null;
 }
 
 export interface CommandHistoryEntry {

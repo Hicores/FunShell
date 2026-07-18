@@ -85,13 +85,13 @@ export const mockSystemInfo: SystemInfo = {
 };
 
 export const mockRemoteFiles: RemoteFileEntry[] = [
-  { name: ".cache", path: "/root/.cache", kind: "directory", size: 0, modified: 1784000000, permissions: 0o755, user: "root", group: "root" },
-  { name: ".config", path: "/root/.config", kind: "directory", size: 0, modified: 1784100000, permissions: 0o755, user: "root", group: "root" },
-  { name: ".ssh", path: "/root/.ssh", kind: "directory", size: 0, modified: 1784200000, permissions: 0o700, user: "root", group: "root" },
-  { name: "gateway", path: "/root/gateway", kind: "directory", size: 0, modified: 1784300000, permissions: 0o755, user: "root", group: "root" },
-  { name: ".bash_history", path: "/root/.bash_history", kind: "file", size: 1840, modified: 1784400000, permissions: 0o600, user: "root", group: "root" },
-  { name: "deploy.sh", path: "/root/deploy.sh", kind: "file", size: 61120, modified: 1784500000, permissions: 0o755, user: "root", group: "root" },
-  { name: "gateway-release.tar.gz", path: "/root/gateway-release.tar.gz", kind: "file", size: 93_200_000, modified: 1784600000, permissions: 0o644, user: "root", group: "root" },
+  { name: ".cache", path: "/root/.cache", kind: "directory", size: 0, modified: 1784000000, permissions: 0o755, user: "root", group: "root", userId: 0, groupId: 0 },
+  { name: ".config", path: "/root/.config", kind: "directory", size: 0, modified: 1784100000, permissions: 0o755, user: "root", group: "root", userId: 0, groupId: 0 },
+  { name: ".ssh", path: "/root/.ssh", kind: "directory", size: 0, modified: 1784200000, permissions: 0o700, user: "root", group: "root", userId: 0, groupId: 0 },
+  { name: "gateway", path: "/root/gateway", kind: "directory", size: 0, modified: 1784300000, permissions: 0o755, user: "root", group: "root", userId: 0, groupId: 0 },
+  { name: ".bash_history", path: "/root/.bash_history", kind: "file", size: 1840, modified: 1784400000, permissions: 0o600, user: "root", group: "root", userId: 0, groupId: 0 },
+  { name: "deploy.sh", path: "/root/deploy.sh", kind: "file", size: 61120, modified: 1784500000, permissions: 0o755, user: "root", group: "root", userId: 0, groupId: 0 },
+  { name: "gateway-release.tar.gz", path: "/root/gateway-release.tar.gz", kind: "file", size: 93_200_000, modified: 1784600000, permissions: 0o644, user: "root", group: "root", userId: 0, groupId: 0 },
 ];
 
 export const mockSockets: SocketInfo[] = [

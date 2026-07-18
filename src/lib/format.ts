@@ -22,3 +22,8 @@ export function formatMode(mode: number | null) {
   if (mode == null) return "-";
   return (mode & 0o7777).toString(8).padStart(3, "0");
 }
+
+export function formatIdentity(name: string | null | undefined, id: number | null | undefined) {
+  if (name && id != null) return `${name} (${id})`;
+  return name ?? (id != null ? String(id) : "-");
+}

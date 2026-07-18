@@ -71,6 +71,8 @@ pub struct RemoteFileEntry {
     pub permissions: Option<u32>,
     pub user: Option<String>,
     pub group: Option<String>,
+    pub user_id: Option<u32>,
+    pub group_id: Option<u32>,
 }
 
 #[derive(Debug, Clone, Copy, Serialize, PartialEq, Eq)]

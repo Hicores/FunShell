@@ -37,8 +37,8 @@ export function PermissionDialog({ file, saving, onClose, onSave }: PermissionDi
   useEffect(() => {
     if (file) {
       setMode((file.permissions ?? 0) & 0o7777);
-      setOwner(file.user ?? "");
-      setGroup(file.group ?? "");
+      setOwner(file.user ?? (file.userId != null ? String(file.userId) : ""));
+      setGroup(file.group ?? (file.groupId != null ? String(file.groupId) : ""));
     }
   }, [file]);
 
@@ -69,8 +69,8 @@ export function PermissionDialog({ file, saving, onClose, onSave }: PermissionDi
           <code>{formatPermissionMode(mode)}</code>
         </div>
         <div className="permission-ownership">
-          <label>所有者<input aria-label="所有者" placeholder="用户名或 UID" value={owner} onChange={(event) => setOwner(event.target.value)} /></label>
-          <label>用户组<input aria-label="用户组" placeholder="组名或 GID" value={group} onChange={(event) => setGroup(event.target.value)} /></label>
+          <label>所有者<span className="permission-identity"><input aria-label="所有者" placeholder="用户名或 UID" value={owner} onChange={(event) => setOwner(event.target.value)} />{file?.userId != null && <small>({file.userId})</small>}</span></label>
+          <label>用户组<span className="permission-identity"><input aria-label="用户组" placeholder="组名或 GID" value={group} onChange={(event) => setGroup(event.target.value)} />{file?.groupId != null && <small>({file.groupId})</small>}</span></label>
         </div>
         <div className="permission-groups">
           {permissionGroups.map((group) => (

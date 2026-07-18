@@ -51,6 +51,8 @@ pub async fn list_remote_files(
                 group: metadata
                     .group
                     .or_else(|| metadata.gid.map(|gid| gid.to_string())),
+                user_id: metadata.uid,
+                group_id: metadata.gid,
             }
         })
         .collect::<Vec<_>>();
