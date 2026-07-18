@@ -17,6 +17,25 @@ pub enum AppError {
     Decryption,
     #[error("{0}")]
     Validation(String),
+    #[error(transparent)]
+    Ssh(#[from] russh::Error),
+    #[error("SFTP 操作失败: {0}")]
+    Sftp(String),
+    #[error("HOST_KEY_REQUIRED|{host}|{port}|{algorithm}|{fingerprint}")]
+    HostKeyRequired {
+        host: String,
+        port: u16,
+        algorithm: String,
+        fingerprint: String,
+    },
+    #[error("HOST_KEY_CHANGED|{host}|{port}|{algorithm}|{fingerprint}|{expected}")]
+    HostKeyChanged {
+        host: String,
+        port: u16,
+        algorithm: String,
+        fingerprint: String,
+        expected: String,
+    },
 }
 
 pub type AppResult<T> = Result<T, AppError>;

@@ -4,6 +4,7 @@ mod error;
 mod paths;
 mod persistence;
 mod security;
+mod services;
 mod state;
 
 use tauri::Manager;
@@ -47,6 +48,23 @@ pub fn run() {
             commands::vault::unlock_master_vault,
             commands::vault::lock_master_vault,
             commands::vault::change_vault_mode,
+            commands::keys::list_keys,
+            commands::keys::import_private_key,
+            commands::keys::generate_private_key,
+            commands::keys::delete_key,
+            commands::session::trust_host_key,
+            commands::session::connect_session,
+            commands::session::disconnect_session,
+            commands::session::send_terminal_input,
+            commands::session::resize_terminal,
+            commands::session::execute_command,
+            commands::files::list_remote_files,
+            commands::files::read_remote_text,
+            commands::files::write_remote_text,
+            commands::files::create_remote_directory,
+            commands::files::rename_remote_path,
+            commands::files::delete_remote_path,
+            commands::files::chmod_remote_path,
         ])
         .run(tauri::generate_context!())
         .expect("failed to run FunShell");

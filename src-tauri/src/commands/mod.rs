@@ -1,7 +1,10 @@
 use serde::Serialize;
 
 pub mod connections;
+pub mod files;
+pub mod keys;
 pub mod paths;
+pub mod session;
 pub mod vault;
 
 #[derive(Serialize)]
