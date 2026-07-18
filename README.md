@@ -1,6 +1,6 @@
 # FunShell
 
-FunShell 是使用 Rust、Tauri 2、React 19 和 TypeScript 构建的便携式 SSH 服务器管理工具。
+FunShell 是使用 Rust、Tauri 2、React 19 和 TypeScript 构建的便携式 SSH 服务器管理工具,界面参考的 FinalShell。
 
 主要功能包括连接与目录管理、密码/私钥认证、TOFU 主机指纹、ANSI 交互终端、命令历史与预设、SFTP 文件管理、Linux 资源监控、进程与网络分析、路由追踪、代理/跳板择优和本地/远端/SOCKS5 隧道。
 
@@ -41,3 +41,7 @@ powershell -ExecutionPolicy Bypass -File scripts/build.ps1
 ```
 
 发布结果为 `dest/FunShell.exe`。首次运行会在可执行文件旁创建 `config/funshell.db`、`config/settings.json`、`downloads`、`logs` 和 `temp`；重新发布只覆盖主程序，不会清理这些数据。
+
+## 许可证
+
+本项目采用 Apache License 2.0 开源协议，详见 [LICENSE](LICENSE)。
