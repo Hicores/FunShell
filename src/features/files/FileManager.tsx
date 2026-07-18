@@ -45,6 +45,7 @@ export function FileManager({ tab }: { tab: WorkspaceTab }) {
   const [selected, setSelected] = useState<RemoteFileEntry | null>(null);
   const [loading, setLoading] = useState(false);
   const [editor, setEditor] = useState<{ path: string; content: string } | null>(null);
+  const [editorLoadingPath, setEditorLoadingPath] = useState<string | null>(null);
   const [permissionFile, setPermissionFile] = useState<RemoteFileEntry | null>(null);
   const [savingPermissions, setSavingPermissions] = useState(false);
   const [context, setContext] = useState<{ x: number; y: number; file: RemoteFileEntry | null; targetPath: string } | null>(null);
@@ -52,6 +53,7 @@ export function FileManager({ tab }: { tab: WorkspaceTab }) {
   const dropTargetRef = useRef<HTMLDivElement>(null);
   const skipNextRefreshPathRef = useRef<string | null>(null);
   const fileRequestRef = useRef(0);
+  const editorRequestRef = useRef(0);
 
   const refresh = useCallback(async () => {
     const requestId = ++fileRequestRef.current;
@@ -128,10 +130,25 @@ export function FileManager({ tab }: { tab: WorkspaceTab }) {
   };
 
   const editEntry = async (file: RemoteFileEntry) => {
+    if (editorLoadingPath) return;
+    const requestId = ++editorRequestRef.current;
+    setContext(null);
+    setEditor(null);
+    setEditorLoadingPath(file.path);
     try {
       const value = await api.readRemoteText(tab.sessionId, file.path);
+      if (editorRequestRef.current !== requestId) return;
       setEditor({ path: file.path, content: value.content });
-    } catch (error) { notify(String(error)); }
+    } catch (error) {
+      if (editorRequestRef.current === requestId) notify(String(error));
+    } finally {
+      if (editorRequestRef.current === requestId) setEditorLoadingPath(null);
+    }
+  };
+
+  const cancelEditorLoading = () => {
+    editorRequestRef.current += 1;
+    setEditorLoadingPath(null);
   };
 
   const uploadPaths = useCallback(async (localPaths: string[], destinationPath = path) => {
@@ -278,8 +295,14 @@ export function FileManager({ tab }: { tab: WorkspaceTab }) {
       <Modal open={createDialog != null} title={createDialog?.kind === "file" ? "新建文件" : "新建文件夹"} width={430} onClose={() => setCreateDialog(null)} footer={<><button type="button" onClick={() => setCreateDialog(null)}>取消</button><button className="primary-button" type="button" disabled={!createDialog?.name.trim()} onClick={() => void createEntry()}>创建</button></>}>
         <div className="form-grid"><label className="wide">目标目录<input value={createDialog?.parentPath ?? ""} readOnly /></label><label className="wide">{createDialog?.kind === "file" ? "文件名称" : "文件夹名称"}<input autoFocus value={createDialog?.name ?? ""} onChange={(event) => setCreateDialog((current) => current ? { ...current, name: event.target.value } : null)} onKeyDown={(event) => { if (event.key === "Enter") void createEntry(); }} /></label></div>
       </Modal>
-      <Modal open={editor != null} title={`远程编辑 - ${editor?.path ?? ""}`} width={900} onClose={() => setEditor(null)} footer={<><button type="button" onClick={() => setEditor(null)}>取消</button><button className="primary-button" type="button" onClick={async () => { if (!editor) return; await api.writeRemoteText(tab.sessionId, editor.path, editor.content); setEditor(null); notify("文件已保存"); }}>保存</button></>}>
-        <textarea className="remote-editor" value={editor?.content ?? ""} onChange={(event) => setEditor((current) => current ? { ...current, content: event.target.value } : null)} spellCheck={false} />
+      <Modal
+        open={editor != null || editorLoadingPath != null}
+        title={editor ? `远程编辑 - ${editor.path}` : `正在打开 - ${editorLoadingPath ?? ""}`}
+        width={900}
+        onClose={editor ? () => setEditor(null) : cancelEditorLoading}
+        footer={editor ? <><button type="button" onClick={() => setEditor(null)}>取消</button><button className="primary-button" type="button" onClick={async () => { if (!editor) return; await api.writeRemoteText(tab.sessionId, editor.path, editor.content); setEditor(null); notify("文件已保存"); }}>保存</button></> : <button type="button" onClick={cancelEditorLoading}>取消</button>}
+      >
+        {editor ? <textarea className="remote-editor" value={editor.content} onChange={(event) => setEditor((current) => current ? { ...current, content: event.target.value } : null)} spellCheck={false} /> : <div className="editor-loading" role="status"><RefreshCw size={20} className="spin" /><span>正在读取远程文本...</span></div>}
       </Modal>
       <PermissionDialog file={permissionFile} saving={savingPermissions} onClose={() => setPermissionFile(null)} onSave={(mode, owner, group) => void savePermissions(mode, owner, group)} />
     </div>

@@ -31,6 +31,7 @@
 .file-entry-label > span, .file-entry-label > small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .file-entry-label > small { color: #64808e; font: 10px "Cascadia Mono", Consolas, monospace; }
 .remote-editor { width: 100%; height: min(60vh, 560px); resize: none; border: 1px solid #acbbc4; padding: 10px; outline: 0; background: #132c3d; color: #eef5f7; font: 13px/1.5 "Cascadia Mono", Consolas, monospace; tab-size: 4; }
+.editor-loading { display: flex; width: 100%; height: min(60vh, 560px); align-items: center; justify-content: center; gap: 10px; color: #607681; }
 .permission-dialog { display: grid; gap: 10px; }
 .permission-target { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 3px 12px; padding: 1px 3px 5px; }
 .permission-target strong { overflow: hidden; font-size: 14px; text-overflow: ellipsis; white-space: nowrap; }

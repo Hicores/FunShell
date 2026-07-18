@@ -100,6 +100,21 @@ describe("FileManager", () => {
     expect(within(editor).getByRole("textbox")).toHaveValue("#!/bin/sh\necho deploy\n");
   });
 
+  it("shows a loading state while reading a remote text file", async () => {
+    let resolveRead: ((value: { path: string; content: string; size: number }) => void) | undefined;
+    vi.spyOn(api, "readRemoteText").mockImplementation(() => new Promise((resolve) => { resolveRead = resolve; }));
+    render(<FileManager tab={tab} />);
+
+    fireEvent.doubleClick(await screen.findByText("deploy.sh"));
+    const loadingDialog = await screen.findByRole("dialog", { name: "正在打开 - /root/deploy.sh" });
+    expect(loadingDialog).toBeInTheDocument();
+    expect(screen.getByRole("status")).toHaveTextContent("正在读取远程文本...");
+    expect(within(loadingDialog).queryByRole("textbox")).not.toBeInTheDocument();
+
+    resolveRead?.({ path: "/root/deploy.sh", content: "echo deploy\n", size: 12 });
+    expect(await screen.findByRole("dialog", { name: "远程编辑 - /root/deploy.sh" })).toBeInTheDocument();
+  });
+
   it("shows directory commands on empty space and creates an empty remote file", async () => {
     const createFile = vi.spyOn(api, "createRemoteFile").mockResolvedValue(undefined);
     const { container } = render(<FileManager tab={tab} />);
