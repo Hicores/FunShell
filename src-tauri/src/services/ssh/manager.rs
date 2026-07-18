@@ -1,4 +1,4 @@
-use std::{sync::Arc, time::Duration};
+use std::sync::Arc;
 
 use base64::{Engine, engine::general_purpose::STANDARD};
 use dashmap::DashMap;
@@ -22,7 +22,7 @@ use crate::{
         auth::authenticate,
         client::{ClientHandler, ForwardedChannel},
         files::open_sftp,
-        transport::connect_for_profile,
+        transport::{client_config, connect_for_profile},
     },
 };
 
@@ -60,13 +60,7 @@ impl SessionManager {
         rows: u32,
     ) -> AppResult<SessionDescriptor> {
         let stream = connect_for_profile(&profile, &database, vault).await?;
-        let config = russh::client::Config {
-            inactivity_timeout: None,
-            keepalive_interval: Some(Duration::from_secs(profile.keepalive_seconds.max(5) as u64)),
-            keepalive_max: 3,
-            nodelay: true,
-            ..Default::default()
-        };
+        let config = client_config(&profile);
         let (forwarded_sender, mut forwarded_receiver) =
             mpsc::unbounded_channel::<ForwardedChannel>();
         let handler = ClientHandler::new(

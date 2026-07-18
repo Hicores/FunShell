@@ -201,12 +201,14 @@ pub async fn upload_remote_file(
         .await,
     )?;
     transfer(
-        &app,
-        &task_id,
-        "upload",
-        &source,
-        &remote_path,
-        total,
+        TransferContext {
+            app: &app,
+            task_id: &task_id,
+            direction: "upload",
+            source: &source,
+            destination: &remote_path,
+            total,
+        },
         &mut source_file,
         &mut destination_file,
     )
@@ -238,12 +240,14 @@ pub async fn download_remote_file(
     let mut source_file = map_sftp(sftp.open(remote_path.clone()).await)?;
     let mut destination_file = File::create(&local_path).await?;
     transfer(
-        &app,
-        &task_id,
-        "download",
-        &remote_path,
-        &local_path.display().to_string(),
-        metadata.len(),
+        TransferContext {
+            app: &app,
+            task_id: &task_id,
+            direction: "download",
+            source: &remote_path,
+            destination: &local_path.display().to_string(),
+            total: metadata.len(),
+        },
         &mut source_file,
         &mut destination_file,
     )
@@ -272,13 +276,17 @@ pub async fn open_remote_file(
     Ok(local_path)
 }
 
-async fn transfer<R, W>(
-    app: &AppHandle,
-    task_id: &str,
-    direction: &str,
-    source: &str,
-    destination: &str,
+struct TransferContext<'a> {
+    app: &'a AppHandle,
+    task_id: &'a str,
+    direction: &'a str,
+    source: &'a str,
+    destination: &'a str,
     total: u64,
+}
+
+async fn transfer<R, W>(
+    context: TransferContext<'_>,
     reader: &mut R,
     writer: &mut W,
 ) -> AppResult<()>
@@ -295,28 +303,28 @@ where
         }
         writer.write_all(&buffer[..read]).await?;
         transferred = transferred.saturating_add(read as u64);
-        let _ = app.emit(
+        let _ = context.app.emit(
             "transfer-progress",
             TransferProgressEvent {
-                task_id: task_id.to_owned(),
-                direction: direction.to_owned(),
-                source: source.to_owned(),
-                destination: destination.to_owned(),
+                task_id: context.task_id.to_owned(),
+                direction: context.direction.to_owned(),
+                source: context.source.to_owned(),
+                destination: context.destination.to_owned(),
                 transferred,
-                total,
+                total: context.total,
                 state: "running".into(),
             },
         );
     }
-    let _ = app.emit(
+    let _ = context.app.emit(
         "transfer-progress",
         TransferProgressEvent {
-            task_id: task_id.to_owned(),
-            direction: direction.to_owned(),
-            source: source.to_owned(),
-            destination: destination.to_owned(),
+            task_id: context.task_id.to_owned(),
+            direction: context.direction.to_owned(),
+            source: context.source.to_owned(),
+            destination: context.destination.to_owned(),
             transferred,
-            total,
+            total: context.total,
             state: "completed".into(),
         },
     );

@@ -50,14 +50,14 @@ pub fn aes_decrypt(key: &[u8], nonce: &[u8], ciphertext: &[u8]) -> AppResult<Vec
 }
 
 pub fn dpapi_encrypt(plaintext: &[u8]) -> AppResult<Vec<u8>> {
-    let mut input = CRYPT_INTEGER_BLOB {
+    let input = CRYPT_INTEGER_BLOB {
         cbData: plaintext.len() as u32,
         pbData: plaintext.as_ptr().cast_mut(),
     };
     let mut output = CRYPT_INTEGER_BLOB::default();
     let result = unsafe {
         CryptProtectData(
-            &mut input,
+            &input,
             ptr::null(),
             ptr::null(),
             ptr::null_mut(),
@@ -76,14 +76,14 @@ pub fn dpapi_encrypt(plaintext: &[u8]) -> AppResult<Vec<u8>> {
 }
 
 pub fn dpapi_decrypt(ciphertext: &[u8]) -> AppResult<Vec<u8>> {
-    let mut input = CRYPT_INTEGER_BLOB {
+    let input = CRYPT_INTEGER_BLOB {
         cbData: ciphertext.len() as u32,
         pbData: ciphertext.as_ptr().cast_mut(),
     };
     let mut output = CRYPT_INTEGER_BLOB::default();
     let result = unsafe {
         CryptUnprotectData(
-            &mut input,
+            &input,
             ptr::null_mut(),
             ptr::null(),
             ptr::null_mut(),

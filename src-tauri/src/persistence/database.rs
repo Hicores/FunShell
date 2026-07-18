@@ -10,48 +10,6 @@ pub struct Database {
     connection: Arc<Mutex<Connection>>,
 }
 
-#[cfg(test)]
-mod tests {
-    use tempfile::tempdir;
-
-    use crate::{
-        domain::{AuthMethod, SaveConnectionInput},
-        persistence::Database,
-    };
-
-    #[test]
-    fn migrates_and_round_trips_connection() {
-        let directory = tempdir().expect("tempdir");
-        let database = Database::open(&directory.path().join("test.db")).expect("database");
-        let input = SaveConnectionInput {
-            id: None,
-            folder_id: None,
-            name: "Test server".into(),
-            host: "127.0.0.1".into(),
-            port: 22,
-            username: "root".into(),
-            auth_method: AuthMethod::Password,
-            password: None,
-            key_id: None,
-            route_id: None,
-            startup_command: None,
-            keepalive_seconds: Some(30),
-            connect_timeout_seconds: Some(10),
-            compression: false,
-            auto_reconnect: true,
-            sort_order: None,
-        };
-
-        let saved = database
-            .save_connection(&input, Some("secret-1".into()))
-            .expect("save");
-        let listed = database.list_connections(false).expect("list");
-        assert_eq!(listed.len(), 1);
-        assert_eq!(listed[0].id, saved.id);
-        assert_eq!(listed[0].secret_id.as_deref(), Some("secret-1"));
-    }
-}
-
 impl Database {
     pub fn open(path: &Path) -> AppResult<Self> {
         let connection = Connection::open(path)?;
@@ -210,5 +168,47 @@ impl Database {
             )?;
             Ok(())
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use tempfile::tempdir;
+
+    use crate::{
+        domain::{AuthMethod, SaveConnectionInput},
+        persistence::Database,
+    };
+
+    #[test]
+    fn migrates_and_round_trips_connection() {
+        let directory = tempdir().expect("tempdir");
+        let database = Database::open(&directory.path().join("test.db")).expect("database");
+        let input = SaveConnectionInput {
+            id: None,
+            folder_id: None,
+            name: "Test server".into(),
+            host: "127.0.0.1".into(),
+            port: 22,
+            username: "root".into(),
+            auth_method: AuthMethod::Password,
+            password: None,
+            key_id: None,
+            route_id: None,
+            startup_command: None,
+            keepalive_seconds: Some(30),
+            connect_timeout_seconds: Some(10),
+            compression: false,
+            auto_reconnect: true,
+            sort_order: None,
+        };
+
+        let saved = database
+            .save_connection(&input, Some("secret-1".into()))
+            .expect("save");
+        let listed = database.list_connections(false).expect("list");
+        assert_eq!(listed.len(), 1);
+        assert_eq!(listed[0].id, saved.id);
+        assert_eq!(listed[0].secret_id.as_deref(), Some("secret-1"));
     }
 }

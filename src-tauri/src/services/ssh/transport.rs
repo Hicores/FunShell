@@ -1,4 +1,6 @@
 use std::{
+    borrow::Cow,
+    collections::HashSet,
     pin::Pin,
     sync::Arc,
     task::{Context, Poll},
@@ -30,14 +32,17 @@ pub async fn connect_for_profile(
     database: &Database,
     vault: &VaultService,
 ) -> AppResult<BoxedStream> {
-    let candidate = select_candidate(profile, database, vault).await?;
-    connect_candidate(profile, candidate.as_ref(), database, vault).await
+    let chain = HashSet::from([profile.id.clone()]);
+    let candidate = select_candidate(profile, database, vault, &chain, true).await?;
+    connect_candidate(profile, candidate.as_ref(), database, vault, &chain).await
 }
 
 async fn select_candidate(
     profile: &ConnectionProfile,
     database: &Database,
     vault: &VaultService,
+    chain: &HashSet<String>,
+    allow_jump: bool,
 ) -> AppResult<Option<RouteCandidate>> {
     let Some(route_id) = profile.route_id.as_deref() else {
         return Ok(None);
@@ -56,31 +61,38 @@ async fn select_candidate(
         return Err(AppError::Validation("路由没有启用的候选路线".into()));
     }
     if !route.auto_select {
-        return enabled
+        let selected = enabled
             .into_iter()
             .find(|candidate| Some(&candidate.id) == route.fixed_candidate_id.as_ref())
-            .map(Some)
             .ok_or_else(|| AppError::Validation("固定路由候选不存在".into()));
+        return selected.and_then(|candidate| {
+            if candidate.kind == RouteKind::JumpHost && !allow_jump {
+                Err(AppError::Validation(
+                    "跳板连接自身只能使用直连或代理路线".into(),
+                ))
+            } else {
+                Ok(Some(candidate))
+            }
+        });
     }
 
     let mut measured = Vec::new();
-    for candidate in enabled {
-        if candidate.kind == RouteKind::JumpHost {
+    for candidate in enabled.iter().cloned() {
+        if candidate.kind == RouteKind::JumpHost && !allow_jump {
             continue;
         }
         let mut samples = Vec::new();
         for _ in 0..3 {
             let started = std::time::Instant::now();
-            if connect_candidate(profile, Some(&candidate), database, vault)
+            if probe_candidate(profile, &candidate, database, vault, chain)
                 .await
                 .is_ok()
             {
                 samples.push(started.elapsed());
             }
         }
-        if !samples.is_empty() {
-            samples.sort();
-            measured.push((samples[samples.len() / 2], candidate));
+        if let Some(median) = median_duration(samples) {
+            measured.push((median, candidate));
         }
     }
     measured.sort_by_key(|(duration, _)| *duration);
@@ -88,7 +100,49 @@ async fn select_candidate(
         .into_iter()
         .next()
         .map(|(_, candidate)| Some(candidate))
-        .ok_or_else(|| AppError::Message("所有连接路线均不可用".into()))
+        .ok_or_else(|| {
+            if !allow_jump
+                && enabled
+                    .iter()
+                    .all(|candidate| candidate.kind == RouteKind::JumpHost)
+            {
+                AppError::Validation("跳板连接自身只能使用直连或代理路线".into())
+            } else {
+                AppError::Message("所有连接路线均不可用".into())
+            }
+        })
+}
+
+async fn probe_candidate(
+    profile: &ConnectionProfile,
+    candidate: &RouteCandidate,
+    database: &Database,
+    vault: &VaultService,
+    chain: &HashSet<String>,
+) -> AppResult<()> {
+    let mut stream = connect_candidate(profile, Some(candidate), database, vault, chain).await?;
+    let duration = Duration::from_secs(profile.connect_timeout_seconds.max(1) as u64);
+    timeout(duration, async {
+        let mut line = Vec::with_capacity(128);
+        let mut byte = [0_u8; 1];
+        while line.len() < 8192 {
+            stream.read_exact(&mut byte).await?;
+            line.push(byte[0]);
+            if byte[0] == b'\n' {
+                if line.starts_with(b"SSH-") {
+                    return Ok(());
+                }
+                line.clear();
+            }
+        }
+        Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            "SSH banner missing",
+        ))
+    })
+    .await
+    .map_err(|_| AppError::Message("SSH banner 探测超时".into()))??;
+    Ok(())
 }
 
 async fn connect_candidate(
@@ -96,6 +150,7 @@ async fn connect_candidate(
     candidate: Option<&RouteCandidate>,
     database: &Database,
     vault: &VaultService,
+    chain: &HashSet<String>,
 ) -> AppResult<BoxedStream> {
     let duration = Duration::from_secs(profile.connect_timeout_seconds.max(1) as u64);
     match candidate.map(|candidate| &candidate.kind) {
@@ -121,7 +176,7 @@ async fn connect_candidate(
             let jump_id = candidate
                 .and_then(|candidate| candidate.jump_connection_id.as_deref())
                 .ok_or_else(|| AppError::Validation("跳板路线没有指定连接".into()))?;
-            connect_jump(profile, jump_id, database, vault).await
+            connect_jump(profile, jump_id, database, vault, chain).await
         }
     }
 }
@@ -131,34 +186,26 @@ async fn connect_jump(
     jump_id: &str,
     database: &Database,
     vault: &VaultService,
+    chain: &HashSet<String>,
 ) -> AppResult<BoxedStream> {
-    if jump_id == target.id {
-        return Err(AppError::Validation("连接不能将自身作为跳板".into()));
-    }
+    ensure_jump_not_cyclic(chain, jump_id)?;
     let jump = database
         .connection_by_id(jump_id)?
         .filter(|profile| !profile.deleted)
         .ok_or_else(|| AppError::Validation("跳板连接不存在或已删除".into()))?;
-    let jump_candidate = Box::pin(select_candidate(&jump, database, vault)).await?;
-    if jump_candidate
-        .as_ref()
-        .is_some_and(|candidate| candidate.kind == RouteKind::JumpHost)
-    {
-        return Err(AppError::Validation("首版仅支持单跳 SSH 跳板".into()));
-    }
+    let mut jump_chain = chain.clone();
+    jump_chain.insert(jump.id.clone());
+    let jump_candidate =
+        Box::pin(select_candidate(&jump, database, vault, &jump_chain, false)).await?;
     let stream = Box::pin(connect_candidate(
         &jump,
         jump_candidate.as_ref(),
         database,
         vault,
+        &jump_chain,
     ))
     .await?;
-    let config = russh::client::Config {
-        keepalive_interval: Some(Duration::from_secs(jump.keepalive_seconds.max(5) as u64)),
-        keepalive_max: 3,
-        nodelay: true,
-        ..Default::default()
-    };
+    let config = client_config(&jump);
     let (forwarded_sender, _forwarded_receiver) = tokio::sync::mpsc::unbounded_channel();
     let handler = ClientHandler::new(
         database.clone(),
@@ -175,6 +222,39 @@ async fn connect_jump(
         stream: channel.into_stream(),
         _handle: handle,
     }))
+}
+
+fn median_duration(mut samples: Vec<Duration>) -> Option<Duration> {
+    samples.sort();
+    samples.get(samples.len() / 2).copied()
+}
+
+fn ensure_jump_not_cyclic(chain: &HashSet<String>, jump_id: &str) -> AppResult<()> {
+    if chain.contains(jump_id) {
+        Err(AppError::Validation("SSH 跳板连接存在循环引用".into()))
+    } else {
+        Ok(())
+    }
+}
+
+pub fn client_config(profile: &ConnectionProfile) -> russh::client::Config {
+    let mut config = russh::client::Config {
+        inactivity_timeout: None,
+        keepalive_interval: Some(Duration::from_secs(profile.keepalive_seconds.max(5) as u64)),
+        keepalive_max: 3,
+        nodelay: true,
+        ..Default::default()
+    };
+    config.preferred.compression = if profile.compression {
+        Cow::Owned(vec![
+            russh::compression::ZLIB,
+            russh::compression::ZLIB_LEGACY,
+            russh::compression::NONE,
+        ])
+    } else {
+        Cow::Owned(vec![russh::compression::NONE])
+    };
+    config
 }
 
 struct JumpStream {
@@ -286,5 +366,68 @@ async fn connect_proxy(
             }
             Ok(Box::new(stream))
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::{collections::HashSet, time::Duration};
+
+    use crate::domain::{AuthMethod, ConnectionProfile};
+
+    use super::{client_config, ensure_jump_not_cyclic, median_duration};
+
+    fn profile(compression: bool) -> ConnectionProfile {
+        ConnectionProfile {
+            id: "target".into(),
+            folder_id: None,
+            name: "Target".into(),
+            host: "127.0.0.1".into(),
+            port: 22,
+            username: "root".into(),
+            auth_method: AuthMethod::Password,
+            secret_id: None,
+            key_id: None,
+            route_id: None,
+            startup_command: None,
+            keepalive_seconds: 30,
+            connect_timeout_seconds: 10,
+            compression,
+            auto_reconnect: true,
+            sort_order: 0,
+            deleted: false,
+            created_at: String::new(),
+            updated_at: String::new(),
+        }
+    }
+
+    #[test]
+    fn chooses_median_route_sample() {
+        assert_eq!(
+            median_duration(vec![
+                Duration::from_millis(90),
+                Duration::from_millis(12),
+                Duration::from_millis(35),
+            ]),
+            Some(Duration::from_millis(35))
+        );
+    }
+
+    #[test]
+    fn blocks_jump_reference_cycles() {
+        let chain = HashSet::from(["target".to_owned(), "jump-a".to_owned()]);
+        assert!(ensure_jump_not_cyclic(&chain, "jump-a").is_err());
+        assert!(ensure_jump_not_cyclic(&chain, "jump-b").is_ok());
+    }
+
+    #[test]
+    fn applies_compression_preference() {
+        let enabled = client_config(&profile(true));
+        let disabled = client_config(&profile(false));
+        assert_eq!(enabled.preferred.compression[0], russh::compression::ZLIB);
+        assert_eq!(
+            disabled.preferred.compression.as_ref(),
+            [russh::compression::NONE]
+        );
     }
 }
