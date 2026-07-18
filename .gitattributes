@@ -1,0 +1,6 @@
+*.rs text eol=lf
+Dockerfile* text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
+tests/fixtures/keys/id_ed25519 -text
+tests/fixtures/keys/id_ed25519.pub text eol=lf
