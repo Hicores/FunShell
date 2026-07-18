@@ -21,9 +21,9 @@
 .file-table th:nth-child(2) { width: 90px; }
 .file-table th:nth-child(3) { width: 95px; }
 .file-table th:nth-child(4) { width: 155px; }
-.file-table th:nth-child(5) { width: 80px; }
+.file-table th:nth-child(5) { width: 125px; min-width: 125px; }
 .file-table th:nth-child(5), .file-table td:nth-child(5) { text-align: center; }
-.file-table td:nth-child(5) { color: #35596b; font: 12px "Cascadia Mono", Consolas, monospace; }
+.file-table td:nth-child(5) { overflow: visible; color: #35596b; font: 12px "Cascadia Mono", Consolas, monospace; text-overflow: clip; }
 .file-table td:first-child { display: flex; align-items: center; gap: 6px; }
 .file-icon { display: inline-grid; width: 18px; place-items: center; color: #667984; }
 .remote-editor { width: 100%; height: min(60vh, 560px); resize: none; border: 1px solid #acbbc4; padding: 10px; outline: 0; background: #132c3d; color: #eef5f7; font: 13px/1.5 "Cascadia Mono", Consolas, monospace; tab-size: 4; }
