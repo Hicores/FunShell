@@ -1,4 +1,6 @@
 import { ArrowDownToLine, ArrowUpToLine, Ban, RotateCcw, Trash2, X } from "lucide-react";
+import { useState } from "react";
+import { ContextMenu } from "../../components/common/ContextMenu";
 import { IconButton } from "../../components/common/IconButton";
 import { formatBytes } from "../../lib/format";
 import type { TransferProgressEvent } from "../../types";
@@ -7,6 +9,7 @@ interface TransferPanelProps {
   transfers: TransferProgressEvent[];
   onCancel: (taskId: string) => void;
   onRetry: (task: TransferProgressEvent) => void;
+  onReveal: (task: TransferProgressEvent) => void;
   onClear: () => void;
   onClose: () => void;
 }
@@ -23,7 +26,8 @@ function statusText(task: TransferProgressEvent) {
   return task.total > 0 ? `${Math.min(100, Math.round(task.transferred / task.total * 100))}%` : "进行中";
 }
 
-export function TransferPanel({ transfers, onCancel, onRetry, onClear, onClose }: TransferPanelProps) {
+export function TransferPanel({ transfers, onCancel, onRetry, onReveal, onClear, onClose }: TransferPanelProps) {
+  const [context, setContext] = useState<{ x: number; y: number; task: TransferProgressEvent } | null>(null);
   const running = transfers.filter((task) => task.state === "running").length;
   const hasHistory = transfers.some((task) => task.state !== "running");
   return (
@@ -36,7 +40,15 @@ export function TransferPanel({ transfers, onCancel, onRetry, onClear, onClose }
       <div className="transfer-list">
         {!transfers.length && <div className="empty-state">暂无传输记录</div>}
         {transfers.map((task) => (
-          <div key={task.taskId} className={`transfer-task ${task.state}`}>
+          <div
+            key={task.taskId}
+            className={`transfer-task ${task.state}`}
+            onContextMenu={task.direction === "download" ? (event) => {
+              event.preventDefault();
+              event.stopPropagation();
+              setContext({ x: event.clientX, y: event.clientY, task });
+            } : undefined}
+          >
             <span className="transfer-direction">{task.direction === "upload" ? <ArrowUpToLine size={14} /> : <ArrowDownToLine size={14} />}{task.direction === "upload" ? "上传" : "下载"}</span>
             <div className="transfer-file"><strong>{taskName(task)}</strong><span title={`${task.source} -> ${task.destination}`}>{task.source} → {task.destination}</span></div>
             <div className="transfer-progress"><progress max={Math.max(task.total, 1)} value={task.transferred} /><span>{formatBytes(task.transferred)} / {formatBytes(task.total)}</span></div>
@@ -45,6 +57,11 @@ export function TransferPanel({ transfers, onCancel, onRetry, onClear, onClose }
           </div>
         ))}
       </div>
+      {context && (
+        <ContextMenu x={context.x} y={context.y} onClose={() => setContext(null)}>
+          <button type="button" onClick={() => onReveal(context.task)}>打开所在文件夹</button>
+        </ContextMenu>
+      )}
     </section>
   );
 }

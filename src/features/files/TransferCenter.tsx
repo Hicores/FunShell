@@ -1,7 +1,8 @@
+import { revealItemInDir } from "@tauri-apps/plugin-opener";
 import { ListChecks } from "lucide-react";
 import { useMemo, useState } from "react";
 import { IconButton } from "../../components/common/IconButton";
-import { api } from "../../lib/ipc";
+import { api, isTauri } from "../../lib/ipc";
 import { useAppStore } from "../../stores/appStore";
 import type { TransferProgressEvent } from "../../types";
 import { TransferPanel } from "./TransferPanel";
@@ -21,10 +22,22 @@ export function TransferCenter() {
     } catch (error) { notify(String(error)); }
   };
 
+  const reveal = async (task: TransferProgressEvent) => {
+    if (!isTauri()) {
+      notify(`演示模式：打开 ${task.destination} 所在文件夹`);
+      return;
+    }
+    try {
+      await revealItemInDir(task.destination);
+    } catch (error) {
+      notify(String(error));
+    }
+  };
+
   return (
     <div className="transfer-center">
       <IconButton label="传输记录" className="transfer-toggle" active={open} onClick={() => setOpen((value) => !value)}><ListChecks size={18} />{transfers.length > 0 && <span>{transfers.length > 99 ? "99+" : transfers.length}</span>}</IconButton>
-      {open && <TransferPanel transfers={transfers} onCancel={(taskId) => void api.cancelTransfer(taskId)} onRetry={(task) => void retry(task)} onClear={() => Object.keys(bySession).forEach((sessionId) => clearCompleted(sessionId))} onClose={() => setOpen(false)} />}
+      {open && <TransferPanel transfers={transfers} onCancel={(taskId) => void api.cancelTransfer(taskId)} onRetry={(task) => void retry(task)} onReveal={(task) => void reveal(task)} onClear={() => Object.keys(bySession).forEach((sessionId) => clearCompleted(sessionId))} onClose={() => setOpen(false)} />}
     </div>
   );
 }
