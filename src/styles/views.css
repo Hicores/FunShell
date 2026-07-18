@@ -24,6 +24,8 @@
 .transfer-toggle { position: relative; }
 .transfer-toggle > span { display: grid; position: absolute; top: 1px; right: 1px; min-width: 13px; height: 13px; place-items: center; border-radius: 7px; padding: 0 3px; background: #d45454; color: white; font-size: 9px; line-height: 1; }
 .transfer-panel { display: grid; position: absolute; top: 38px; right: 6px; width: min(680px, calc(100% - 12px)); height: min(280px, calc(100% - 44px)); min-height: 120px; grid-template-rows: 36px minmax(0, 1fr); border: 1px solid #9fadb6; background: white; box-shadow: 0 7px 22px #17354442; z-index: 6; }
+.transfer-center { position: relative; }
+.transfer-center .transfer-panel { position: fixed; top: 48px; right: 8px; width: min(720px, calc(100vw - 16px)); height: min(340px, calc(100vh - 56px)); z-index: 35; }
 .transfer-panel > header { display: flex; align-items: center; gap: 4px; border-bottom: 1px solid #c3cdd3; padding: 0 4px 0 9px; background: #f2f5f7; }
 .transfer-panel > header > div { display: flex; min-width: 0; flex: 1; align-items: baseline; gap: 10px; }
 .transfer-panel > header strong { font-size: 12px; }

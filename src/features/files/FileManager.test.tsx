@@ -4,7 +4,6 @@ import { api } from "../../lib/ipc";
 import { useAppStore } from "../../stores/appStore";
 import type { WorkspaceTab } from "../../types";
 import { FileManager } from "./FileManager";
-import { useTransferStore } from "./transferStore";
 
 const tab: WorkspaceTab = {
   id: "session-1",
@@ -18,7 +17,6 @@ const tab: WorkspaceTab = {
 describe("FileManager", () => {
   beforeEach(() => {
     useAppStore.setState({ activeTabId: tab.id, toast: null });
-    useTransferStore.setState({ bySession: {} });
   });
 
   it("selects a file and confirms remote deletion", async () => {
@@ -60,7 +58,7 @@ describe("FileManager", () => {
     await waitFor(() => expect(createFile).toHaveBeenCalledWith(tab.sessionId, "/root/healthcheck.txt"));
   });
 
-  it("uploads dropped local paths and opens transfer history from the top-right button", async () => {
+  it("uploads dropped local paths from the file list", async () => {
     const upload = vi.spyOn(api, "uploadRemoteFile").mockResolvedValue("transfer-1");
     const { container } = render(<FileManager tab={tab} />);
     await screen.findByText("deploy.sh");
@@ -71,10 +69,5 @@ describe("FileManager", () => {
     fireEvent.drop(list, { dataTransfer: { files: [{ name: "release.zip", path: "C:\\builds\\release.zip" }] } });
 
     await waitFor(() => expect(upload).toHaveBeenCalledWith(tab.sessionId, "C:\\builds\\release.zip", "/root/release.zip"));
-    expect(screen.getByRole("region", { name: "传输进度与历史" })).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "关闭传输记录" }));
-    expect(screen.queryByRole("region", { name: "传输进度与历史" })).not.toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "传输记录" }));
-    expect(screen.getByRole("region", { name: "传输进度与历史" })).toBeInTheDocument();
   });
 });

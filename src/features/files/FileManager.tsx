@@ -1,6 +1,6 @@
 import { open, save } from "@tauri-apps/plugin-dialog";
 import { openPath } from "@tauri-apps/plugin-opener";
-import { Download, File, Folder, FolderPlus, Home, ListChecks, RefreshCw, Trash2, Upload } from "lucide-react";
+import { Download, File, Folder, FolderPlus, Home, RefreshCw, Trash2, Upload } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ContextMenu } from "../../components/common/ContextMenu";
 import { IconButton } from "../../components/common/IconButton";
@@ -8,9 +8,7 @@ import { Modal } from "../../components/common/Modal";
 import { formatBytes, formatMode } from "../../lib/format";
 import { api, isTauri } from "../../lib/ipc";
 import { useAppStore } from "../../stores/appStore";
-import type { RemoteFileEntry, TransferProgressEvent, WorkspaceTab } from "../../types";
-import { TransferPanel } from "./TransferPanel";
-import { sessionTransfers, useTransferStore } from "./transferStore";
+import type { RemoteFileEntry, WorkspaceTab } from "../../types";
 import { useFileDrop } from "./useFileDrop";
 
 function joinRemote(base: string, name: string) {
@@ -26,8 +24,6 @@ function parentRemote(path: string) {
 export function FileManager({ tab }: { tab: WorkspaceTab }) {
   const notify = useAppStore((state) => state.notify);
   const active = useAppStore((state) => state.activeTabId === tab.id);
-  const transfers = useTransferStore((state) => sessionTransfers(state, tab.sessionId));
-  const clearCompleted = useTransferStore((state) => state.clearCompleted);
   const [path, setPath] = useState("/root");
   const [files, setFiles] = useState<RemoteFileEntry[]>([]);
   const [selected, setSelected] = useState<RemoteFileEntry | null>(null);
@@ -35,7 +31,6 @@ export function FileManager({ tab }: { tab: WorkspaceTab }) {
   const [editor, setEditor] = useState<{ path: string; content: string } | null>(null);
   const [context, setContext] = useState<{ x: number; y: number; file: RemoteFileEntry | null } | null>(null);
   const [createDialog, setCreateDialog] = useState<{ kind: "file" | "directory"; name: string } | null>(null);
-  const [transferOpen, setTransferOpen] = useState(false);
   const dropTargetRef = useRef<HTMLDivElement>(null);
 
   const refresh = useCallback(async () => {
@@ -66,7 +61,6 @@ export function FileManager({ tab }: { tab: WorkspaceTab }) {
 
   const uploadPaths = useCallback(async (localPaths: string[]) => {
     if (!localPaths.length) return;
-    setTransferOpen(true);
     for (const localPath of localPaths) {
       const name = localPath.replaceAll("\\", "/").split("/").at(-1) ?? "upload.bin";
       try { await api.uploadRemoteFile(tab.sessionId, localPath, joinRemote(path, name)); }
@@ -92,7 +86,7 @@ export function FileManager({ tab }: { tab: WorkspaceTab }) {
     if (file.kind === "directory") return notify("目录请使用打包传输");
     if (!isTauri()) return notify(`演示模式：下载 ${file.name}`);
     const localPath = await save({ defaultPath: file.name });
-    if (localPath) { setTransferOpen(true); await api.downloadRemoteFile(tab.sessionId, file.path, localPath); }
+    if (localPath) await api.downloadRemoteFile(tab.sessionId, file.path, localPath);
   };
 
   const openCreateDialog = (kind: "file" | "directory") => setCreateDialog({ kind, name: "" });
@@ -131,13 +125,6 @@ export function FileManager({ tab }: { tab: WorkspaceTab }) {
     catch (error) { notify(String(error)); }
   };
 
-  const retryTransfer = async (task: TransferProgressEvent) => {
-    try {
-      if (task.direction === "upload") await api.uploadRemoteFile(tab.sessionId, task.source, task.destination);
-      else await api.downloadRemoteFile(tab.sessionId, task.source, task.destination);
-    } catch (error) { notify(String(error)); }
-  };
-
   return (
     <div className="file-manager">
       <div className="file-tree">
@@ -158,7 +145,6 @@ export function FileManager({ tab }: { tab: WorkspaceTab }) {
           <IconButton label="上传" onClick={() => void uploadFiles()}><Upload size={16} /></IconButton>
           <IconButton label="下载" disabled={!selected} onClick={() => selected && void downloadFile(selected)}><Download size={16} /></IconButton>
           <IconButton label="删除" disabled={!selected} onClick={() => selected && void remove(selected)}><Trash2 size={16} /></IconButton>
-          <IconButton label="传输记录" className="transfer-toggle" active={transferOpen} onClick={() => setTransferOpen((open) => !open)}><ListChecks size={16} />{transfers.length > 0 && <span>{transfers.length > 99 ? "99+" : transfers.length}</span>}</IconButton>
         </div>
         <div ref={dropTargetRef} className={`file-table-wrap ${dropActive ? "drop-active" : ""}`} {...dropHandlers} onContextMenu={(event) => { event.preventDefault(); setSelected(null); setContext({ x: event.clientX, y: event.clientY, file: null }); }}>
           <table className="data-table file-table">
@@ -175,7 +161,6 @@ export function FileManager({ tab }: { tab: WorkspaceTab }) {
           </table>
           {dropActive && <div className="file-drop-overlay"><Upload size={22} /><strong>上传到 {path}</strong></div>}
         </div>
-        {transferOpen && <TransferPanel transfers={transfers} onCancel={(taskId) => void api.cancelTransfer(taskId)} onRetry={(task) => void retryTransfer(task)} onClear={() => clearCompleted(tab.sessionId)} onClose={() => setTransferOpen(false)} />}
       </div>
       {context && (
         <ContextMenu x={context.x} y={context.y} onClose={() => setContext(null)}>

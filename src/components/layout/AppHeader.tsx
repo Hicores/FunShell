@@ -1,5 +1,6 @@
 import { FolderOpen, Grid2X2, KeyRound, Menu, RefreshCw, Settings } from "lucide-react";
 import { IconButton } from "../common/IconButton";
+import { TransferCenter } from "../../features/files/TransferCenter";
 import { useAppStore } from "../../stores/appStore";
 
 export function AppHeader() {
@@ -27,6 +28,7 @@ export function AppHeader() {
       <IconButton label="重新连接" disabled={!active} onClick={() => active && void reconnect(active.sessionId)}><RefreshCw size={17} /></IconButton>
       <IconButton label="工具" active={toolsOpen} onClick={toggleTools}><Grid2X2 size={18} /></IconButton>
       <IconButton label="设置" onClick={() => openSettings(true)}><Settings size={18} /></IconButton>
+      <TransferCenter />
       <IconButton label="菜单"><Menu size={20} /></IconButton>
     </header>
   );
