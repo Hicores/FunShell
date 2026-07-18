@@ -10,11 +10,13 @@ import { SettingsDialog } from "../features/settings/SettingsDialog";
 import { useAppStore } from "../stores/appStore";
 import { onEvent } from "../lib/ipc";
 import type { SessionStatusEvent } from "../types";
+import { useDesktopGuards } from "./useDesktopGuards";
 import "../styles/layout.css";
 import "../styles/controls.css";
 import "../styles/views.css";
 
 export function App() {
+  useDesktopGuards();
   const initialize = useAppStore((state) => state.initialize);
   const initialized = useAppStore((state) => state.initialized);
   const busy = useAppStore((state) => state.busy);
