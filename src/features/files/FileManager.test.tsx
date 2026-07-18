@@ -42,6 +42,27 @@ describe("FileManager", () => {
     expect(screen.getByRole("button", { name: "文本编辑" })).toBeInTheDocument();
   });
 
+  it("edits basic and extended file permission bits visually", async () => {
+    const chmod = vi.spyOn(api, "chmodRemotePath").mockResolvedValue(undefined);
+    render(<FileManager tab={tab} />);
+    const fileName = await screen.findByText("deploy.sh");
+    fireEvent.contextMenu(fileName);
+    fireEvent.click(screen.getByRole("button", { name: "文件权限..." }));
+
+    const dialog = screen.getByRole("dialog", { name: "修改文件权限" });
+    expect(within(dialog).getByText("0755")).toBeInTheDocument();
+    expect(within(dialog).getByRole("checkbox", { name: "所有者 读取" })).toBeChecked();
+    expect(within(dialog).getByRole("checkbox", { name: "组 写入" })).not.toBeChecked();
+    expect(within(dialog).getByRole("checkbox", { name: "设置用户 ID (setuid)" })).not.toBeChecked();
+
+    fireEvent.click(within(dialog).getByRole("checkbox", { name: "组 写入" }));
+    fireEvent.click(within(dialog).getByRole("checkbox", { name: "粘滞位 (sticky)" }));
+    expect(within(dialog).getByText("1775")).toBeInTheDocument();
+    fireEvent.click(within(dialog).getByRole("button", { name: "确定" }));
+
+    await waitFor(() => expect(chmod).toHaveBeenCalledWith(tab.sessionId, "/root/deploy.sh", 0o1775));
+  });
+
   it("opens a remote file in the text editor on double click", async () => {
     const readText = vi.spyOn(api, "readRemoteText").mockResolvedValue({
       path: "/root/deploy.sh",

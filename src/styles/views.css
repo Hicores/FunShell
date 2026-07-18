@@ -25,6 +25,19 @@
 .file-table td:first-child { display: flex; align-items: center; gap: 6px; }
 .file-icon { display: inline-grid; width: 18px; place-items: center; color: #667984; }
 .remote-editor { width: 100%; height: min(60vh, 560px); resize: none; border: 1px solid #acbbc4; padding: 10px; outline: 0; background: #132c3d; color: #eef5f7; font: 13px/1.5 "Cascadia Mono", Consolas, monospace; tab-size: 4; }
+.permission-dialog { display: grid; gap: 10px; }
+.permission-target { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 3px 12px; padding: 1px 3px 5px; }
+.permission-target strong { overflow: hidden; font-size: 14px; text-overflow: ellipsis; white-space: nowrap; }
+.permission-target span { overflow: hidden; color: #71818b; font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
+.permission-target code { grid-column: 2; grid-row: 1 / span 2; border: 1px solid #b9c7ce; padding: 5px 9px; background: white; color: #31576a; font: 600 13px "Cascadia Mono", Consolas, monospace; }
+.permission-groups { display: grid; gap: 7px; }
+.permission-groups fieldset { margin: 0; padding: 6px 10px 9px; }
+.permission-groups legend { font-size: 12px; }
+.permission-options { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.permission-option { display: flex; min-width: 0; align-items: center; gap: 7px; }
+.permission-option input { width: 16px; height: 16px; flex: 0 0 16px; margin: 0; accent-color: #2f8fbd; }
+.permission-option span { display: flex; min-width: 0; align-items: baseline; gap: 5px; white-space: nowrap; }
+.permission-option small { color: #778892; font: 10px "Cascadia Mono", Consolas, monospace; }
 .transfer-toggle { position: relative; }
 .transfer-toggle > span { display: grid; position: absolute; top: 1px; right: 1px; min-width: 13px; height: 13px; place-items: center; border-radius: 7px; padding: 0 3px; background: #d45454; color: white; font-size: 9px; line-height: 1; }
 .transfer-panel { display: grid; position: absolute; top: 38px; right: 6px; width: min(680px, calc(100% - 12px)); height: min(280px, calc(100% - 44px)); min-height: 120px; grid-template-rows: 36px minmax(0, 1fr); border: 1px solid #9fadb6; background: white; box-shadow: 0 7px 22px #17354442; z-index: 6; }

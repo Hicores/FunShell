@@ -8,6 +8,7 @@ import { formatBytes, formatMode } from "../../lib/format";
 import { api, isTauri } from "../../lib/ipc";
 import { useAppStore } from "../../stores/appStore";
 import type { RemoteFileEntry, WorkspaceTab } from "../../types";
+import { PermissionDialog } from "./PermissionDialog";
 import { RemoteDirectoryTree } from "./RemoteDirectoryTree";
 import { useFileDrop } from "./useFileDrop";
 
@@ -44,6 +45,8 @@ export function FileManager({ tab }: { tab: WorkspaceTab }) {
   const [selected, setSelected] = useState<RemoteFileEntry | null>(null);
   const [loading, setLoading] = useState(false);
   const [editor, setEditor] = useState<{ path: string; content: string } | null>(null);
+  const [permissionFile, setPermissionFile] = useState<RemoteFileEntry | null>(null);
+  const [savingPermissions, setSavingPermissions] = useState(false);
   const [context, setContext] = useState<{ x: number; y: number; file: RemoteFileEntry | null; targetPath: string } | null>(null);
   const [createDialog, setCreateDialog] = useState<{ kind: "file" | "directory"; name: string; parentPath: string } | null>(null);
   const dropTargetRef = useRef<HTMLDivElement>(null);
@@ -192,11 +195,19 @@ export function FileManager({ tab }: { tab: WorkspaceTab }) {
     catch (error) { notify(String(error)); }
   };
 
-  const chmod = async (file: RemoteFileEntry) => {
-    const next = window.prompt("权限（八进制）", formatMode(file.permissions));
-    if (!next || !/^[0-7]{3,4}$/.test(next)) return;
-    try { await api.chmodRemotePath(tab.sessionId, file.path, Number.parseInt(next, 8)); await refresh(); }
-    catch (error) { notify(String(error)); }
+  const savePermissions = async (mode: number) => {
+    if (!permissionFile) return;
+    setSavingPermissions(true);
+    try {
+      await api.chmodRemotePath(tab.sessionId, permissionFile.path, mode);
+      setPermissionFile(null);
+      await refresh();
+      notify("文件权限已更新");
+    } catch (error) {
+      notify(String(error));
+    } finally {
+      setSavingPermissions(false);
+    }
   };
 
   return (
@@ -248,7 +259,7 @@ export function FileManager({ tab }: { tab: WorkspaceTab }) {
             <hr />
             <button type="button" onClick={() => void rename(context.file!)}>重命名</button>
             <button type="button" className="danger" onClick={() => void remove(context.file!)}>删除</button>
-            <button type="button" onClick={() => void chmod(context.file!)}>文件权限...</button>
+            <button type="button" onClick={() => setPermissionFile(context.file!)}>文件权限...</button>
           </> : <>
             <button type="button" onClick={() => { if (context.targetPath === path) void refresh(); else navigateToPath(context.targetPath); }}>刷新</button>
             <button type="button" onClick={() => openCreateDialog("file", context.targetPath)}>新建文件</button>
@@ -263,6 +274,7 @@ export function FileManager({ tab }: { tab: WorkspaceTab }) {
       <Modal open={editor != null} title={`远程编辑 - ${editor?.path ?? ""}`} width={900} onClose={() => setEditor(null)} footer={<><button type="button" onClick={() => setEditor(null)}>取消</button><button className="primary-button" type="button" onClick={async () => { if (!editor) return; await api.writeRemoteText(tab.sessionId, editor.path, editor.content); setEditor(null); notify("文件已保存"); }}>保存</button></>}>
         <textarea className="remote-editor" value={editor?.content ?? ""} onChange={(event) => setEditor((current) => current ? { ...current, content: event.target.value } : null)} spellCheck={false} />
       </Modal>
+      <PermissionDialog file={permissionFile} saving={savingPermissions} onClose={() => setPermissionFile(null)} onSave={(mode) => void savePermissions(mode)} />
     </div>
   );
 }
