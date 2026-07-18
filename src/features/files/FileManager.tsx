@@ -195,14 +195,15 @@ export function FileManager({ tab }: { tab: WorkspaceTab }) {
     catch (error) { notify(String(error)); }
   };
 
-  const savePermissions = async (mode: number) => {
+  const savePermissions = async (mode: number, owner: string, group: string) => {
     if (!permissionFile) return;
     setSavingPermissions(true);
     try {
+      await api.chownRemotePath(tab.sessionId, permissionFile.path, owner, group);
       await api.chmodRemotePath(tab.sessionId, permissionFile.path, mode);
       setPermissionFile(null);
       await refresh();
-      notify("文件权限已更新");
+      notify("文件权限和所有者已更新");
     } catch (error) {
       notify(String(error));
     } finally {
@@ -274,7 +275,7 @@ export function FileManager({ tab }: { tab: WorkspaceTab }) {
       <Modal open={editor != null} title={`远程编辑 - ${editor?.path ?? ""}`} width={900} onClose={() => setEditor(null)} footer={<><button type="button" onClick={() => setEditor(null)}>取消</button><button className="primary-button" type="button" onClick={async () => { if (!editor) return; await api.writeRemoteText(tab.sessionId, editor.path, editor.content); setEditor(null); notify("文件已保存"); }}>保存</button></>}>
         <textarea className="remote-editor" value={editor?.content ?? ""} onChange={(event) => setEditor((current) => current ? { ...current, content: event.target.value } : null)} spellCheck={false} />
       </Modal>
-      <PermissionDialog file={permissionFile} saving={savingPermissions} onClose={() => setPermissionFile(null)} onSave={(mode) => void savePermissions(mode)} />
+      <PermissionDialog file={permissionFile} saving={savingPermissions} onClose={() => setPermissionFile(null)} onSave={(mode, owner, group) => void savePermissions(mode, owner, group)} />
     </div>
   );
 }

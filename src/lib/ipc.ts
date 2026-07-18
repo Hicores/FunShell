@@ -187,6 +187,21 @@ function mockCall(command: string, args?: Record<string, unknown>): unknown {
       }
       return null;
     }
+    case "chown_remote_path": {
+      const path = String(args?.path ?? "");
+      const entry = mockRemoteFiles.find((item) => item.path === path);
+      if (entry) {
+        entry.user = String(args?.owner ?? entry.user ?? "");
+        entry.group = String(args?.group ?? entry.group ?? "");
+      }
+      return null;
+    }
+    case "chmod_remote_path": {
+      const path = String(args?.path ?? "");
+      const entry = mockRemoteFiles.find((item) => item.path === path);
+      if (entry) entry.permissions = Number(args?.mode ?? entry.permissions ?? 0);
+      return null;
+    }
     case "list_command_presets": return mockPresets;
     case "save_command_preset": {
       const preset = args?.preset as CommandPreset;
@@ -272,6 +287,7 @@ export const api = {
   renameRemotePath: (sessionId: string, from: string, to: string) => call<void>("rename_remote_path", { sessionId, from, to }),
   deleteRemotePath: (sessionId: string, path: string, directory: boolean, recursive = false) => call<void>("delete_remote_path", { sessionId, path, directory, recursive }),
   chmodRemotePath: (sessionId: string, path: string, mode: number) => call<void>("chmod_remote_path", { sessionId, path, mode }),
+  chownRemotePath: (sessionId: string, path: string, owner: string, group: string) => call<void>("chown_remote_path", { sessionId, path, owner, group }),
   uploadRemoteFile: (sessionId: string, localPath: string, remotePath: string) => call<string>("upload_remote_file", { sessionId, localPath, remotePath }),
   downloadRemoteFile: (sessionId: string, remotePath: string, localPath: string) => call<string>("download_remote_file", { sessionId, remotePath, localPath }),
   cancelTransfer: (taskId: string) => call<void>("cancel_file_transfer", { taskId }),

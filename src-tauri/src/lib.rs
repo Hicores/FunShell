@@ -72,6 +72,7 @@ pub fn run() {
             commands::files::rename_remote_path,
             commands::files::delete_remote_path,
             commands::files::chmod_remote_path,
+            commands::files::chown_remote_path,
             commands::files::upload_remote_file,
             commands::files::download_remote_file,
             commands::files::open_remote_file,

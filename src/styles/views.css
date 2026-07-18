@@ -30,6 +30,10 @@
 .permission-target strong { overflow: hidden; font-size: 14px; text-overflow: ellipsis; white-space: nowrap; }
 .permission-target span { overflow: hidden; color: #71818b; font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
 .permission-target code { grid-column: 2; grid-row: 1 / span 2; border: 1px solid #b9c7ce; padding: 5px 9px; background: white; color: #31576a; font: 600 13px "Cascadia Mono", Consolas, monospace; }
+.permission-ownership { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.permission-ownership label { display: grid; gap: 4px; color: #4c6270; font-size: 12px; }
+.permission-ownership input { width: 100%; height: 29px; border: 1px solid #b8c5cc; padding: 0 7px; outline: 0; background: white; color: #263f4d; }
+.permission-ownership input:focus { border-color: #5b9fc2; box-shadow: inset 0 0 0 1px #5b9fc233; }
 .permission-groups { display: grid; gap: 7px; }
 .permission-groups fieldset { margin: 0; padding: 6px 10px 9px; }
 .permission-groups legend { font-size: 12px; }

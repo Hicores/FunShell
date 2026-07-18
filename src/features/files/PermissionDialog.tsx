@@ -6,7 +6,7 @@ interface PermissionDialogProps {
   file: RemoteFileEntry | null;
   saving: boolean;
   onClose: () => void;
-  onSave: (mode: number) => void;
+  onSave: (mode: number, owner: string, group: string) => void;
 }
 
 const permissionGroups = [
@@ -31,9 +31,15 @@ export function formatPermissionMode(mode: number) {
 
 export function PermissionDialog({ file, saving, onClose, onSave }: PermissionDialogProps) {
   const [mode, setMode] = useState(0);
+  const [owner, setOwner] = useState("");
+  const [group, setGroup] = useState("");
 
   useEffect(() => {
-    if (file) setMode((file.permissions ?? 0) & 0o7777);
+    if (file) {
+      setMode((file.permissions ?? 0) & 0o7777);
+      setOwner(file.user ?? "");
+      setGroup(file.group ?? "");
+    }
   }, [file]);
 
   const permissionOption = (label: string, bit: number, detail?: string, accessibleLabel = label) => (
@@ -54,13 +60,17 @@ export function PermissionDialog({ file, saving, onClose, onSave }: PermissionDi
       title="修改文件权限"
       width={520}
       onClose={onClose}
-      footer={<><button type="button" onClick={onClose}>取消</button><button className="primary-button" type="button" disabled={saving} onClick={() => onSave(mode)}>{saving ? "保存中..." : "确定"}</button></>}
+      footer={<><button type="button" onClick={onClose}>取消</button><button className="primary-button" type="button" disabled={saving || !owner.trim() || !group.trim()} onClick={() => onSave(mode, owner.trim(), group.trim())}>{saving ? "保存中..." : "确定"}</button></>}
     >
       <div className="permission-dialog">
         <div className="permission-target">
           <strong>{file?.name}</strong>
           <span title={file?.path}>{file?.path}</span>
           <code>{formatPermissionMode(mode)}</code>
+        </div>
+        <div className="permission-ownership">
+          <label>所有者<input aria-label="所有者" placeholder="用户名或 UID" value={owner} onChange={(event) => setOwner(event.target.value)} /></label>
+          <label>用户组<input aria-label="用户组" placeholder="组名或 GID" value={group} onChange={(event) => setGroup(event.target.value)} /></label>
         </div>
         <div className="permission-groups">
           {permissionGroups.map((group) => (

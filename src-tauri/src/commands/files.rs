@@ -201,6 +201,32 @@ pub async fn chmod_remote_path(
 }
 
 #[tauri::command]
+pub async fn chown_remote_path(
+    state: State<'_, AppState>,
+    session_id: String,
+    path: String,
+    owner: String,
+    group: String,
+) -> AppResult<()> {
+    let owner = owner.trim();
+    let group = group.trim();
+    if owner.is_empty() || group.is_empty() || owner.contains(':') || group.contains(':') {
+        return Err(AppError::Validation(
+            "所有者和用户组不能为空，且不能包含冒号".into(),
+        ));
+    }
+    let command = chown_command(owner, group, &path);
+    let result = state.sessions.execute(&session_id, &command).await?;
+    if result.exit_status != Some(0) {
+        return Err(AppError::Message(format!(
+            "修改所有者失败: {}",
+            result.stderr.trim()
+        )));
+    }
+    Ok(())
+}
+
+#[tauri::command]
 pub async fn upload_remote_file(
     app: AppHandle,
     state: State<'_, AppState>,
@@ -462,14 +488,30 @@ fn shell_quote(value: &str) -> String {
     format!("'{}'", value.replace('\'', "'\\''"))
 }
 
+fn chown_command(owner: &str, group: &str, path: &str) -> String {
+    format!(
+        "chown -- {} {}",
+        shell_quote(&format!("{owner}:{group}")),
+        shell_quote(path)
+    )
+}
+
 #[cfg(test)]
 mod tests {
-    use super::{DOWNLOAD_CHUNK_SIZE, download_ranges, shell_quote};
+    use super::{DOWNLOAD_CHUNK_SIZE, chown_command, download_ranges, shell_quote};
 
     #[test]
     fn quotes_posix_paths() {
         assert_eq!(shell_quote("/tmp/a b"), "'/tmp/a b'");
         assert_eq!(shell_quote("it's"), "'it'\\''s'");
+    }
+
+    #[test]
+    fn builds_a_quoted_chown_command() {
+        assert_eq!(
+            chown_command("deploy", "release", "/srv/my app"),
+            "chown -- 'deploy:release' '/srv/my app'"
+        );
     }
 
     #[test]
