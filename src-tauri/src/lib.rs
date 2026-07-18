@@ -80,6 +80,7 @@ pub fn run() {
             commands::transfers::mark_transfer_history_viewed,
             commands::transfers::clear_transfer_history,
             commands::monitor::collect_server_snapshot,
+            commands::monitor::measure_session_latency,
             commands::monitor::get_system_info,
             commands::monitor::list_processes,
             commands::monitor::get_process_details,

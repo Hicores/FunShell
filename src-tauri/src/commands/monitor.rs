@@ -1,3 +1,5 @@
+use std::time::Instant;
+
 use tauri::State;
 use tokio::process::Command;
 
@@ -21,6 +23,24 @@ pub async fn collect_server_snapshot(
     let result = state.sessions.execute(&session_id, SNAPSHOT_SCRIPT).await?;
     ensure_success(&result.stderr, result.exit_status)?;
     Ok(parse_snapshot(&result.stdout))
+}
+
+#[tauri::command]
+pub async fn measure_session_latency(
+    state: State<'_, AppState>,
+    session_id: String,
+) -> AppResult<u64> {
+    const PAYLOAD: &str = "FUNSHELL_LATENCY_0123456789ABCDEF0123456789ABCDEF";
+    let started = Instant::now();
+    let result = state
+        .sessions
+        .execute(&session_id, &format!("printf '%s' '{PAYLOAD}'"))
+        .await?;
+    ensure_success(&result.stderr, result.exit_status)?;
+    if result.stdout != PAYLOAD {
+        return Err(AppError::Message("SSH 延迟探针响应不完整".into()));
+    }
+    Ok(u64::try_from(started.elapsed().as_millis()).unwrap_or(u64::MAX))
 }
 
 #[tauri::command]

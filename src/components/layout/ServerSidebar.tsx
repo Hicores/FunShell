@@ -19,18 +19,33 @@ export function ServerSidebar() {
   const snapshot = sessionTab ? snapshots[sessionTab.sessionId] : undefined;
   const [networkName, setNetworkName] = useState("eth0");
   const [networkHistory, setNetworkHistory] = useState<Record<string, NetworkRateSample[]>>({});
+  const [latencies, setLatencies] = useState<Record<string, number>>({});
   const selectedNetwork = snapshot?.interfaces.find((item) => item.name === networkName) ?? snapshot?.interfaces[0];
   const networkHistoryKey = sessionTab && selectedNetwork ? `${sessionTab.sessionId}:${selectedNetwork.name}` : "";
+  const latency = sessionTab ? latencies[sessionTab.sessionId] : undefined;
 
   useEffect(() => {
     if (!sessionTab) return;
     let disposed = false;
+    let refreshing = false;
     const refresh = async () => {
-      try {
-        const next = await api.snapshot(sessionTab.sessionId);
-        if (!disposed) setSnapshot(sessionTab.sessionId, next);
-      } catch {
-        // Session status already surfaces connection errors.
+      if (refreshing) return;
+      refreshing = true;
+      const [snapshotResult, latencyResult] = await Promise.allSettled([
+        api.snapshot(sessionTab.sessionId),
+        api.sessionLatency(sessionTab.sessionId),
+      ]);
+      refreshing = false;
+      if (disposed) return;
+      if (snapshotResult.status === "fulfilled") setSnapshot(sessionTab.sessionId, snapshotResult.value);
+      if (latencyResult.status === "fulfilled") {
+        setLatencies((current) => ({ ...current, [sessionTab.sessionId]: latencyResult.value }));
+      } else {
+        setLatencies((current) => {
+          const next = { ...current };
+          delete next[sessionTab.sessionId];
+          return next;
+        });
       }
     };
     void refresh();
@@ -76,12 +91,20 @@ export function ServerSidebar() {
         <div className="resource-row"><span>交换</span><ProgressBar value={swapPercent} tone="orange" /><em>{snapshot ? `${formatBytes(snapshot.swapUsed)}/${formatBytes(snapshot.swapTotal)}` : "0/0"}</em></div>
       </div>
 
-      <div className="sidebar-block process-mini">
+      <div
+        className={`sidebar-block process-mini ${sessionTab ? "clickable" : ""}`}
+        role="button"
+        tabIndex={sessionTab ? 0 : -1}
+        aria-label="打开进程管理"
+        aria-disabled={!sessionTab}
+        onClick={() => sessionTab && openWorkspace("processes")}
+        onKeyDown={(event) => { if (sessionTab && (event.key === "Enter" || event.key === " ")) { event.preventDefault(); openWorkspace("processes"); } }}
+      >
         <div className="mini-table-head"><span>内存</span><span>CPU</span><span>命令</span></div>
         {(snapshot?.topProcesses ?? []).slice(0, 5).map((process) => (
-          <button key={process.pid} type="button" onDoubleClick={() => openWorkspace("processes")}>
+          <div className="process-mini-row" key={process.pid}>
             <span>{formatBytes(process.memoryBytes, 0)}</span><span>{process.cpuPercent.toFixed(1)}</span><strong>{process.name}</strong>
-          </button>
+          </div>
         ))}
         {!snapshot && <div className="mini-empty">连接后显示进程摘要</div>}
       </div>
@@ -107,8 +130,8 @@ export function ServerSidebar() {
         <NetworkRateChart samples={networkHistory[networkHistoryKey] ?? []} />
       </div>
 
-      <button className="latency-block" type="button" onClick={() => openWorkspace("network")}>
-        <Network size={15} /><strong>0 ms</strong><span>本机</span>
+      <button className="latency-block" type="button" disabled={!sessionTab} title="SSH 数据往返延迟" onClick={() => openWorkspace("network")}>
+        <Network size={15} /><strong>{latency == null ? "-" : `${latency} ms`}</strong><span>数据往返</span>
       </button>
 
       <div className="filesystem-list">

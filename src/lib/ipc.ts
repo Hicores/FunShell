@@ -106,6 +106,7 @@ function mockCall(command: string, args?: Record<string, unknown>): unknown {
         }),
       } satisfies ServerSnapshot;
     }
+    case "measure_session_latency": return 24;
     case "get_system_info": return mockSystemInfo;
     case "list_processes": return mockProcesses;
     case "get_process_details": {
@@ -205,6 +206,7 @@ export const api = {
   resizeTerminal: (sessionId: string, columns: number, rows: number) => call<void>("resize_terminal", { sessionId, columns, rows }),
   trustHost: (host: string, port: number, algorithm: string, fingerprint: string) => call<void>("trust_host_key", { info: { host, port, algorithm, fingerprint } }),
   snapshot: (sessionId: string) => call<ServerSnapshot>("collect_server_snapshot", { sessionId }),
+  sessionLatency: (sessionId: string) => call<number>("measure_session_latency", { sessionId }),
   systemInfo: (sessionId: string) => call<SystemInfo>("get_system_info", { sessionId }),
   processes: (sessionId: string) => call<ProcessInfo[]>("list_processes", { sessionId }),
   processDetails: (sessionId: string, pid: number) => call<ProcessDetails>("get_process_details", { sessionId, pid }),

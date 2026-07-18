@@ -70,12 +70,15 @@
 .resource-row em { overflow: hidden; color: #51636e; font-style: normal; text-align: right; white-space: nowrap; }
 
 .process-mini { padding: 0; min-height: 116px; }
-.mini-table-head, .process-mini button { display: grid; grid-template-columns: 68px 50px 1fr; min-width: 0; }
+.mini-table-head, .process-mini-row { display: grid; grid-template-columns: 68px 50px 1fr; min-width: 0; }
 .mini-table-head { padding: 5px 7px; background: #5b9bd0; color: white; }
-.process-mini button { width: 100%; height: 24px; align-items: center; border: 0; padding: 0 7px; background: #f4fafc; text-align: left; }
-.process-mini button:nth-child(odd) { background: #e8f4f8; }
-.process-mini button span { text-align: right; padding-right: 9px; }
-.process-mini button strong { overflow: hidden; font-weight: 500; text-overflow: ellipsis; }
+.process-mini-row { width: 100%; height: 24px; align-items: center; padding: 0 7px; background: #f4fafc; text-align: left; }
+.process-mini-row:nth-child(odd) { background: #e8f4f8; }
+.process-mini-row span { text-align: right; padding-right: 9px; }
+.process-mini-row strong { overflow: hidden; font-weight: 500; text-overflow: ellipsis; }
+.process-mini.clickable { cursor: pointer; }
+.process-mini.clickable:hover { box-shadow: inset 3px 0 #2d93c3; }
+.process-mini.clickable:focus-visible { outline: 2px solid #3b98c8; outline-offset: -2px; }
 .mini-empty { display: grid; height: 80px; place-items: center; color: #84939c; }
 
 .network-mini { padding: 7px; }
@@ -99,6 +102,7 @@
 .latency-block { display: grid; grid-template-columns: 20px 1fr auto; align-items: center; min-height: 54px; border: 0; border-bottom: 1px solid #cbd4da; padding: 8px; background: #f8fafb; text-align: left; }
 .latency-block strong { color: #2379a7; }
 .latency-block span { color: #4f6e80; }
+.latency-block:disabled { color: #8d9aa2; cursor: default; }
 .filesystem-list { min-height: 0; flex: 1; overflow: auto; }
 .filesystem-head, .filesystem-row { display: grid; grid-template-columns: 1fr 108px; position: relative; }
 .filesystem-head { position: sticky; top: 0; padding: 7px 8px; border-bottom: 1px solid #cbd4da; background: #f2f5f7; text-align: center; z-index: 1; }
