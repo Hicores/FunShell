@@ -6,7 +6,7 @@ export interface NetworkRateSample {
   transmitBps: number;
 }
 
-export const NETWORK_RATE_HISTORY_LIMIT = 48;
+export const NETWORK_RATE_HISTORY_LIMIT = 96;
 
 export function appendNetworkRateSample(history: NetworkRateSample[], sample: NetworkRateSample) {
   return [...history, sample].slice(-NETWORK_RATE_HISTORY_LIMIT);

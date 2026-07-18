@@ -17,6 +17,7 @@ describe("NetworkRateChart", () => {
     expect(Number(receiveBars[0].getAttribute("x")) + Number(receiveBars[0].getAttribute("width"))).toBeCloseTo(Number(receiveBars[1].getAttribute("x")));
     expect(Number(transmitBars[0].getAttribute("x")) + Number(transmitBars[0].getAttribute("width"))).toBeCloseTo(Number(transmitBars[1].getAttribute("x")));
     expect(transmitBars[1].getAttribute("width")).toBe(receiveBars[1].getAttribute("width"));
+    expect(Number(receiveBars[1].getAttribute("width"))).toBeLessThan(3);
     expect(Number(receiveBars[1].getAttribute("height"))).toBeGreaterThan(Number(transmitBars[1].getAttribute("height")));
     expect(Number(receiveBars[1].getAttribute("height"))).toBeCloseTo(57);
     expect(screen.queryByText("正在采样...")).not.toBeInTheDocument();
