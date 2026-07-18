@@ -16,6 +16,7 @@ describe("ServerSidebar", () => {
     });
     render(<ServerSidebar />);
 
+    expect(screen.getByRole("img", { name: /网卡实际速率曲线/ })).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "打开网络监听" }));
     expect(useAppStore.getState().tabs.some((tab) => tab.kind === "network" && tab.sessionId === terminal.sessionId)).toBe(true);
   });

@@ -1,9 +1,10 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { ChevronDown, Copy, Network, ServerCog } from "lucide-react";
 import { api } from "../../lib/ipc";
 import { formatBytes, formatDuration, formatRate } from "../../lib/format";
 import { useAppStore } from "../../stores/appStore";
 import { ProgressBar } from "../common/ProgressBar";
+import { appendNetworkRateSample, NetworkRateChart, type NetworkRateSample } from "./NetworkRateChart";
 
 export function ServerSidebar() {
   const tabs = useAppStore((state) => state.tabs);
@@ -17,7 +18,9 @@ export function ServerSidebar() {
   const connection = connections.find((item) => item.id === sessionTab?.connectionId);
   const snapshot = sessionTab ? snapshots[sessionTab.sessionId] : undefined;
   const [networkName, setNetworkName] = useState("eth0");
+  const [networkHistory, setNetworkHistory] = useState<Record<string, NetworkRateSample[]>>({});
   const selectedNetwork = snapshot?.interfaces.find((item) => item.name === networkName) ?? snapshot?.interfaces[0];
+  const networkHistoryKey = sessionTab && selectedNetwork ? `${sessionTab.sessionId}:${selectedNetwork.name}` : "";
 
   useEffect(() => {
     if (!sessionTab) return;
@@ -35,13 +38,18 @@ export function ServerSidebar() {
     return () => { disposed = true; window.clearInterval(timer); };
   }, [sessionTab?.sessionId, setSnapshot]);
 
-  const networkBars = useMemo(() => {
-    const base = selectedNetwork ? Math.max(selectedNetwork.receiveBps, selectedNetwork.transmitBps, 1) : 1;
-    return Array.from({ length: 22 }, (_, index) => {
-      const wave = 0.2 + Math.abs(Math.sin(index * 1.91 + base / 100000)) * 0.7;
-      return Math.max(4, Math.round(wave * 56));
-    });
-  }, [selectedNetwork?.receiveBps, selectedNetwork?.transmitBps]);
+  useEffect(() => {
+    if (!networkHistoryKey || !selectedNetwork) return;
+    const sample: NetworkRateSample = {
+      sampledAt: Date.now(),
+      receiveBps: selectedNetwork.receiveBps,
+      transmitBps: selectedNetwork.transmitBps,
+    };
+    setNetworkHistory((current) => ({
+      ...current,
+      [networkHistoryKey]: appendNetworkRateSample(current[networkHistoryKey] ?? [], sample),
+    }));
+  }, [networkHistoryKey, selectedNetwork?.receiveBps, selectedNetwork?.receivedBytes, selectedNetwork?.transmitBps, selectedNetwork?.transmittedBytes]);
 
   const memoryPercent = snapshot?.memoryTotal ? snapshot.memoryUsed / snapshot.memoryTotal * 100 : 0;
   const swapPercent = snapshot?.swapTotal ? snapshot.swapUsed / snapshot.swapTotal * 100 : 0;
@@ -95,9 +103,7 @@ export function ServerSidebar() {
             </select><ChevronDown size={13} />
           </label>
         </div>
-        <div className="network-chart" aria-label="网卡速度图">
-          {networkBars.map((height, index) => <i key={index} style={{ height }} />)}
-        </div>
+        <NetworkRateChart samples={networkHistory[networkHistoryKey] ?? []} />
       </div>
 
       <button className="latency-block" type="button" onClick={() => openWorkspace("network")}>

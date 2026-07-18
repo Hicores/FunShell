@@ -47,6 +47,8 @@ let mockSettings: AppSettings = {
 };
 let mockSessionSequence = 0;
 let mockSocketTick = 0;
+let mockSnapshotTick = 0;
+const mockNetworkTotals = new Map(mockSnapshot.interfaces.map((item) => [item.name, { receivedBytes: item.receivedBytes, transmittedBytes: item.transmittedBytes }]));
 
 async function call<T>(command: string, args?: Record<string, unknown>): Promise<T> {
   if (isTauri()) return invoke<T>(command, args);
@@ -87,7 +89,21 @@ function mockCall(command: string, args?: Record<string, unknown>): unknown {
       const connection = mockConnections.find((item) => item.id === args?.connectionId) ?? mockConnections[0];
       return { id: `mock-${Date.now()}-${++mockSessionSequence}`, connectionId: connection.id, title: connection.name, state: "connected" } satisfies SessionDescriptor;
     }
-    case "collect_server_snapshot": return mockSnapshot;
+    case "collect_server_snapshot": {
+      mockSnapshotTick += 1;
+      return {
+        ...mockSnapshot,
+        interfaces: mockSnapshot.interfaces.map((item, index) => {
+          const receiveBps = Math.round(item.receiveBps * (0.45 + Math.abs(Math.sin(mockSnapshotTick * 0.73 + index)) * 0.9));
+          const transmitBps = Math.round(item.transmitBps * (0.35 + Math.abs(Math.cos(mockSnapshotTick * 0.61 + index)) * 1.05));
+          const totals = mockNetworkTotals.get(item.name) ?? { receivedBytes: item.receivedBytes, transmittedBytes: item.transmittedBytes };
+          totals.receivedBytes += Math.round(receiveBps * 2.2);
+          totals.transmittedBytes += Math.round(transmitBps * 2.2);
+          mockNetworkTotals.set(item.name, totals);
+          return { ...item, ...totals, receiveBps, transmitBps };
+        }),
+      } satisfies ServerSnapshot;
+    }
     case "get_system_info": return mockSystemInfo;
     case "list_processes": return mockProcesses;
     case "get_process_details": {
