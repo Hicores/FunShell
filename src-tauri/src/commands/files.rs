@@ -61,11 +61,18 @@ pub async fn list_remote_files(
         })
         .collect::<Vec<_>>();
     drop(sftp);
-    let paths = output
+    let identities = output
         .iter()
-        .map(|entry| entry.path.clone())
+        .map(|entry| {
+            (
+                entry.user.clone(),
+                entry.group.clone(),
+                entry.user_id,
+                entry.group_id,
+            )
+        })
         .collect::<Vec<_>>();
-    for (index, (user, group)) in resolve_owner_names(&state, &session_id, &paths)
+    for (index, (user, group)) in resolve_owner_names(&state, &session_id, &identities)
         .await
         .into_iter()
         .enumerate()
@@ -86,47 +93,61 @@ pub async fn list_remote_files(
     Ok(output)
 }
 
-const OWNER_LOOKUP_BATCH_SIZE: usize = 64;
+type OwnerIdentity = (Option<String>, Option<String>, Option<u32>, Option<u32>);
 
 async fn resolve_owner_names(
     state: &AppState,
     session_id: &str,
-    paths: &[String],
+    identities: &[OwnerIdentity],
 ) -> Vec<(Option<String>, Option<String>)> {
-    let mut resolved = vec![(None, None); paths.len()];
+    let mut resolved = Vec::with_capacity(identities.len());
     let mut user_cache = HashMap::<u32, Option<String>>::new();
     let mut group_cache = HashMap::<u32, Option<String>>::new();
-    for (offset, batch) in paths.chunks(OWNER_LOOKUP_BATCH_SIZE).enumerate() {
-        let quoted_paths = batch
-            .iter()
-            .map(|path| shell_quote(path))
-            .collect::<Vec<_>>()
-            .join(" ");
-        let command = format!("stat -c '%U\\t%G' -- {quoted_paths}");
-        let Ok(result) = state.sessions.execute(session_id, &command).await else {
-            continue;
-        };
-        if result.exit_status != Some(0) {
-            continue;
-        }
-        for (index, line) in result.stdout.lines().enumerate() {
-            let Some((user, group)) = line.trim().split_once('\t') else {
-                continue;
-            };
-            let target = offset * OWNER_LOOKUP_BATCH_SIZE + index;
-            if target >= resolved.len() {
-                break;
-            }
-            if !user.is_empty() && user != "?" && !group.is_empty() && group != "?" {
-                let user =
-                    resolve_numeric_name(state, session_id, "passwd", user, &mut user_cache).await;
-                let group =
-                    resolve_numeric_name(state, session_id, "group", group, &mut group_cache).await;
-                resolved[target] = (Some(user), Some(group));
-            }
-        }
+    for (user, group, user_id, group_id) in identities {
+        let user = resolve_owner_value(
+            state,
+            session_id,
+            user.as_deref(),
+            *user_id,
+            "passwd",
+            &mut user_cache,
+        )
+        .await;
+        let group = resolve_owner_value(
+            state,
+            session_id,
+            group.as_deref(),
+            *group_id,
+            "group",
+            &mut group_cache,
+        )
+        .await;
+        resolved.push((user, group));
     }
     resolved
+}
+
+async fn resolve_owner_value(
+    state: &AppState,
+    session_id: &str,
+    value: Option<&str>,
+    id: Option<u32>,
+    database: &str,
+    cache: &mut HashMap<u32, Option<String>>,
+) -> Option<String> {
+    let value = value.filter(|value| !value.is_empty() && *value != "?");
+    if let Some(value) = value {
+        if value.parse::<u32>().is_err() {
+            return Some(value.to_owned());
+        }
+        return Some(resolve_numeric_name(state, session_id, database, value, cache).await);
+    }
+    if let Some(id) = id {
+        return Some(
+            resolve_numeric_name(state, session_id, database, &id.to_string(), cache).await,
+        );
+    }
+    None
 }
 
 async fn resolve_numeric_name(
