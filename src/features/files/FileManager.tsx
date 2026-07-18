@@ -1,6 +1,6 @@
 import { open, save } from "@tauri-apps/plugin-dialog";
 import { openPath } from "@tauri-apps/plugin-opener";
-import { Ban, Download, Edit3, File, Folder, FolderPlus, Home, RefreshCw, RotateCcw, Trash2, Upload } from "lucide-react";
+import { Ban, Download, File, Folder, FolderPlus, Home, RefreshCw, RotateCcw, Trash2, Upload } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { api, isTauri, onEvent } from "../../lib/ipc";
 import { formatBytes, formatMode } from "../../lib/format";
@@ -162,12 +162,12 @@ export function FileManager({ tab }: { tab: WorkspaceTab }) {
       </div>
       {context && (
         <ContextMenu x={context.x} y={context.y} onClose={() => setContext(null)}>
-          <button type="button" onClick={() => void refresh()}><RefreshCw size={14} />刷新</button>
+          <button type="button" onClick={() => void refresh()}>刷新</button>
           <button type="button" onClick={() => void openEntry(context.file)}>打开</button>
-          {context.file.kind === "file" && <button type="button" onClick={() => void editEntry(context.file)}><Edit3 size={14} />文本编辑</button>}
+          {context.file.kind === "file" && <button type="button" onClick={() => void editEntry(context.file)}>文本编辑</button>}
           <button type="button" onClick={() => void navigator.clipboard.writeText(context.file.path)}>复制路径</button>
-          <button type="button" onClick={() => void downloadFile(context.file)}><Download size={14} />下载</button>
-          <button type="button" onClick={() => void uploadFiles()}><Upload size={14} />上传</button>
+          <button type="button" onClick={() => void downloadFile(context.file)}>下载</button>
+          <button type="button" onClick={() => void uploadFiles()}>上传</button>
           <hr />
           <button type="button" onClick={() => void rename(context.file)}>重命名</button>
           <button type="button" className="danger" onClick={() => void remove(context.file)}>删除</button>

@@ -53,7 +53,7 @@ legend { padding: 0 6px; color: #2b566d; font-weight: 600; }
 .empty-state.large { min-height: 240px; }
 .view-loading { display: flex; height: 100%; align-items: center; justify-content: center; gap: 10px; color: #667984; }
 .context-menu { position: fixed; width: 178px; max-width: calc(100vw - 16px); max-height: calc(100vh - 16px); overflow-y: auto; border: 1px solid #aebac1; border-radius: 4px; padding: 4px 0; background: white; box-shadow: 0 6px 18px #172f3d44; z-index: 75; }
-.context-menu button { display: flex; width: 100%; height: 28px; align-items: center; gap: 8px; border: 0; padding: 0 12px; background: white; text-align: left; }
+.context-menu button { display: flex; width: 100%; height: 28px; align-items: center; border: 0; padding: 0 12px; background: white; text-align: left; }
 .context-menu button:hover { background: #e5f2f8; }
 .context-menu button.danger { color: #b33f3f; }
 .context-menu hr { border: 0; border-top: 1px solid #d3dbe0; margin: 4px 0; }

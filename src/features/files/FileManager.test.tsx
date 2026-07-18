@@ -26,4 +26,13 @@ describe("FileManager", () => {
     fireEvent.click(screen.getByRole("button", { name: "删除" }));
     await waitFor(() => expect(remove).toHaveBeenCalledWith("session-1", "/root/deploy.sh", false, false));
   });
+
+  it("renders a text-only context menu", async () => {
+    render(<FileManager tab={tab} />);
+    const fileName = await screen.findByText("deploy.sh");
+    fireEvent.contextMenu(fileName);
+    const menu = screen.getByRole("menu");
+    expect(menu.querySelectorAll("svg")).toHaveLength(0);
+    expect(screen.getByRole("button", { name: "文本编辑" })).toBeInTheDocument();
+  });
 });
