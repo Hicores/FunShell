@@ -10,6 +10,7 @@ import {
   mockSystemInfo,
 } from "./mock";
 import type {
+  AppSettings,
   CommandHistoryEntry,
   CommandPreset,
   ConnectionFolder,
@@ -28,6 +29,7 @@ import type {
   TunnelProfile,
   TunnelRuntime,
   VaultStatus,
+  GeoIpInfo,
 } from "../types";
 
 export const isTauri = () => "__TAURI_INTERNALS__" in window;
@@ -37,6 +39,11 @@ const mockPresets: CommandPreset[] = [
   { id: "preset-health", scope: "global", scopeId: null, name: "服务健康检查", command: "systemctl --no-pager --failed", tags: ["systemd"], sortOrder: 0 },
   { id: "preset-disk", scope: "global", scopeId: null, name: "磁盘占用", command: "du -sh * | sort -h", tags: ["storage"], sortOrder: 1 },
 ];
+let mockSettings: AppSettings = {
+  geoipEnabled: true,
+  geoipProviderUrl: "https://ipwho.is/{ip}",
+  confirmCloseActiveSessions: true,
+};
 
 async function call<T>(command: string, args?: Record<string, unknown>): Promise<T> {
   if (isTauri()) return invoke<T>(command, args);
@@ -53,6 +60,26 @@ function mockCall(command: string, args?: Record<string, unknown>): unknown {
     case "list_tunnel_profiles": return [];
     case "list_tunnel_statuses": return [];
     case "vault_status": return { mode: "dpapi", initialized: false, unlocked: true } satisfies VaultStatus;
+    case "get_settings": return { ...mockSettings };
+    case "save_settings": {
+      mockSettings = { ...(args?.settings as AppSettings) };
+      return { ...mockSettings };
+    }
+    case "lookup_geo_ip": {
+      const ip = String(args?.ip ?? "");
+      const privateAddress = ip.startsWith("10.") || ip.startsWith("192.168.") || ip === "127.0.0.1" || ip === "::1" || ip === "0.0.0.0";
+      return {
+        ip,
+        private: privateAddress,
+        country: privateAddress ? null : "中国",
+        region: privateAddress ? null : "广东",
+        city: privateAddress ? null : "深圳",
+        isp: privateAddress ? null : "演示网络",
+        latitude: privateAddress ? null : 22.5431,
+        longitude: privateAddress ? null : 114.0579,
+        cachedAt: new Date().toISOString(),
+      } satisfies GeoIpInfo;
+    }
     case "connect_session": {
       const connection = mockConnections.find((item) => item.id === args?.connectionId) ?? mockConnections[0];
       return { id: `mock-${Date.now()}`, connectionId: connection.id, title: connection.name, state: "connected" } satisfies SessionDescriptor;
@@ -95,6 +122,9 @@ export async function onEvent<T>(name: string, callback: EventCallback<T>): Prom
 }
 
 export const api = {
+  getSettings: () => call<AppSettings>("get_settings"),
+  saveSettings: (settings: AppSettings) => call<AppSettings>("save_settings", { settings }),
+  geoIp: (ip: string) => call<GeoIpInfo>("lookup_geo_ip", { ip }),
   listConnections: (includeDeleted = false) => call<ConnectionProfile[]>("list_connections", { includeDeleted }),
   saveConnection: (input: SaveConnectionInput) => call<ConnectionProfile>("save_connection", { input }),
   deleteConnection: (id: string, deleted = true) => call<void>("delete_connection", { id, deleted }),

@@ -5,6 +5,7 @@ mod paths;
 mod persistence;
 mod security;
 mod services;
+mod settings;
 mod state;
 
 use tauri::Manager;
@@ -33,6 +34,9 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             commands::health,
             commands::paths::get_runtime_paths,
+            commands::settings::get_settings,
+            commands::settings::save_settings,
+            commands::settings::lookup_geo_ip,
             commands::connections::list_connections,
             commands::connections::save_connection,
             commands::connections::delete_connection,

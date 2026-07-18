@@ -99,6 +99,20 @@ pub struct RouteTraceResult {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GeoIpInfo {
+    pub ip: String,
+    pub private: bool,
+    pub country: Option<String>,
+    pub region: Option<String>,
+    pub city: Option<String>,
+    pub isp: Option<String>,
+    pub latitude: Option<f64>,
+    pub longitude: Option<f64>,
+    pub cached_at: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum PresetScope {
     Global,

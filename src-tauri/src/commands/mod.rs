@@ -7,6 +7,7 @@ pub mod keys;
 pub mod monitor;
 pub mod paths;
 pub mod session;
+pub mod settings;
 pub mod tunnels;
 pub mod vault;
 

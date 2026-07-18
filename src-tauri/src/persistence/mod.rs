@@ -1,6 +1,7 @@
 mod commands;
 mod connections;
 mod database;
+mod geoip;
 mod keys;
 mod secrets;
 mod tunnels;

@@ -10,6 +10,7 @@ pub struct AppPaths {
     pub root: PathBuf,
     pub config: PathBuf,
     pub database: PathBuf,
+    pub settings: PathBuf,
     pub downloads: PathBuf,
     pub logs: PathBuf,
     pub temporary: PathBuf,
@@ -32,6 +33,7 @@ impl AppPaths {
         let paths = Self {
             config: root.join("config"),
             database: root.join("config").join("funshell.db"),
+            settings: root.join("config").join("settings.json"),
             downloads: root.join("downloads"),
             logs: root.join("logs"),
             temporary: root.join("temp"),

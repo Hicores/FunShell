@@ -35,6 +35,7 @@ parking_lot = "0.12"
 rand = "0.8"
 rand_chacha = "0.10"
 rand_core = "0.10"
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
 russh = { version = "0.62.2", default-features = false, features = ["async-trait", "flate2", "ring", "rsa"] }
 russh-sftp = "2.3.0"
 rusqlite = { version = "0.38", features = ["bundled"] }

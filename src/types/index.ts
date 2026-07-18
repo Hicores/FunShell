@@ -258,3 +258,20 @@ export interface VaultStatus {
   unlocked: boolean;
 }
 
+export interface AppSettings {
+  geoipEnabled: boolean;
+  geoipProviderUrl: string;
+  confirmCloseActiveSessions: boolean;
+}
+
+export interface GeoIpInfo {
+  ip: string;
+  private: boolean;
+  country: string | null;
+  region: string | null;
+  city: string | null;
+  isp: string | null;
+  latitude: number | null;
+  longitude: number | null;
+  cachedAt: string;
+}
