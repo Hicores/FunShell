@@ -13,11 +13,7 @@ export function appendNetworkRateSample(history: NetworkRateSample[], sample: Ne
 }
 
 export function rateScaleCeiling(value: number) {
-  const safeValue = Math.max(1024, value);
-  const magnitude = 10 ** Math.floor(Math.log10(safeValue));
-  const normalized = safeValue / magnitude;
-  const step = normalized <= 1 ? 1 : normalized <= 2 ? 2 : normalized <= 5 ? 5 : 10;
-  return step * magnitude;
+  return Math.max(1024, value);
 }
 
 function axisLabel(value: number) {
@@ -31,15 +27,13 @@ function barGeometry(samples: NetworkRateSample[], field: "receiveBps" | "transm
   const bottom = 62;
   const width = 320 - left - right;
   const step = width / NETWORK_RATE_HISTORY_LIMIT;
-  const wideBar = step;
-  const barWidth = field === "receiveBps" ? wideBar : Math.max(1, wideBar * 0.34);
   return samples.map((sample, index) => {
     const slotX = left + width - (samples.length - index) * step;
     const height = Math.min(sample[field], ceiling) / ceiling * (bottom - top);
     return {
-      x: slotX + (step - barWidth) / 2,
+      x: slotX,
       y: bottom - height,
-      width: barWidth,
+      width: step,
       height,
     };
   });
