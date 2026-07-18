@@ -66,6 +66,7 @@ pub struct RemoteFileEntry {
     pub name: String,
     pub path: String,
     pub kind: RemoteFileKind,
+    pub link_target: Option<String>,
     pub size: u64,
     pub modified: Option<u64>,
     pub permissions: Option<u32>,

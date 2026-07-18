@@ -1,5 +1,5 @@
 import { open, save } from "@tauri-apps/plugin-dialog";
-import { ArrowRight, Download, File, Folder, FolderPlus, RefreshCw, Trash2, Upload } from "lucide-react";
+import { ArrowRight, Download, File, Folder, FolderPlus, Link2, RefreshCw, Trash2, Upload } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ContextMenu } from "../../components/common/ContextMenu";
 import { IconButton } from "../../components/common/IconButton";
@@ -238,7 +238,13 @@ export function FileManager({ tab }: { tab: WorkspaceTab }) {
             <tbody>
               {visibleFiles.map((file) => (
                 <tr key={file.path} className={selected?.path === file.path ? "selected" : ""} onClick={() => setSelected(file)} onDoubleClick={() => void openEntry(file)} onContextMenu={(event) => { event.preventDefault(); event.stopPropagation(); setSelected(file); setContext({ x: event.clientX, y: event.clientY, file, targetPath: path }); }}>
-                  <td><span className={`file-icon ${file.kind}`}>{file.kind === "directory" ? <Folder size={16} /> : <File size={16} />}</span>{file.name}</td>
+                  <td>
+                    <span className={`file-icon ${file.kind}`}>{file.kind === "directory" ? <Folder size={16} /> : file.kind === "symlink" ? <Link2 size={16} /> : <File size={16} />}</span>
+                    <span className="file-entry-label">
+                      <span title={file.name}>{file.name}</span>
+                      {file.kind === "symlink" && file.linkTarget && <small title={`链接来源：${file.linkTarget}`}>链接来源：{file.linkTarget}</small>}
+                    </span>
+                  </td>
                   <td>{file.kind === "directory" ? "" : formatBytes(file.size)}</td><td>{file.kind === "directory" ? "文件夹" : file.kind === "symlink" ? "链接" : "文件"}</td>
                   <td>{file.modified ? new Date(file.modified * 1000).toLocaleString() : "-"}</td><td>{formatMode(file.permissions, file.kind)}</td><td>{formatIdentity(file.user, file.userId)}/{formatIdentity(file.group, file.groupId)}</td>
                 </tr>

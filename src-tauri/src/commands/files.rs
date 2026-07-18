@@ -47,6 +47,7 @@ pub async fn list_remote_files(
                     FileType::Symlink => RemoteFileKind::Symlink,
                     FileType::Other => RemoteFileKind::Other,
                 },
+                link_target: None,
                 size: metadata.len(),
                 modified: metadata.mtime.map(u64::from),
                 permissions: metadata.permissions,
@@ -61,6 +62,18 @@ pub async fn list_remote_files(
             }
         })
         .collect::<Vec<_>>();
+    stream::iter(
+        output
+            .iter_mut()
+            .filter(|entry| entry.kind == RemoteFileKind::Symlink),
+    )
+    .for_each_concurrent(8, |entry| {
+        let sftp = &sftp;
+        async move {
+            entry.link_target = sftp.read_link(entry.path.clone()).await.ok();
+        }
+    })
+    .await;
     drop(sftp);
     let identities = output
         .iter()

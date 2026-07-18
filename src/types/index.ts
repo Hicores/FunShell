@@ -185,6 +185,7 @@ export interface RemoteFileEntry {
   name: string;
   path: string;
   kind: "directory" | "file" | "symlink" | "other";
+  linkTarget: string | null;
   size: number;
   modified: number | null;
   permissions: number | null;

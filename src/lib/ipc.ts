@@ -58,6 +58,7 @@ const mockRootDirectories: RemoteFileEntry[] = ["bin", "boot", "dev", "etc", "ho
   name,
   path: `/${name}`,
   kind: "directory",
+  linkTarget: null,
   size: 0,
   modified: 1_784_000_000,
   permissions: 0o755,

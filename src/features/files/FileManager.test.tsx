@@ -43,6 +43,18 @@ describe("FileManager", () => {
     expect(screen.getByRole("button", { name: "文本编辑" })).toBeInTheDocument();
   });
 
+  it("shows the source path for symbolic links", async () => {
+    render(<FileManager tab={tab} />);
+
+    const linkName = await screen.findByText("gateway-current");
+    const row = linkName.closest("tr")!;
+    expect(within(row).getByText("链接来源：/opt/gateway/releases/2026-07-18")).toHaveAttribute(
+      "title",
+      "链接来源：/opt/gateway/releases/2026-07-18",
+    );
+    expect(within(row).getByText("链接")).toBeInTheDocument();
+  });
+
   it("edits basic and extended file permission bits visually", async () => {
     const chown = vi.spyOn(api, "chownRemotePath").mockResolvedValue(undefined);
     const chmod = vi.spyOn(api, "chmodRemotePath").mockResolvedValue(undefined);
