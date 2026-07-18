@@ -14,11 +14,10 @@ interface ModalProps {
 export function Modal({ open, title, width = 760, children, footer, onClose }: ModalProps) {
   if (!open) return null;
   return (
-    <div className="modal-backdrop" onMouseDown={onClose}>
+    <div className="modal-backdrop">
       <section
         className="modal-window"
         style={{ width: `min(${width}px, calc(100vw - 32px))` }}
-        onMouseDown={(event) => event.stopPropagation()}
         role="dialog"
         aria-modal="true"
         aria-label={title}
@@ -33,4 +32,3 @@ export function Modal({ open, title, width = 760, children, footer, onClose }: M
     </div>
   );
 }
-
