@@ -1,10 +1,12 @@
 import { Search, Settings, Zap } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type MouseEvent } from "react";
 import { FitAddon } from "@xterm/addon-fit";
 import { SearchAddon } from "@xterm/addon-search";
 import { WebLinksAddon } from "@xterm/addon-web-links";
 import { Terminal } from "@xterm/xterm";
+import { ContextMenu } from "../../components/common/ContextMenu";
 import { api, isTauri, onEvent } from "../../lib/ipc";
+import { useAppStore } from "../../stores/appStore";
 import type { TerminalOutputEvent, WorkspaceTab } from "../../types";
 
 function encodeBase64(value: string) {
@@ -24,7 +26,15 @@ interface TerminalViewProps {
   active: boolean;
 }
 
+export type TerminalContextAction = "copy" | "paste";
+
+export function terminalContextAction(selection: string, clipboard: string): TerminalContextAction | null {
+  if (selection) return "copy";
+  return clipboard ? "paste" : null;
+}
+
 export function TerminalView({ tab, active }: TerminalViewProps) {
+  const notify = useAppStore((state) => state.notify);
   const hostRef = useRef<HTMLDivElement>(null);
   const terminalRef = useRef<Terminal | null>(null);
   const fitRef = useRef<FitAddon | null>(null);
@@ -34,6 +44,8 @@ export function TerminalView({ tab, active }: TerminalViewProps) {
   const [search, setSearch] = useState("");
   const [history, setHistory] = useState<string[]>([]);
   const [historyIndex, setHistoryIndex] = useState<number | null>(null);
+  const [context, setContext] = useState<{ x: number; y: number; action: TerminalContextAction; text: string } | null>(null);
+  const contextRequestRef = useRef(0);
 
   useEffect(() => {
     if (!hostRef.current) return;
@@ -135,9 +147,50 @@ export function TerminalView({ tab, active }: TerminalViewProps) {
     await api.terminalCommand(tab.sessionId, value);
   };
 
+  const openTerminalContextMenu = async (event: MouseEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
+    const terminal = terminalRef.current;
+    if (!terminal) return;
+    const selection = terminal.hasSelection() ? terminal.getSelection() : "";
+    if (selection) {
+      setContext({ x: event.clientX, y: event.clientY, action: "copy", text: selection });
+      return;
+    }
+    const request = ++contextRequestRef.current;
+    let clipboard = "";
+    try {
+      clipboard = await navigator.clipboard.readText();
+    } catch {
+      clipboard = "";
+    }
+    if (request !== contextRequestRef.current) return;
+    const action = terminalContextAction(selection, clipboard);
+    setContext(action ? { x: event.clientX, y: event.clientY, action, text: clipboard } : null);
+  };
+
+  const copySelection = async () => {
+    if (!context?.text) return;
+    try {
+      await navigator.clipboard.writeText(context.text);
+      terminalRef.current?.clearSelection();
+    } catch (error) {
+      notify(`复制文本失败: ${String(error)}`);
+    }
+  };
+
+  const pasteClipboard = () => {
+    if (context?.text) terminalRef.current?.paste(context.text);
+  };
+
   return (
     <div className="terminal-view">
-      <div ref={hostRef} className="xterm-host" />
+      <div ref={hostRef} className="xterm-host" onContextMenu={(event) => void openTerminalContextMenu(event)} />
+      {context && (
+        <ContextMenu x={context.x} y={context.y} onClose={() => setContext(null)}>
+          <button type="button" onClick={() => void (context.action === "copy" ? copySelection() : pasteClipboard())}>{context.action === "copy" ? "复制文本" : "粘贴"}</button>
+        </ContextMenu>
+      )}
       {searchOpen && (
         <div className="terminal-search">
           <input autoFocus placeholder="查找终端内容" value={search} onChange={(event) => { setSearch(event.target.value); searchRef.current?.findNext(event.target.value); }} />
