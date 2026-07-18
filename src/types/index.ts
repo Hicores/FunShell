@@ -243,13 +243,14 @@ export interface SessionStatusEvent {
 }
 
 export interface TransferProgressEvent {
+  sessionId: string;
   taskId: string;
   direction: "upload" | "download";
   source: string;
   destination: string;
   transferred: number;
   total: number;
-  state: "running" | "completed" | "error";
+  state: "running" | "completed" | "error" | "canceled";
 }
 
 export interface VaultStatus {

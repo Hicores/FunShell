@@ -93,6 +93,7 @@ pub struct TextFileContent {
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TransferProgressEvent {
+    pub session_id: String,
     pub task_id: String,
     pub direction: String,
     pub source: String,

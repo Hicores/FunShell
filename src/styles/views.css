@@ -5,7 +5,7 @@
 .file-tree button { border: 0; padding-left: 20px; background: transparent; text-align: left; }
 .file-tree button:hover, .file-tree button.active { background: #dceef7; color: #176d9b; }
 .file-tree svg, .file-icon.directory { color: #e2ac3e; }
-.file-browser { display: grid; min-width: 0; min-height: 0; grid-template-rows: 34px 1fr; }
+.file-browser { display: grid; min-width: 0; min-height: 0; grid-template-rows: 34px minmax(0, 1fr) auto; }
 .file-toolbar { display: flex; align-items: center; border-bottom: 1px solid #c7d0d6; background: #f7f8f9; }
 .breadcrumbs { display: flex; min-width: 0; flex: 1; align-items: center; overflow: hidden; padding-left: 6px; }
 .breadcrumbs button { display: inline-flex; height: 27px; align-items: center; border: 0; padding: 0 6px; background: transparent; color: #476474; }
@@ -19,6 +19,13 @@
 .file-table td:first-child { display: flex; align-items: center; gap: 6px; }
 .file-icon { display: inline-grid; width: 18px; place-items: center; color: #667984; }
 .remote-editor { width: 100%; height: min(60vh, 560px); resize: none; border: 1px solid #acbbc4; padding: 10px; outline: 0; background: #132c3d; color: #eef5f7; font: 13px/1.5 "Cascadia Mono", Consolas, monospace; tab-size: 4; }
+.transfer-queue { max-height: 92px; overflow: auto; border-top: 1px solid #bac6cd; background: #f5f8f9; }
+.transfer-task { display: grid; height: 30px; grid-template-columns: 46px minmax(100px, 1fr) minmax(100px, 220px) 125px 28px; align-items: center; gap: 7px; padding: 0 7px; border-bottom: 1px solid #dce3e7; font-size: 11px; }
+.transfer-task strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.transfer-task progress { width: 100%; height: 8px; accent-color: #2c95c5; }
+.transfer-task em { color: #657984; font-style: normal; text-align: right; }
+.transfer-task.completed { color: #24744c; }
+.transfer-task.error, .transfer-task.canceled { color: #a04444; }
 
 .command-panel { display: grid; height: 100%; grid-template-columns: 165px 1fr; min-height: 0; }
 .command-panel > aside { display: flex; flex-direction: column; border-right: 1px solid #c7d1d7; padding: 5px; background: #f4f7f8; }

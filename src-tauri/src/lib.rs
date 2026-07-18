@@ -73,6 +73,7 @@ pub fn run() {
             commands::files::upload_remote_file,
             commands::files::download_remote_file,
             commands::files::open_remote_file,
+            commands::files::cancel_file_transfer,
             commands::monitor::collect_server_snapshot,
             commands::monitor::get_system_info,
             commands::monitor::list_processes,

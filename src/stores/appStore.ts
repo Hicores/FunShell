@@ -37,6 +37,7 @@ interface AppStore {
   initialize: () => Promise<void>;
   refreshConnections: () => Promise<void>;
   connect: (connection: ConnectionProfile) => Promise<void>;
+  reconnect: (sessionId: string) => Promise<void>;
   closeTab: (id: string) => Promise<void>;
   setActiveTab: (id: string) => void;
   openWorkspace: (kind: Exclude<WorkspaceKind, "terminal">) => void;
@@ -133,6 +134,37 @@ export const useAppStore = create<AppStore>((set, get) => ({
       set({ toast: String(error) });
     } finally {
       set({ busy: false });
+    }
+  },
+
+  reconnect: async (sessionId) => {
+    const state = get();
+    const related = state.tabs.filter((tab) => tab.sessionId === sessionId);
+    const terminal = related.find((tab) => tab.kind === "terminal");
+    const connection = state.connections.find((item) => item.id === terminal?.connectionId);
+    if (!terminal || !connection) return;
+    set((current) => ({ tabs: current.tabs.map((tab) => tab.sessionId === sessionId ? { ...tab, state: "connecting" } : tab), toast: null }));
+    try {
+      await api.disconnectSession(sessionId).catch(() => undefined);
+      const session = await api.connectSession(connection.id);
+      const idMap = new Map(related.map((tab) => [tab.id, tab.kind === "terminal" ? session.id : `${session.id}:${tab.kind}`]));
+      set((current) => {
+        const snapshots = { ...current.snapshots };
+        delete snapshots[sessionId];
+        if (!isTauri()) snapshots[session.id] = mockSnapshot;
+        return {
+          sessions: [...current.sessions.filter((item) => item.id !== sessionId), session],
+          tabs: current.tabs.map((tab) => tab.sessionId === sessionId ? { ...tab, id: idMap.get(tab.id)!, sessionId: session.id, state: session.state } : tab),
+          activeTabId: current.activeTabId ? idMap.get(current.activeTabId) ?? current.activeTabId : null,
+          snapshots,
+          toast: "服务器已重新连接",
+        };
+      });
+    } catch (error) {
+      set((current) => ({
+        tabs: current.tabs.map((tab) => tab.sessionId === sessionId ? { ...tab, state: "error" } : tab),
+        toast: `重新连接失败: ${String(error)}`,
+      }));
     }
   },
 

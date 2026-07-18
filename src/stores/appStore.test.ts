@@ -4,7 +4,7 @@ import { useAppStore } from "./appStore";
 
 describe("appStore tab lifecycle", () => {
   it("opens one tool tab per session and closes the session after its last tab", async () => {
-    useAppStore.setState({ sessions: [], tabs: [], activeTabId: null, snapshots: {}, toast: null });
+    useAppStore.setState({ connections: mockConnections, sessions: [], tabs: [], activeTabId: null, snapshots: {}, toast: null });
 
     await useAppStore.getState().connect(mockConnections[0]);
     const terminal = useAppStore.getState().tabs[0];
@@ -14,11 +14,16 @@ describe("appStore tab lifecycle", () => {
     useAppStore.getState().openWorkspace("processes");
     expect(useAppStore.getState().tabs.filter((tab) => tab.kind === "processes")).toHaveLength(1);
 
+    await useAppStore.getState().reconnect(terminal!.sessionId);
+    const reconnectedTerminal = useAppStore.getState().tabs.find((tab) => tab.kind === "terminal");
+    expect(reconnectedTerminal?.sessionId).not.toBe(terminal!.sessionId);
+    expect(useAppStore.getState().tabs.find((tab) => tab.kind === "processes")?.sessionId).toBe(reconnectedTerminal?.sessionId);
+
     const processTab = useAppStore.getState().tabs.find((tab) => tab.kind === "processes");
     await useAppStore.getState().closeTab(processTab!.id);
     expect(useAppStore.getState().tabs).toHaveLength(1);
 
-    await useAppStore.getState().closeTab(terminal!.id);
+    await useAppStore.getState().closeTab(reconnectedTerminal!.id);
     expect(useAppStore.getState().tabs).toHaveLength(0);
     expect(useAppStore.getState().activeTabId).toBeNull();
   });

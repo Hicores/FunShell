@@ -1,10 +1,10 @@
 import { open, save } from "@tauri-apps/plugin-dialog";
 import { openPath } from "@tauri-apps/plugin-opener";
-import { Download, Edit3, File, Folder, FolderPlus, Home, RefreshCw, Trash2, Upload } from "lucide-react";
+import { Ban, Download, Edit3, File, Folder, FolderPlus, Home, RefreshCw, RotateCcw, Trash2, Upload } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { api, isTauri } from "../../lib/ipc";
+import { api, isTauri, onEvent } from "../../lib/ipc";
 import { formatBytes, formatMode } from "../../lib/format";
-import type { RemoteFileEntry, WorkspaceTab } from "../../types";
+import type { RemoteFileEntry, TransferProgressEvent, WorkspaceTab } from "../../types";
 import { useAppStore } from "../../stores/appStore";
 import { IconButton } from "../../components/common/IconButton";
 import { Modal } from "../../components/common/Modal";
@@ -27,6 +27,7 @@ export function FileManager({ tab }: { tab: WorkspaceTab }) {
   const [loading, setLoading] = useState(false);
   const [editor, setEditor] = useState<{ path: string; content: string } | null>(null);
   const [context, setContext] = useState<{ x: number; y: number; file: RemoteFileEntry } | null>(null);
+  const [transfers, setTransfers] = useState<TransferProgressEvent[]>([]);
 
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -41,6 +42,18 @@ export function FileManager({ tab }: { tab: WorkspaceTab }) {
     window.addEventListener("click", close);
     return () => window.removeEventListener("click", close);
   }, []);
+  useEffect(() => {
+    let dispose: (() => void) | undefined;
+    void onEvent<TransferProgressEvent>("transfer-progress", (event) => {
+      const task = event.payload;
+      if (task.sessionId !== tab.sessionId) return;
+      setTransfers((current) => {
+        const next = current.filter((item) => item.taskId !== task.taskId);
+        return [task, ...next].slice(0, 8);
+      });
+    }).then((unlisten) => { dispose = unlisten; });
+    return () => dispose?.();
+  }, [tab.sessionId]);
 
   const breadcrumbs = useMemo(() => path.split("/").filter(Boolean), [path]);
 
@@ -105,6 +118,13 @@ export function FileManager({ tab }: { tab: WorkspaceTab }) {
     catch (error) { notify(String(error)); }
   };
 
+  const retryTransfer = async (task: TransferProgressEvent) => {
+    try {
+      if (task.direction === "upload") await api.uploadRemoteFile(tab.sessionId, task.source, task.destination);
+      else await api.downloadRemoteFile(tab.sessionId, task.source, task.destination);
+    } catch (error) { notify(String(error)); }
+  };
+
   return (
     <div className="file-manager">
       <div className="file-tree">
@@ -140,6 +160,9 @@ export function FileManager({ tab }: { tab: WorkspaceTab }) {
             </tbody>
           </table>
         </div>
+        {transfers.length > 0 && <div className="transfer-queue">
+          {transfers.map((task) => <div key={task.taskId} className={`transfer-task ${task.state}`}><span>{task.direction === "upload" ? "上传" : "下载"}</span><strong title={task.destination}>{task.destination.replaceAll("\\", "/").split("/").at(-1)}</strong><progress max={Math.max(task.total, 1)} value={task.transferred} /><em>{task.state === "completed" ? "完成" : task.state === "canceled" ? "已取消" : task.state === "error" ? "失败" : `${formatBytes(task.transferred)} / ${formatBytes(task.total)}`}</em>{task.state === "running" ? <IconButton label="取消传输" onClick={() => void api.cancelTransfer(task.taskId)}><Ban size={14} /></IconButton> : task.state !== "completed" ? <IconButton label="重试传输" onClick={() => void retryTransfer(task)}><RotateCcw size={14} /></IconButton> : <span />}</div>)}
+        </div>}
       </div>
       {context && (
         <div className="context-menu" style={{ left: context.x, top: context.y }} onClick={(event) => event.stopPropagation()}>
@@ -161,4 +184,3 @@ export function FileManager({ tab }: { tab: WorkspaceTab }) {
     </div>
   );
 }
-

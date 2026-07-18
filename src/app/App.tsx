@@ -8,6 +8,8 @@ import { ConnectionEditor } from "../features/connections/ConnectionEditor";
 import { KeyManager } from "../features/connections/KeyManager";
 import { SettingsDialog } from "../features/settings/SettingsDialog";
 import { useAppStore } from "../stores/appStore";
+import { onEvent } from "../lib/ipc";
+import type { SessionStatusEvent } from "../types";
 import "../styles/layout.css";
 import "../styles/controls.css";
 import "../styles/views.css";
@@ -18,6 +20,7 @@ export function App() {
   const busy = useAppStore((state) => state.busy);
   const toast = useAppStore((state) => state.toast);
   const notify = useAppStore((state) => state.notify);
+  const reconnect = useAppStore((state) => state.reconnect);
 
   useEffect(() => {
     void initialize();
@@ -28,6 +31,35 @@ export function App() {
     const timer = window.setTimeout(() => notify(null), 5200);
     return () => window.clearTimeout(timer);
   }, [notify, toast]);
+
+  useEffect(() => {
+    let dispose: (() => void) | undefined;
+    const timers = new Set<number>();
+    void onEvent<SessionStatusEvent>("session-status", (event) => {
+      const payload = event.payload;
+      const state = useAppStore.getState();
+      const previous = state.tabs.find((tab) => tab.sessionId === payload.sessionId)?.state;
+      useAppStore.setState({
+        tabs: state.tabs.map((tab) => tab.sessionId === payload.sessionId ? { ...tab, state: payload.state } : tab),
+      });
+      if (payload.state !== "disconnected" || previous !== "connected") return;
+      const terminal = state.tabs.find((tab) => tab.sessionId === payload.sessionId && tab.kind === "terminal");
+      const connection = state.connections.find((item) => item.id === terminal?.connectionId);
+      if (!terminal || !connection?.autoReconnect) return;
+      notify("连接已中断，正在自动重连");
+      const timer = window.setTimeout(() => {
+        timers.delete(timer);
+        if (useAppStore.getState().tabs.some((tab) => tab.sessionId === payload.sessionId)) {
+          void reconnect(payload.sessionId);
+        }
+      }, 1200);
+      timers.add(timer);
+    }).then((unlisten) => { dispose = unlisten; });
+    return () => {
+      dispose?.();
+      timers.forEach(window.clearTimeout);
+    };
+  }, [notify, reconnect]);
 
   if (!initialized) {
     return (

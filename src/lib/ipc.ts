@@ -44,6 +44,7 @@ let mockSettings: AppSettings = {
   geoipProviderUrl: "https://ipwho.is/{ip}",
   confirmCloseActiveSessions: true,
 };
+let mockSessionSequence = 0;
 
 async function call<T>(command: string, args?: Record<string, unknown>): Promise<T> {
   if (isTauri()) return invoke<T>(command, args);
@@ -82,7 +83,7 @@ function mockCall(command: string, args?: Record<string, unknown>): unknown {
     }
     case "connect_session": {
       const connection = mockConnections.find((item) => item.id === args?.connectionId) ?? mockConnections[0];
-      return { id: `mock-${Date.now()}`, connectionId: connection.id, title: connection.name, state: "connected" } satisfies SessionDescriptor;
+      return { id: `mock-${Date.now()}-${++mockSessionSequence}`, connectionId: connection.id, title: connection.name, state: "connected" } satisfies SessionDescriptor;
     }
     case "collect_server_snapshot": return mockSnapshot;
     case "get_system_info": return mockSystemInfo;
@@ -160,6 +161,7 @@ export const api = {
   chmodRemotePath: (sessionId: string, path: string, mode: number) => call<void>("chmod_remote_path", { sessionId, path, mode }),
   uploadRemoteFile: (sessionId: string, localPath: string, remotePath: string) => call<string>("upload_remote_file", { sessionId, localPath, remotePath }),
   downloadRemoteFile: (sessionId: string, remotePath: string, localPath: string) => call<string>("download_remote_file", { sessionId, remotePath, localPath }),
+  cancelTransfer: (taskId: string) => call<void>("cancel_file_transfer", { taskId }),
   openRemoteFile: (sessionId: string, remotePath: string) => call<string>("open_remote_file", { sessionId, remotePath }),
   history: (connectionId?: string, search?: string) => call<CommandHistoryEntry[]>("list_command_history", { connectionId, search, limit: 300 }),
   favoriteHistory: (id: string, favorite: boolean) => call<void>("set_command_favorite", { id, favorite }),

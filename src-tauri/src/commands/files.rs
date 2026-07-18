@@ -6,6 +6,7 @@ use tokio::{
     fs::File,
     io::{AsyncReadExt, AsyncWriteExt},
 };
+use tokio_util::sync::CancellationToken;
 use uuid::Uuid;
 
 use crate::{
@@ -200,19 +201,24 @@ pub async fn upload_remote_file(
         )
         .await,
     )?;
-    transfer(
+    let cancellation = state.transfers.start(&task_id);
+    let result = transfer(
         TransferContext {
             app: &app,
+            session_id: &session_id,
             task_id: &task_id,
             direction: "upload",
             source: &source,
             destination: &remote_path,
             total,
+            cancellation,
         },
         &mut source_file,
         &mut destination_file,
     )
-    .await?;
+    .await;
+    state.transfers.finish(&task_id);
+    result?;
     destination_file
         .shutdown()
         .await
@@ -239,19 +245,24 @@ pub async fn download_remote_file(
     }
     let mut source_file = map_sftp(sftp.open(remote_path.clone()).await)?;
     let mut destination_file = File::create(&local_path).await?;
-    transfer(
+    let cancellation = state.transfers.start(&task_id);
+    let result = transfer(
         TransferContext {
             app: &app,
+            session_id: &session_id,
             task_id: &task_id,
             direction: "download",
             source: &remote_path,
             destination: &local_path.display().to_string(),
             total: metadata.len(),
+            cancellation,
         },
         &mut source_file,
         &mut destination_file,
     )
-    .await?;
+    .await;
+    state.transfers.finish(&task_id);
+    result?;
     destination_file.flush().await?;
     Ok(task_id)
 }
@@ -276,13 +287,24 @@ pub async fn open_remote_file(
     Ok(local_path)
 }
 
+#[tauri::command]
+pub fn cancel_file_transfer(state: State<'_, AppState>, task_id: String) -> AppResult<()> {
+    if state.transfers.cancel(&task_id) {
+        Ok(())
+    } else {
+        Err(AppError::Message("传输任务已结束或不存在".into()))
+    }
+}
+
 struct TransferContext<'a> {
     app: &'a AppHandle,
+    session_id: &'a str,
     task_id: &'a str,
     direction: &'a str,
     source: &'a str,
     destination: &'a str,
     total: u64,
+    cancellation: CancellationToken,
 }
 
 async fn transfer<R, W>(
@@ -297,38 +319,47 @@ where
     let mut buffer = vec![0_u8; 64 * 1024];
     let mut transferred = 0_u64;
     loop {
-        let read = reader.read(&mut buffer).await?;
+        let read = tokio::select! {
+            _ = context.cancellation.cancelled() => {
+                emit_transfer(&context, transferred, "canceled");
+                return Err(AppError::Message("文件传输已取消".into()));
+            }
+            result = reader.read(&mut buffer) => match result {
+                Ok(read) => read,
+                Err(error) => {
+                    emit_transfer(&context, transferred, "error");
+                    return Err(error.into());
+                }
+            }
+        };
         if read == 0 {
             break;
         }
-        writer.write_all(&buffer[..read]).await?;
+        if let Err(error) = writer.write_all(&buffer[..read]).await {
+            emit_transfer(&context, transferred, "error");
+            return Err(error.into());
+        }
         transferred = transferred.saturating_add(read as u64);
-        let _ = context.app.emit(
-            "transfer-progress",
-            TransferProgressEvent {
-                task_id: context.task_id.to_owned(),
-                direction: context.direction.to_owned(),
-                source: context.source.to_owned(),
-                destination: context.destination.to_owned(),
-                transferred,
-                total: context.total,
-                state: "running".into(),
-            },
-        );
+        emit_transfer(&context, transferred, "running");
     }
+    emit_transfer(&context, transferred, "completed");
+    Ok(())
+}
+
+fn emit_transfer(context: &TransferContext<'_>, transferred: u64, state: &str) {
     let _ = context.app.emit(
         "transfer-progress",
         TransferProgressEvent {
+            session_id: context.session_id.to_owned(),
             task_id: context.task_id.to_owned(),
             direction: context.direction.to_owned(),
             source: context.source.to_owned(),
             destination: context.destination.to_owned(),
             transferred,
             total: context.total,
-            state: "completed".into(),
+            state: state.into(),
         },
     );
-    Ok(())
 }
 
 fn shell_quote(value: &str) -> String {

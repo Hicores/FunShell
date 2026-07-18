@@ -3,7 +3,9 @@ use crate::{
     paths::AppPaths,
     persistence::Database,
     security::VaultService,
-    services::{geoip::GeoIpService, ssh::SessionManager, tunnel::TunnelManager},
+    services::{
+        geoip::GeoIpService, ssh::SessionManager, transfer::TransferManager, tunnel::TunnelManager,
+    },
     settings::SettingsService,
 };
 
@@ -15,6 +17,7 @@ pub struct AppState {
     pub geoip: GeoIpService,
     pub sessions: SessionManager,
     pub tunnels: TunnelManager,
+    pub transfers: TransferManager,
 }
 
 impl AppState {
@@ -25,6 +28,7 @@ impl AppState {
         let geoip = GeoIpService::new(database.clone(), settings.clone())?;
         let sessions = SessionManager::new();
         let tunnels = TunnelManager::new();
+        let transfers = TransferManager::new();
         Ok(Self {
             paths,
             database,
@@ -33,6 +37,7 @@ impl AppState {
             geoip,
             sessions,
             tunnels,
+            transfers,
         })
     }
 }
