@@ -135,6 +135,10 @@ function mockCall(command: string, args?: Record<string, unknown>): unknown {
       ].join("\n"),
     };
     case "list_remote_files": return mockRemoteFiles;
+    case "read_remote_text": {
+      const path = String(args?.path ?? "");
+      return { path, content: `# FunShell demo editor\n# ${path}\n`, size: path.length };
+    }
     case "list_command_history": return mockHistory;
     case "list_transfer_history": return [...mockTransferHistory];
     case "mark_transfer_history_viewed": {

@@ -41,6 +41,23 @@ describe("FileManager", () => {
     expect(screen.getByRole("button", { name: "文本编辑" })).toBeInTheDocument();
   });
 
+  it("opens a remote file in the text editor on double click", async () => {
+    const readText = vi.spyOn(api, "readRemoteText").mockResolvedValue({
+      path: "/root/deploy.sh",
+      content: "#!/bin/sh\necho deploy\n",
+      size: 23,
+    });
+    const openRemote = vi.spyOn(api, "openRemoteFile");
+    render(<FileManager tab={tab} />);
+
+    fireEvent.doubleClick(await screen.findByText("deploy.sh"));
+
+    await waitFor(() => expect(readText).toHaveBeenCalledWith("session-1", "/root/deploy.sh"));
+    expect(openRemote).not.toHaveBeenCalled();
+    expect(screen.getByRole("dialog", { name: "远程编辑 - /root/deploy.sh" })).toBeInTheDocument();
+    expect(screen.getByRole("textbox")).toHaveValue("#!/bin/sh\necho deploy\n");
+  });
+
   it("shows directory commands on empty space and creates an empty remote file", async () => {
     const createFile = vi.spyOn(api, "createRemoteFile").mockResolvedValue(undefined);
     const { container } = render(<FileManager tab={tab} />);

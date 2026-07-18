@@ -1,5 +1,4 @@
 import { open, save } from "@tauri-apps/plugin-dialog";
-import { openPath } from "@tauri-apps/plugin-opener";
 import { Download, File, Folder, FolderPlus, Home, RefreshCw, Trash2, Upload } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ContextMenu } from "../../components/common/ContextMenu";
@@ -45,11 +44,7 @@ export function FileManager({ tab }: { tab: WorkspaceTab }) {
 
   const openEntry = async (file: RemoteFileEntry) => {
     if (file.kind === "directory") { setPath(file.path); setSelected(null); return; }
-    if (!isTauri()) return notify(`演示模式：打开 ${file.path}`);
-    try {
-      const localPath = await api.openRemoteFile(tab.sessionId, file.path);
-      await openPath(localPath);
-    } catch (error) { notify(String(error)); }
+    await editEntry(file);
   };
 
   const editEntry = async (file: RemoteFileEntry) => {
