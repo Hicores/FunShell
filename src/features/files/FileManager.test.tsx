@@ -1,6 +1,7 @@
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { api } from "../../lib/ipc";
+import { mockRemoteFiles } from "../../lib/mock";
 import { useAppStore } from "../../stores/appStore";
 import type { WorkspaceTab } from "../../types";
 import { FileManager } from "./FileManager";
@@ -54,8 +55,9 @@ describe("FileManager", () => {
 
     await waitFor(() => expect(readText).toHaveBeenCalledWith("session-1", "/root/deploy.sh"));
     expect(openRemote).not.toHaveBeenCalled();
-    expect(screen.getByRole("dialog", { name: "远程编辑 - /root/deploy.sh" })).toBeInTheDocument();
-    expect(screen.getByRole("textbox")).toHaveValue("#!/bin/sh\necho deploy\n");
+    const editor = screen.getByRole("dialog", { name: "远程编辑 - /root/deploy.sh" });
+    expect(editor).toBeInTheDocument();
+    expect(within(editor).getByRole("textbox")).toHaveValue("#!/bin/sh\necho deploy\n");
   });
 
   it("shows directory commands on empty space and creates an empty remote file", async () => {
@@ -73,6 +75,35 @@ describe("FileManager", () => {
     fireEvent.change(screen.getByLabelText("文件名称"), { target: { value: "healthcheck.txt" } });
     fireEvent.click(screen.getByRole("button", { name: "创建" }));
     await waitFor(() => expect(createFile).toHaveBeenCalledWith(tab.sessionId, "/root/healthcheck.txt"));
+  });
+
+  it("creates entries in the directory selected from the tree context menu", async () => {
+    const createDirectory = vi.spyOn(api, "createRemoteDirectory").mockResolvedValue(undefined);
+    render(<FileManager tab={tab} />);
+    await screen.findByText("deploy.sh");
+
+    fireEvent.contextMenu(screen.getByRole("button", { name: "etc" }), { clientX: 120, clientY: 180 });
+    const menu = screen.getByRole("menu");
+    expect(within(menu).getByRole("button", { name: "新建文件" })).toBeInTheDocument();
+    fireEvent.click(within(menu).getByRole("button", { name: "新建文件夹" }));
+
+    expect(screen.getByLabelText("目标目录")).toHaveValue("/etc");
+    fireEvent.change(screen.getByLabelText("文件夹名称"), { target: { value: "funshell.d" } });
+    fireEvent.click(screen.getByRole("button", { name: "创建" }));
+    await waitFor(() => expect(createDirectory).toHaveBeenCalledWith(tab.sessionId, "/etc/funshell.d"));
+  });
+
+  it("opens an absolute remote path entered in the address field", async () => {
+    const listFiles = vi.spyOn(api, "remoteFiles").mockImplementation(async (_sessionId, remotePath) => remotePath === "/srv/apps" ? [] : mockRemoteFiles);
+    render(<FileManager tab={tab} />);
+    await screen.findByText("deploy.sh");
+
+    const address = screen.getByRole("textbox", { name: "当前目录" });
+    fireEvent.change(address, { target: { value: "/srv/apps" } });
+    fireEvent.keyDown(address, { key: "Enter" });
+
+    await waitFor(() => expect(listFiles).toHaveBeenCalledWith(tab.sessionId, "/srv/apps"));
+    expect(address).toHaveValue("/srv/apps");
   });
 
   it("uploads dropped local paths from the file list", async () => {

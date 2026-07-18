@@ -1,6 +1,6 @@
 import { open, save } from "@tauri-apps/plugin-dialog";
-import { Download, File, Folder, FolderPlus, Home, RefreshCw, Trash2, Upload } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { ArrowRight, Download, File, Folder, FolderPlus, RefreshCw, Trash2, Upload } from "lucide-react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { ContextMenu } from "../../components/common/ContextMenu";
 import { IconButton } from "../../components/common/IconButton";
 import { Modal } from "../../components/common/Modal";
@@ -20,17 +20,31 @@ function parentRemote(path: string) {
   return parent || "/";
 }
 
+function normalizeRemoteDirectory(value: string) {
+  const trimmed = value.trim();
+  if (!trimmed.startsWith("/")) return null;
+  const segments: string[] = [];
+  for (const segment of trimmed.split("/")) {
+    if (!segment || segment === ".") continue;
+    if (segment === "..") segments.pop();
+    else segments.push(segment);
+  }
+  return `/${segments.join("/")}`;
+}
+
 export function FileManager({ tab }: { tab: WorkspaceTab }) {
   const notify = useAppStore((state) => state.notify);
   const active = useAppStore((state) => state.activeTabId === tab.id);
   const [path, setPath] = useState("/root");
+  const [pathInput, setPathInput] = useState("/root");
   const [files, setFiles] = useState<RemoteFileEntry[]>([]);
   const [selected, setSelected] = useState<RemoteFileEntry | null>(null);
   const [loading, setLoading] = useState(false);
   const [editor, setEditor] = useState<{ path: string; content: string } | null>(null);
-  const [context, setContext] = useState<{ x: number; y: number; file: RemoteFileEntry | null } | null>(null);
-  const [createDialog, setCreateDialog] = useState<{ kind: "file" | "directory"; name: string } | null>(null);
+  const [context, setContext] = useState<{ x: number; y: number; file: RemoteFileEntry | null; targetPath: string } | null>(null);
+  const [createDialog, setCreateDialog] = useState<{ kind: "file" | "directory"; name: string; parentPath: string } | null>(null);
   const dropTargetRef = useRef<HTMLDivElement>(null);
+  const skipNextRefreshPathRef = useRef<string | null>(null);
 
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -39,11 +53,51 @@ export function FileManager({ tab }: { tab: WorkspaceTab }) {
     finally { setLoading(false); }
   }, [notify, path, tab.sessionId]);
 
-  useEffect(() => { void refresh(); }, [refresh]);
-  const breadcrumbs = useMemo(() => path.split("/").filter(Boolean), [path]);
+  useEffect(() => {
+    if (skipNextRefreshPathRef.current === path) {
+      skipNextRefreshPathRef.current = null;
+      return;
+    }
+    void refresh();
+  }, [path, refresh]);
+  useEffect(() => { setPathInput(path); }, [path]);
+
+  const navigateToPath = (targetPath: string) => {
+    setPath(targetPath);
+    setPathInput(targetPath);
+    setSelected(null);
+  };
+
+  const openTypedPath = async () => {
+    const targetPath = normalizeRemoteDirectory(pathInput);
+    if (!targetPath) {
+      notify("请输入以 / 开头的远程绝对路径");
+      setPathInput(path);
+      return;
+    }
+    if (targetPath === path) {
+      setPathInput(path);
+      await refresh();
+      return;
+    }
+    setLoading(true);
+    try {
+      const nextFiles = await api.remoteFiles(tab.sessionId, targetPath);
+      skipNextRefreshPathRef.current = targetPath;
+      setFiles(nextFiles);
+      setPath(targetPath);
+      setPathInput(targetPath);
+      setSelected(null);
+    } catch (error) {
+      setPathInput(path);
+      notify(String(error));
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const openEntry = async (file: RemoteFileEntry) => {
-    if (file.kind === "directory") { setPath(file.path); setSelected(null); return; }
+    if (file.kind === "directory") { navigateToPath(file.path); return; }
     await editEntry(file);
   };
 
@@ -54,20 +108,20 @@ export function FileManager({ tab }: { tab: WorkspaceTab }) {
     } catch (error) { notify(String(error)); }
   };
 
-  const uploadPaths = useCallback(async (localPaths: string[]) => {
+  const uploadPaths = useCallback(async (localPaths: string[], destinationPath = path) => {
     if (!localPaths.length) return;
     for (const localPath of localPaths) {
       const name = localPath.replaceAll("\\", "/").split("/").at(-1) ?? "upload.bin";
-      try { await api.uploadRemoteFile(tab.sessionId, localPath, joinRemote(path, name)); }
+      try { await api.uploadRemoteFile(tab.sessionId, localPath, joinRemote(destinationPath, name)); }
       catch (error) { notify(`上传 ${name} 失败: ${String(error)}`); }
     }
-    await refresh();
+    if (destinationPath === path) await refresh();
   }, [notify, path, refresh, tab.sessionId]);
 
-  const uploadFiles = async () => {
+  const uploadFiles = async (destinationPath = path) => {
     if (!isTauri()) return notify("桌面程序中可选择本地文件上传");
     const picked = await open({ multiple: true, directory: false });
-    await uploadPaths(Array.isArray(picked) ? picked : picked ? [picked] : []);
+    await uploadPaths(Array.isArray(picked) ? picked : picked ? [picked] : [], destinationPath);
   };
 
   const { dropActive, dropHandlers } = useFileDrop(
@@ -84,19 +138,21 @@ export function FileManager({ tab }: { tab: WorkspaceTab }) {
     if (localPath) await api.downloadRemoteFile(tab.sessionId, file.path, localPath);
   };
 
-  const openCreateDialog = (kind: "file" | "directory") => setCreateDialog({ kind, name: "" });
+  const openCreateDialog = (kind: "file" | "directory", parentPath = path) => setCreateDialog({ kind, name: "", parentPath });
 
   const createEntry = async () => {
     if (!createDialog) return;
     const name = createDialog.name.trim();
     if (!name || name.includes("/") || name === "." || name === "..") return notify("名称无效");
-    if (files.some((file) => file.name === name)) return notify("当前目录已存在同名项目");
+    if (createDialog.parentPath === path && files.some((file) => file.name === name)) return notify("当前目录已存在同名项目");
     try {
-      const remotePath = joinRemote(path, name);
+      const parentPath = createDialog.parentPath;
+      const remotePath = joinRemote(parentPath, name);
       if (createDialog.kind === "file") await api.createRemoteFile(tab.sessionId, remotePath);
       else await api.createRemoteDirectory(tab.sessionId, remotePath);
       setCreateDialog(null);
-      await refresh();
+      if (parentPath === path) await refresh();
+      else navigateToPath(parentPath);
     } catch (error) { notify(String(error)); }
   };
 
@@ -122,31 +178,28 @@ export function FileManager({ tab }: { tab: WorkspaceTab }) {
 
   return (
     <div className="file-manager">
-      <div className="file-tree">
-        <div className="tree-title"><Folder size={15} /> /</div>
+      <div className="file-tree" onContextMenu={(event) => { event.preventDefault(); setContext({ x: event.clientX, y: event.clientY, file: null, targetPath: path }); }}>
+        <div className="tree-title" onContextMenu={(event) => { event.preventDefault(); event.stopPropagation(); setContext({ x: event.clientX, y: event.clientY, file: null, targetPath: "/" }); }}><Folder size={15} /> /</div>
         {["root", "etc", "home", "opt", "tmp", "var", "usr"].map((name) => (
-          <button key={name} className={path === `/${name}` ? "active" : ""} type="button" onClick={() => setPath(`/${name}`)}><Folder size={14} />{name}</button>
+          <button key={name} className={path === `/${name}` ? "active" : ""} type="button" onClick={() => navigateToPath(`/${name}`)} onContextMenu={(event) => { event.preventDefault(); event.stopPropagation(); setContext({ x: event.clientX, y: event.clientY, file: null, targetPath: `/${name}` }); }}><Folder size={14} />{name}</button>
         ))}
       </div>
       <div className="file-browser">
         <div className="file-toolbar">
-          <div className="breadcrumbs">
-            <button type="button" onClick={() => setPath("/")}><Home size={14} /></button>
-            {breadcrumbs.map((part, index) => <button key={`${part}-${index}`} type="button" onClick={() => setPath(`/${breadcrumbs.slice(0, index + 1).join("/")}`)}>{part}</button>)}
-          </div>
-          <IconButton label="上级目录" onClick={() => setPath(parentRemote(path))}><Folder size={16} /></IconButton>
+          <div className="file-path-input"><Folder size={14} /><input aria-label="当前目录" title="输入远程目录后按 Enter" value={pathInput} onChange={(event) => setPathInput(event.target.value)} onBlur={() => setPathInput(path)} onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); void openTypedPath(); } else if (event.key === "Escape") setPathInput(path); }} /><button type="button" aria-label="打开路径" title="打开路径" onMouseDown={(event) => event.preventDefault()} onClick={() => void openTypedPath()}><ArrowRight size={14} /></button></div>
+          <IconButton label="上级目录" onClick={() => navigateToPath(parentRemote(path))}><Folder size={16} /></IconButton>
           <IconButton label="刷新" onClick={() => void refresh()}><RefreshCw size={16} className={loading ? "spin" : ""} /></IconButton>
           <IconButton label="新建文件夹" onClick={() => openCreateDialog("directory")}><FolderPlus size={16} /></IconButton>
           <IconButton label="上传" onClick={() => void uploadFiles()}><Upload size={16} /></IconButton>
           <IconButton label="下载" disabled={!selected} onClick={() => selected && void downloadFile(selected)}><Download size={16} /></IconButton>
           <IconButton label="删除" disabled={!selected} onClick={() => selected && void remove(selected)}><Trash2 size={16} /></IconButton>
         </div>
-        <div ref={dropTargetRef} className={`file-table-wrap ${dropActive ? "drop-active" : ""}`} {...dropHandlers} onContextMenu={(event) => { event.preventDefault(); setSelected(null); setContext({ x: event.clientX, y: event.clientY, file: null }); }}>
+        <div ref={dropTargetRef} className={`file-table-wrap ${dropActive ? "drop-active" : ""}`} {...dropHandlers} onContextMenu={(event) => { event.preventDefault(); setSelected(null); setContext({ x: event.clientX, y: event.clientY, file: null, targetPath: path }); }}>
           <table className="data-table file-table">
             <thead><tr><th>文件名</th><th>大小</th><th>类型</th><th>修改时间</th><th>权限</th><th>用户/用户组</th></tr></thead>
             <tbody>
               {files.map((file) => (
-                <tr key={file.path} className={selected?.path === file.path ? "selected" : ""} onClick={() => setSelected(file)} onDoubleClick={() => void openEntry(file)} onContextMenu={(event) => { event.preventDefault(); event.stopPropagation(); setSelected(file); setContext({ x: event.clientX, y: event.clientY, file }); }}>
+                <tr key={file.path} className={selected?.path === file.path ? "selected" : ""} onClick={() => setSelected(file)} onDoubleClick={() => void openEntry(file)} onContextMenu={(event) => { event.preventDefault(); event.stopPropagation(); setSelected(file); setContext({ x: event.clientX, y: event.clientY, file, targetPath: path }); }}>
                   <td><span className={`file-icon ${file.kind}`}>{file.kind === "directory" ? <Folder size={16} /> : <File size={16} />}</span>{file.name}</td>
                   <td>{file.kind === "directory" ? "" : formatBytes(file.size)}</td><td>{file.kind === "directory" ? "文件夹" : file.kind === "symlink" ? "链接" : "文件"}</td>
                   <td>{file.modified ? new Date(file.modified * 1000).toLocaleString() : "-"}</td><td>{formatMode(file.permissions)}</td><td>{file.user ?? "-"}/{file.group ?? "-"}</td>
@@ -171,15 +224,15 @@ export function FileManager({ tab }: { tab: WorkspaceTab }) {
             <button type="button" className="danger" onClick={() => void remove(context.file!)}>删除</button>
             <button type="button" onClick={() => void chmod(context.file!)}>文件权限...</button>
           </> : <>
-            <button type="button" onClick={() => void refresh()}>刷新</button>
-            <button type="button" onClick={() => openCreateDialog("file")}>新建文件</button>
-            <button type="button" onClick={() => openCreateDialog("directory")}>新建文件夹</button>
-            <button type="button" onClick={() => void uploadFiles()}>上传文件</button>
+            <button type="button" onClick={() => { if (context.targetPath === path) void refresh(); else navigateToPath(context.targetPath); }}>刷新</button>
+            <button type="button" onClick={() => openCreateDialog("file", context.targetPath)}>新建文件</button>
+            <button type="button" onClick={() => openCreateDialog("directory", context.targetPath)}>新建文件夹</button>
+            <button type="button" onClick={() => void uploadFiles(context.targetPath)}>上传文件</button>
           </>}
         </ContextMenu>
       )}
       <Modal open={createDialog != null} title={createDialog?.kind === "file" ? "新建文件" : "新建文件夹"} width={430} onClose={() => setCreateDialog(null)} footer={<><button type="button" onClick={() => setCreateDialog(null)}>取消</button><button className="primary-button" type="button" disabled={!createDialog?.name.trim()} onClick={() => void createEntry()}>创建</button></>}>
-        <div className="form-grid"><label className="wide">{createDialog?.kind === "file" ? "文件名称" : "文件夹名称"}<input autoFocus value={createDialog?.name ?? ""} onChange={(event) => setCreateDialog((current) => current ? { ...current, name: event.target.value } : null)} onKeyDown={(event) => { if (event.key === "Enter") void createEntry(); }} /></label></div>
+        <div className="form-grid"><label className="wide">目标目录<input value={createDialog?.parentPath ?? ""} readOnly /></label><label className="wide">{createDialog?.kind === "file" ? "文件名称" : "文件夹名称"}<input autoFocus value={createDialog?.name ?? ""} onChange={(event) => setCreateDialog((current) => current ? { ...current, name: event.target.value } : null)} onKeyDown={(event) => { if (event.key === "Enter") void createEntry(); }} /></label></div>
       </Modal>
       <Modal open={editor != null} title={`远程编辑 - ${editor?.path ?? ""}`} width={900} onClose={() => setEditor(null)} footer={<><button type="button" onClick={() => setEditor(null)}>取消</button><button className="primary-button" type="button" onClick={async () => { if (!editor) return; await api.writeRemoteText(tab.sessionId, editor.path, editor.content); setEditor(null); notify("文件已保存"); }}>保存</button></>}>
         <textarea className="remote-editor" value={editor?.content ?? ""} onChange={(event) => setEditor((current) => current ? { ...current, content: event.target.value } : null)} spellCheck={false} />
