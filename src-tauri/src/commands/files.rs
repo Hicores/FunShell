@@ -34,6 +34,7 @@ pub async fn list_remote_files(
 ) -> AppResult<Vec<RemoteFileEntry>> {
     let sftp = state.sessions.sftp(&session_id).await?;
     let entries = map_sftp(sftp.read_dir(path).await)?;
+    let owner_maps = load_owner_maps(&sftp).await;
     let mut output = entries
         .map(|entry| {
             let metadata = entry.metadata();
@@ -72,7 +73,7 @@ pub async fn list_remote_files(
             )
         })
         .collect::<Vec<_>>();
-    for (index, (user, group)) in resolve_owner_names(&state, &session_id, &identities)
+    for (index, (user, group)) in resolve_owner_names(&state, &session_id, &identities, &owner_maps)
         .await
         .into_iter()
         .enumerate()
@@ -94,11 +95,47 @@ pub async fn list_remote_files(
 }
 
 type OwnerIdentity = (Option<String>, Option<String>, Option<u32>, Option<u32>);
+type OwnerMaps = (HashMap<u32, String>, HashMap<u32, String>);
+
+async fn load_owner_maps(sftp: &russh_sftp::client::SftpSession) -> OwnerMaps {
+    let users = read_owner_map(sftp, "/etc/passwd", 2).await;
+    let groups = read_owner_map(sftp, "/etc/group", 2).await;
+    (users, groups)
+}
+
+async fn read_owner_map(
+    sftp: &russh_sftp::client::SftpSession,
+    path: &str,
+    id_field: usize,
+) -> HashMap<u32, String> {
+    let Ok(bytes) = sftp.read(path.to_owned()).await else {
+        return HashMap::new();
+    };
+    let Ok(content) = String::from_utf8(bytes) else {
+        return HashMap::new();
+    };
+    parse_owner_map(&content, id_field)
+}
+
+fn parse_owner_map(content: &str, id_field: usize) -> HashMap<u32, String> {
+    content
+        .lines()
+        .filter_map(|line| {
+            let fields = line.split(':').collect::<Vec<_>>();
+            if fields.len() <= id_field || fields[0].is_empty() || fields[0].starts_with('#') {
+                return None;
+            }
+            let id = fields[id_field].parse::<u32>().ok()?;
+            Some((id, fields[0].to_owned()))
+        })
+        .collect()
+}
 
 async fn resolve_owner_names(
     state: &AppState,
     session_id: &str,
     identities: &[OwnerIdentity],
+    owner_maps: &OwnerMaps,
 ) -> Vec<(Option<String>, Option<String>)> {
     let mut resolved = Vec::with_capacity(identities.len());
     let mut user_cache = HashMap::<u32, Option<String>>::new();
@@ -110,6 +147,7 @@ async fn resolve_owner_names(
             user.as_deref(),
             *user_id,
             "passwd",
+            &owner_maps.0,
             &mut user_cache,
         )
         .await;
@@ -119,6 +157,7 @@ async fn resolve_owner_names(
             group.as_deref(),
             *group_id,
             "group",
+            &owner_maps.1,
             &mut group_cache,
         )
         .await;
@@ -133,6 +172,7 @@ async fn resolve_owner_value(
     value: Option<&str>,
     id: Option<u32>,
     database: &str,
+    owner_map: &HashMap<u32, String>,
     cache: &mut HashMap<u32, Option<String>>,
 ) -> Option<String> {
     let value = value.filter(|value| !value.is_empty() && *value != "?");
@@ -140,11 +180,21 @@ async fn resolve_owner_value(
         if value.parse::<u32>().is_err() {
             return Some(value.to_owned());
         }
-        return Some(resolve_numeric_name(state, session_id, database, value, cache).await);
+        return Some(
+            resolve_numeric_name(state, session_id, database, value, owner_map, cache).await,
+        );
     }
     if let Some(id) = id {
         return Some(
-            resolve_numeric_name(state, session_id, database, &id.to_string(), cache).await,
+            resolve_numeric_name(
+                state,
+                session_id,
+                database,
+                &id.to_string(),
+                owner_map,
+                cache,
+            )
+            .await,
         );
     }
     None
@@ -155,11 +205,19 @@ async fn resolve_numeric_name(
     session_id: &str,
     database: &str,
     value: &str,
+    owner_map: &HashMap<u32, String>,
     cache: &mut HashMap<u32, Option<String>>,
 ) -> String {
     let Ok(id) = value.parse::<u32>() else {
         return value.to_owned();
     };
+    if let Some(name) = cache.get(&id) {
+        return name.clone().unwrap_or_else(|| value.to_owned());
+    }
+    if let Some(name) = owner_map.get(&id) {
+        cache.insert(id, Some(name.clone()));
+        return name.clone();
+    }
     if let Entry::Vacant(entry) = cache.entry(id) {
         let database_file = match database {
             "passwd" => "/etc/passwd",
@@ -626,7 +684,9 @@ fn chown_command(owner: &str, group: &str, path: &str) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::{DOWNLOAD_CHUNK_SIZE, chown_command, download_ranges, shell_quote};
+    use super::{
+        DOWNLOAD_CHUNK_SIZE, chown_command, download_ranges, parse_owner_map, shell_quote,
+    };
 
     #[test]
     fn quotes_posix_paths() {
@@ -653,5 +713,18 @@ mod tests {
                 (DOWNLOAD_CHUNK_SIZE * 2, 17),
             ]
         );
+    }
+
+    #[test]
+    fn parses_passwd_and_group_owner_maps() {
+        let users = parse_owner_map(
+            "root:x:0:0:root:/root:/bin/sh\nworker:x:1000:1000::/home/worker:/bin/sh\n",
+            2,
+        );
+        let groups = parse_owner_map("root:x:0:\nworkers:x:1000:worker\n", 2);
+        assert_eq!(users.get(&0).map(String::as_str), Some("root"));
+        assert_eq!(users.get(&1000).map(String::as_str), Some("worker"));
+        assert_eq!(groups.get(&0).map(String::as_str), Some("root"));
+        assert_eq!(groups.get(&1000).map(String::as_str), Some("workers"));
     }
 }
