@@ -108,11 +108,29 @@ describe("FileManager", () => {
     fireEvent.doubleClick(await screen.findByText("deploy.sh"));
     const loadingDialog = await screen.findByRole("dialog", { name: "正在打开 - /root/deploy.sh" });
     expect(loadingDialog).toBeInTheDocument();
-    expect(screen.getByRole("status")).toHaveTextContent("正在读取远程文本...");
+    expect(screen.getByRole("status")).toHaveTextContent("正在读取 deploy.sh...");
     expect(within(loadingDialog).queryByRole("textbox")).not.toBeInTheDocument();
 
     resolveRead?.({ path: "/root/deploy.sh", content: "echo deploy\n", size: 12 });
     expect(await screen.findByRole("dialog", { name: "远程编辑 - /root/deploy.sh" })).toBeInTheDocument();
+  });
+
+  it("keeps multiple remote files open in independent editor panes", async () => {
+    const readText = vi.spyOn(api, "readRemoteText").mockImplementation(async (_sessionId, path) => ({ path, content: path, size: path.length }));
+    render(<FileManager tab={tab} />);
+
+    fireEvent.doubleClick(await screen.findByText("deploy.sh"));
+    const firstEditor = await screen.findByRole("dialog", { name: "远程编辑 - /root/deploy.sh" });
+    fireEvent.click(within(firstEditor).getByRole("button", { name: "打开文件" }));
+    const picker = await screen.findByRole("dialog", { name: "打开远程文件" });
+    fireEvent.click(within(picker).getByRole("button", { name: /^\.bash_history/ }));
+
+    const workspace = await screen.findByRole("dialog", { name: "远程编辑 (2 个文件)" });
+    await waitFor(() => expect(readText).toHaveBeenCalledWith(tab.sessionId, "/root/.bash_history"));
+    const editors = within(workspace).getAllByRole("textbox");
+    expect(editors).toHaveLength(2);
+    fireEvent.change(editors[0], { target: { value: "changed" } });
+    expect(editors[1]).toHaveValue("/root/.bash_history");
   });
 
   it("shows directory commands on empty space and creates an empty remote file", async () => {

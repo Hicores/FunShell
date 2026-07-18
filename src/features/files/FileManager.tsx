@@ -1,5 +1,5 @@
 import { open, save } from "@tauri-apps/plugin-dialog";
-import { ArrowRight, Download, File, Folder, FolderPlus, Link2, RefreshCw, Trash2, Upload } from "lucide-react";
+import { ArrowRight, Download, File, Folder, FolderPlus, Link2, Plus, RefreshCw, Save, Trash2, Upload, X } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ContextMenu } from "../../components/common/ContextMenu";
 import { IconButton } from "../../components/common/IconButton";
@@ -34,6 +34,16 @@ function normalizeRemoteDirectory(value: string) {
   return `/${segments.join("/")}`;
 }
 
+interface EditorDocument {
+  path: string;
+  content: string;
+  dirty: boolean;
+}
+
+function remoteFileName(path: string) {
+  return path.split("/").at(-1) || path;
+}
+
 export function FileManager({ tab }: { tab: WorkspaceTab }) {
   const notify = useAppStore((state) => state.notify);
   const active = useAppStore((state) => state.activeTabId === tab.id);
@@ -44,8 +54,11 @@ export function FileManager({ tab }: { tab: WorkspaceTab }) {
   const [filesSessionId, setFilesSessionId] = useState<string | null>(null);
   const [selected, setSelected] = useState<RemoteFileEntry | null>(null);
   const [loading, setLoading] = useState(false);
-  const [editor, setEditor] = useState<{ path: string; content: string } | null>(null);
-  const [editorLoadingPath, setEditorLoadingPath] = useState<string | null>(null);
+  const [editorDocuments, setEditorDocuments] = useState<EditorDocument[]>([]);
+  const [activeEditorPath, setActiveEditorPath] = useState<string | null>(null);
+  const [editorLoadingPaths, setEditorLoadingPaths] = useState<string[]>([]);
+  const [editorOpen, setEditorOpen] = useState(false);
+  const [editorPickerOpen, setEditorPickerOpen] = useState(false);
   const [permissionFile, setPermissionFile] = useState<RemoteFileEntry | null>(null);
   const [savingPermissions, setSavingPermissions] = useState(false);
   const [context, setContext] = useState<{ x: number; y: number; file: RemoteFileEntry | null; targetPath: string } | null>(null);
@@ -53,7 +66,9 @@ export function FileManager({ tab }: { tab: WorkspaceTab }) {
   const dropTargetRef = useRef<HTMLDivElement>(null);
   const skipNextRefreshPathRef = useRef<string | null>(null);
   const fileRequestRef = useRef(0);
-  const editorRequestRef = useRef(0);
+  const editorRequestRef = useRef(new Map<string, number>());
+  const editorRequestSequenceRef = useRef(0);
+  const editor = editorDocuments.find((document) => document.path === activeEditorPath) ?? editorDocuments[0] ?? null;
 
   const refresh = useCallback(async () => {
     const requestId = ++fileRequestRef.current;
@@ -130,25 +145,81 @@ export function FileManager({ tab }: { tab: WorkspaceTab }) {
   };
 
   const editEntry = async (file: RemoteFileEntry) => {
-    if (editorLoadingPath) return;
-    const requestId = ++editorRequestRef.current;
+    if (editorDocuments.some((document) => document.path === file.path)) {
+      setActiveEditorPath(file.path);
+      setEditorOpen(true);
+      setContext(null);
+      return;
+    }
+    if (editorLoadingPaths.includes(file.path)) return;
+    const requestId = ++editorRequestSequenceRef.current;
+    editorRequestRef.current.set(file.path, requestId);
     setContext(null);
-    setEditor(null);
-    setEditorLoadingPath(file.path);
+    setEditorOpen(true);
+    setEditorLoadingPaths((current) => current.includes(file.path) ? current : [...current, file.path]);
     try {
       const value = await api.readRemoteText(tab.sessionId, file.path);
-      if (editorRequestRef.current !== requestId) return;
-      setEditor({ path: file.path, content: value.content });
+      if (editorRequestRef.current.get(file.path) !== requestId) return;
+      setEditorDocuments((current) => current.some((document) => document.path === file.path)
+        ? current
+        : [...current, { path: file.path, content: value.content, dirty: false }]);
+      setActiveEditorPath(file.path);
     } catch (error) {
-      if (editorRequestRef.current === requestId) notify(String(error));
+      if (editorRequestRef.current.get(file.path) === requestId) notify(String(error));
     } finally {
-      if (editorRequestRef.current === requestId) setEditorLoadingPath(null);
+      if (editorRequestRef.current.get(file.path) === requestId) {
+        editorRequestRef.current.delete(file.path);
+        setEditorLoadingPaths((current) => current.filter((path) => path !== file.path));
+      }
     }
   };
 
-  const cancelEditorLoading = () => {
-    editorRequestRef.current += 1;
-    setEditorLoadingPath(null);
+  const cancelEditorLoading = (targetPath?: string) => {
+    if (targetPath) {
+      editorRequestRef.current.delete(targetPath);
+      setEditorLoadingPaths((current) => current.filter((path) => path !== targetPath));
+      return;
+    }
+    editorRequestRef.current.clear();
+    setEditorLoadingPaths([]);
+  };
+
+  const closeEditorDocument = (targetPath: string) => {
+    const document = editorDocuments.find((item) => item.path === targetPath);
+    if (document?.dirty && !window.confirm(`文件 ${remoteFileName(targetPath)} 有未保存修改，确认关闭？`)) return;
+    const remaining = editorDocuments.filter((item) => item.path !== targetPath);
+    setEditorDocuments(remaining);
+    if (activeEditorPath === targetPath) setActiveEditorPath(remaining[0]?.path ?? null);
+    if (!remaining.length && !editorLoadingPaths.length) setEditorOpen(false);
+  };
+
+  const updateEditorContent = (targetPath: string, content: string) => {
+    setEditorDocuments((current) => current.map((document) => document.path === targetPath ? { ...document, content, dirty: true } : document));
+  };
+
+  const saveEditorDocument = async (targetPath: string) => {
+    const document = editorDocuments.find((item) => item.path === targetPath);
+    if (!document) return;
+    try {
+      await api.writeRemoteText(tab.sessionId, document.path, document.content);
+      setEditorDocuments((current) => current.map((item) => item.path === targetPath ? { ...item, dirty: false } : item));
+      notify(`文件 ${remoteFileName(targetPath)} 已保存`);
+    } catch (error) {
+      notify(String(error));
+    }
+  };
+
+  const saveAllEditors = async () => {
+    for (const document of editorDocuments.filter((item) => item.dirty)) {
+      await saveEditorDocument(document.path);
+    }
+  };
+
+  const closeEditorWorkspace = () => {
+    if (editorDocuments.some((document) => document.dirty) && !window.confirm("存在未保存的文件，确认关闭编辑工作区？")) return;
+    cancelEditorLoading();
+    setEditorPickerOpen(false);
+    setEditorOpen(false);
   };
 
   const uploadPaths = useCallback(async (localPaths: string[], destinationPath = path) => {
@@ -296,13 +367,59 @@ export function FileManager({ tab }: { tab: WorkspaceTab }) {
         <div className="form-grid"><label className="wide">目标目录<input value={createDialog?.parentPath ?? ""} readOnly /></label><label className="wide">{createDialog?.kind === "file" ? "文件名称" : "文件夹名称"}<input autoFocus value={createDialog?.name ?? ""} onChange={(event) => setCreateDialog((current) => current ? { ...current, name: event.target.value } : null)} onKeyDown={(event) => { if (event.key === "Enter") void createEntry(); }} /></label></div>
       </Modal>
       <Modal
-        open={editor != null || editorLoadingPath != null}
-        title={editor ? `远程编辑 - ${editor.path}` : `正在打开 - ${editorLoadingPath ?? ""}`}
-        width={900}
-        onClose={editor ? () => setEditor(null) : cancelEditorLoading}
-        footer={editor ? <><button type="button" onClick={() => setEditor(null)}>取消</button><button className="primary-button" type="button" onClick={async () => { if (!editor) return; await api.writeRemoteText(tab.sessionId, editor.path, editor.content); setEditor(null); notify("文件已保存"); }}>保存</button></> : <button type="button" onClick={cancelEditorLoading}>取消</button>}
+        open={editorOpen && (editorDocuments.length > 0 || editorLoadingPaths.length > 0)}
+        title={editorDocuments.length > 1 ? `远程编辑 (${editorDocuments.length} 个文件)` : editor ? `远程编辑 - ${editor.path}` : `正在打开 - ${editorLoadingPaths[0] ?? ""}`}
+        width={editorDocuments.length > 1 ? 1120 : 900}
+        onClose={closeEditorWorkspace}
+        footer={<><button type="button" onClick={closeEditorWorkspace}>关闭</button><button className="primary-button" type="button" disabled={!editorDocuments.some((document) => document.dirty)} onClick={() => void saveAllEditors()}>全部保存</button></>}
       >
-        {editor ? <textarea className="remote-editor" value={editor.content} onChange={(event) => setEditor((current) => current ? { ...current, content: event.target.value } : null)} spellCheck={false} /> : <div className="editor-loading" role="status"><RefreshCw size={20} className="spin" /><span>正在读取远程文本...</span></div>}
+        <div className="editor-workspace">
+          <header className="editor-toolbar">
+            <div className="editor-document-tabs">
+              {editorDocuments.map((document) => (
+                <div key={document.path} className={`editor-document-tab ${document.path === editor?.path ? "active" : ""}`}>
+                  <button type="button" onClick={() => setActiveEditorPath(document.path)} title={document.path}>{remoteFileName(document.path)}{document.dirty ? " *" : ""}</button>
+                  <IconButton label={`关闭 ${remoteFileName(document.path)}`} onClick={() => closeEditorDocument(document.path)}><X size={13} /></IconButton>
+                </div>
+              ))}
+              {editorLoadingPaths.map((targetPath) => (
+                <div key={targetPath} className="editor-document-tab loading">
+                  <span><RefreshCw size={12} className="spin" />{remoteFileName(targetPath)}</span>
+                  <IconButton label={`取消读取 ${remoteFileName(targetPath)}`} onClick={() => cancelEditorLoading(targetPath)}><X size={13} /></IconButton>
+                </div>
+              ))}
+            </div>
+            <button type="button" className="editor-open-button" onClick={() => setEditorPickerOpen(true)}><Plus size={14} />打开文件</button>
+          </header>
+          <div className="editor-document-grid">
+            {editorDocuments.map((document) => (
+              <article key={document.path} className={`editor-document ${document.path === editor?.path ? "active" : ""}`}>
+                <header className="editor-document-header">
+                  <div><strong>{remoteFileName(document.path)}{document.dirty ? " *" : ""}</strong><span title={document.path}>{document.path}</span></div>
+                  <div className="editor-document-actions">
+                    <IconButton label={`保存 ${remoteFileName(document.path)}`} disabled={!document.dirty} onClick={() => void saveEditorDocument(document.path)}><Save size={14} /></IconButton>
+                    <IconButton label={`关闭 ${remoteFileName(document.path)}`} onClick={() => closeEditorDocument(document.path)}><X size={14} /></IconButton>
+                  </div>
+                </header>
+                <textarea className="remote-editor" value={document.content} onFocus={() => setActiveEditorPath(document.path)} onChange={(event) => updateEditorContent(document.path, event.target.value)} spellCheck={false} />
+              </article>
+            ))}
+            {editorLoadingPaths.map((targetPath) => (
+              <article key={`loading-${targetPath}`} className="editor-document loading">
+                <div className="editor-loading" role="status"><RefreshCw size={20} className="spin" /><span>正在读取 {remoteFileName(targetPath)}...</span></div>
+              </article>
+            ))}
+          </div>
+        </div>
+      </Modal>
+      <Modal open={editorPickerOpen} title="打开远程文件" width={520} onClose={() => setEditorPickerOpen(false)} footer={<button type="button" onClick={() => setEditorPickerOpen(false)}>取消</button>}>
+        <div className="editor-file-picker">
+          <span className="editor-file-picker-path">当前目录：{path}</span>
+          {visibleFiles.filter((file) => file.kind === "file").map((file) => (
+            <button key={file.path} type="button" onClick={() => { setEditorPickerOpen(false); void editEntry(file); }}><File size={14} /><span><strong>{file.name}</strong><small>{file.path}</small></span></button>
+          ))}
+          {!visibleFiles.some((file) => file.kind === "file") && <div className="empty-state">当前目录没有可编辑文件</div>}
+        </div>
       </Modal>
       <PermissionDialog file={permissionFile} saving={savingPermissions} onClose={() => setPermissionFile(null)} onSave={(mode, owner, group) => void savePermissions(mode, owner, group)} />
     </div>

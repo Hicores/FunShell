@@ -30,8 +30,35 @@
 .file-entry-label { display: grid; min-width: 0; gap: 1px; padding: 3px 0; }
 .file-entry-label > span, .file-entry-label > small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .file-entry-label > small { color: #64808e; font: 10px "Cascadia Mono", Consolas, monospace; }
-.remote-editor { width: 100%; height: min(60vh, 560px); resize: none; border: 1px solid #acbbc4; padding: 10px; outline: 0; background: #132c3d; color: #eef5f7; font: 13px/1.5 "Cascadia Mono", Consolas, monospace; tab-size: 4; }
-.editor-loading { display: flex; width: 100%; height: min(60vh, 560px); align-items: center; justify-content: center; gap: 10px; color: #607681; }
+.editor-workspace { display: grid; min-height: 0; gap: 8px; }
+.editor-toolbar { display: flex; min-width: 0; align-items: center; gap: 8px; border-bottom: 1px solid #c5d0d6; padding-bottom: 6px; }
+.editor-document-tabs { display: flex; min-width: 0; flex: 1; gap: 3px; overflow-x: auto; }
+.editor-document-tab { display: flex; min-width: 0; align-items: center; border: 1px solid #c4ced4; background: #edf2f4; }
+.editor-document-tab.active { border-color: #5b9fc2; background: #dceef7; color: #176d9b; }
+.editor-document-tab.loading { color: #607681; }
+.editor-document-tab > button:first-child, .editor-document-tab > span { display: flex; min-width: 0; height: 28px; align-items: center; gap: 5px; overflow: hidden; border: 0; padding: 0 7px; background: transparent; color: inherit; font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
+.editor-document-tab .icon-button { width: 24px; height: 26px; flex: 0 0 24px; }
+.editor-open-button { display: inline-flex; height: 28px; flex: 0 0 auto; align-items: center; gap: 5px; border: 1px solid #b6c4cb; padding: 0 8px; background: white; color: #2c718f; }
+.editor-document-grid { display: grid; min-height: 0; grid-template-columns: repeat(auto-fit, minmax(min(400px, 100%), 1fr)); gap: 8px; overflow: auto; }
+.editor-document { display: grid; min-width: 0; grid-template-rows: 35px minmax(250px, 1fr); border: 1px solid #b6c4cb; background: #eef2f3; }
+.editor-document.active { border-color: #5b9fc2; box-shadow: inset 0 0 0 1px #5b9fc233; }
+.editor-document-header { display: flex; min-width: 0; align-items: center; gap: 8px; border-bottom: 1px solid #c6d0d5; padding: 0 4px 0 9px; background: #f7f9fa; }
+.editor-document-header > div:first-child { display: grid; min-width: 0; flex: 1; gap: 1px; }
+.editor-document-header strong, .editor-document-header span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.editor-document-header strong { color: #2c5368; font-size: 12px; }
+.editor-document-header span { color: #71828c; font: 10px "Cascadia Mono", Consolas, monospace; }
+.editor-document-actions { display: flex; flex: 0 0 auto; }
+.editor-document-actions .icon-button { width: 27px; height: 27px; }
+.remote-editor { width: 100%; height: min(60vh, 560px); min-height: 250px; resize: none; border: 0; padding: 10px; outline: 0; background: #132c3d; color: #eef5f7; font: 13px/1.5 "Cascadia Mono", Consolas, monospace; tab-size: 4; }
+.editor-document.loading { grid-template-rows: 1fr; }
+.editor-loading { display: flex; width: 100%; min-height: 250px; align-items: center; justify-content: center; gap: 10px; color: #607681; }
+.editor-file-picker { display: grid; gap: 5px; }
+.editor-file-picker-path { overflow: hidden; color: #607681; font: 11px "Cascadia Mono", Consolas, monospace; text-overflow: ellipsis; white-space: nowrap; }
+.editor-file-picker > button { display: flex; min-width: 0; align-items: center; gap: 8px; border: 1px solid #d2dce0; padding: 7px 9px; background: white; color: #2a5265; text-align: left; }
+.editor-file-picker > button:hover { border-color: #69a7c3; background: #edf7fb; }
+.editor-file-picker > button > span { display: grid; min-width: 0; gap: 2px; }
+.editor-file-picker > button strong, .editor-file-picker > button small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.editor-file-picker > button small { color: #738791; font: 10px "Cascadia Mono", Consolas, monospace; }
 .permission-dialog { display: grid; gap: 10px; }
 .permission-target { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 3px 12px; padding: 1px 3px 5px; }
 .permission-target strong { overflow: hidden; font-size: 14px; text-overflow: ellipsis; white-space: nowrap; }
