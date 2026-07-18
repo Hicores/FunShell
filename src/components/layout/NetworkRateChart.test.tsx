@@ -14,6 +14,7 @@ describe("NetworkRateChart", () => {
     const transmitBars = container.querySelectorAll<SVGRectElement>(".transmit-bar");
     expect(receiveBars).toHaveLength(2);
     expect(transmitBars).toHaveLength(2);
+    expect(Number(receiveBars[0].getAttribute("x")) + Number(receiveBars[0].getAttribute("width"))).toBeCloseTo(Number(receiveBars[1].getAttribute("x")));
     expect(Number(receiveBars[1].getAttribute("height"))).toBeGreaterThan(Number(transmitBars[1].getAttribute("height")));
     expect(screen.queryByText("正在采样...")).not.toBeInTheDocument();
   });

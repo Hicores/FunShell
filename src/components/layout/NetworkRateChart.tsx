@@ -31,7 +31,7 @@ function barGeometry(samples: NetworkRateSample[], field: "receiveBps" | "transm
   const bottom = 62;
   const width = 320 - left - right;
   const step = width / NETWORK_RATE_HISTORY_LIMIT;
-  const wideBar = Math.max(1.5, step * 0.72);
+  const wideBar = step;
   const barWidth = field === "receiveBps" ? wideBar : Math.max(1, wideBar * 0.34);
   return samples.map((sample, index) => {
     const slotX = left + width - (samples.length - index) * step;
