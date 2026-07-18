@@ -81,6 +81,10 @@ legend { padding: 0 6px; color: #2b566d; font-weight: 600; }
 .connection-editor > aside button.active { background: #e1f0f7; color: #176d9b; }
 .connection-editor > section { padding: 16px; }
 .connection-editor .host-field { grid-column: 1 / 2; }
+.key-picker-field { display: grid; grid-template-columns: minmax(0, 1fr) 108px; align-items: end; gap: 8px; }
+.key-picker-field label { display: grid; gap: 5px; color: #394d59; font-size: 12px; }
+.key-picker-field button { display: inline-flex; height: 31px; align-items: center; justify-content: center; gap: 6px; border: 1px solid #aebdc6; border-radius: 2px; background: #f8fafb; color: #2c607b; }
+.key-picker-field button:hover { border-color: #6ea2bd; background: #eaf5fa; }
 
 .key-toolbar { display: flex; gap: 7px; padding-bottom: 9px; }
 .key-table th:nth-child(1) { width: 170px; }
@@ -117,4 +121,5 @@ legend { padding: 0 6px; color: #2b566d; font-weight: 600; }
   .connection-manager-body { grid-template-columns: 150px 1fr; }
   .form-grid { grid-template-columns: 1fr; }
   .form-grid > *, .host-field { grid-column: 1 !important; }
+  .key-picker-field { grid-template-columns: 1fr; }
 }

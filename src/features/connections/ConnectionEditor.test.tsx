@@ -19,6 +19,7 @@ describe("ConnectionEditor", () => {
         createdAt: new Date().toISOString(),
       }],
       routes: [],
+      keyManagerOpen: false,
     });
 
     render(<ConnectionEditor />);
@@ -31,5 +32,9 @@ describe("ConnectionEditor", () => {
     fireEvent.change(screen.getByLabelText("方法"), { target: { value: "public_key" } });
     expect(screen.getByLabelText("私钥")).toHaveValue("");
     expect(screen.getByRole("option", { name: "部署密钥 (ssh-ed25519)" })).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText("名称"), { target: { value: "保留中的连接名称" } });
+    fireEvent.click(screen.getByRole("button", { name: "密钥管理" }));
+    expect(useAppStore.getState().keyManagerOpen).toBe(true);
+    expect(screen.getByLabelText("名称")).toHaveValue("保留中的连接名称");
   });
 });
