@@ -71,5 +71,9 @@ pub async fn execute_command(
     session_id: String,
     command: String,
 ) -> AppResult<ExecResult> {
+    if !command.trim().is_empty() {
+        let profile = state.sessions.profile(&session_id)?;
+        state.database.add_history(Some(&profile.id), &command)?;
+    }
     state.sessions.execute(&session_id, &command).await
 }

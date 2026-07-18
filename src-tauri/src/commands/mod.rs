@@ -2,7 +2,9 @@ use serde::Serialize;
 
 pub mod connections;
 pub mod files;
+pub mod history;
 pub mod keys;
+pub mod monitor;
 pub mod paths;
 pub mod session;
 pub mod vault;

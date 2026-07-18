@@ -1,3 +1,4 @@
+mod commands;
 mod connections;
 mod database;
 mod keys;
