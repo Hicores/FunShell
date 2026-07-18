@@ -67,6 +67,7 @@ pub fn run() {
             commands::files::list_remote_files,
             commands::files::read_remote_text,
             commands::files::write_remote_text,
+            commands::files::create_remote_file,
             commands::files::create_remote_directory,
             commands::files::rename_remote_path,
             commands::files::delete_remote_path,

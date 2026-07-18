@@ -9,8 +9,9 @@ import { KeyManager } from "../features/connections/KeyManager";
 import { SettingsDialog } from "../features/settings/SettingsDialog";
 import { useAppStore } from "../stores/appStore";
 import { onEvent } from "../lib/ipc";
-import type { SessionStatusEvent } from "../types";
+import type { SessionStatusEvent, TransferProgressEvent } from "../types";
 import { useDesktopGuards } from "./useDesktopGuards";
+import { useTransferStore } from "../features/files/transferStore";
 import "../styles/layout.css";
 import "../styles/controls.css";
 import "../styles/views.css";
@@ -23,6 +24,7 @@ export function App() {
   const toast = useAppStore((state) => state.toast);
   const notify = useAppStore((state) => state.notify);
   const reconnect = useAppStore((state) => state.reconnect);
+  const recordTransfer = useTransferStore((state) => state.record);
 
   useEffect(() => {
     void initialize();
@@ -62,6 +64,12 @@ export function App() {
       timers.forEach(window.clearTimeout);
     };
   }, [notify, reconnect]);
+
+  useEffect(() => {
+    let dispose: (() => void) | undefined;
+    void onEvent<TransferProgressEvent>("transfer-progress", (event) => recordTransfer(event.payload)).then((unlisten) => { dispose = unlisten; });
+    return () => dispose?.();
+  }, [recordTransfer]);
 
   if (!initialized) {
     return (

@@ -111,6 +111,25 @@ pub async fn write_remote_text(
 }
 
 #[tauri::command]
+pub async fn create_remote_file(
+    state: State<'_, AppState>,
+    session_id: String,
+    path: String,
+) -> AppResult<()> {
+    let sftp = state.sessions.sftp(&session_id).await?;
+    let mut file = map_sftp(
+        sftp.open_with_flags(
+            path,
+            OpenFlags::CREATE | OpenFlags::EXCLUDE | OpenFlags::WRITE,
+        )
+        .await,
+    )?;
+    file.shutdown()
+        .await
+        .map_err(|error| AppError::Sftp(error.to_string()))
+}
+
+#[tauri::command]
 pub async fn create_remote_directory(
     state: State<'_, AppState>,
     session_id: String,

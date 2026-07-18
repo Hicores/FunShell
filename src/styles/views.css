@@ -5,12 +5,14 @@
 .file-tree button { border: 0; padding-left: 20px; background: transparent; text-align: left; }
 .file-tree button:hover, .file-tree button.active { background: #dceef7; color: #176d9b; }
 .file-tree svg, .file-icon.directory { color: #e2ac3e; }
-.file-browser { display: grid; min-width: 0; min-height: 0; grid-template-rows: 34px minmax(0, 1fr) auto; }
+.file-browser { display: grid; position: relative; min-width: 0; min-height: 0; grid-template-rows: 34px minmax(0, 1fr); }
 .file-toolbar { display: flex; align-items: center; border-bottom: 1px solid #c7d0d6; background: #f7f8f9; }
 .breadcrumbs { display: flex; min-width: 0; flex: 1; align-items: center; overflow: hidden; padding-left: 6px; }
 .breadcrumbs button { display: inline-flex; height: 27px; align-items: center; border: 0; padding: 0 6px; background: transparent; color: #476474; }
 .breadcrumbs button + button::before { content: "/"; margin-right: 7px; color: #9aa6ad; }
-.file-table-wrap { min-height: 0; overflow: auto; }
+.file-table-wrap { position: relative; min-height: 0; overflow: auto; }
+.file-table-wrap.drop-active { box-shadow: inset 0 0 0 2px #2c91c5; }
+.file-drop-overlay { display: flex; position: absolute; inset: 29px 0 0; align-items: center; justify-content: center; gap: 8px; border: 2px dashed #2c91c5; background: #eef8fbd9; color: #176f9d; pointer-events: none; z-index: 3; }
 .file-table th:nth-child(1) { width: 28%; }
 .file-table th:nth-child(2) { width: 90px; }
 .file-table th:nth-child(3) { width: 95px; }
@@ -19,10 +21,20 @@
 .file-table td:first-child { display: flex; align-items: center; gap: 6px; }
 .file-icon { display: inline-grid; width: 18px; place-items: center; color: #667984; }
 .remote-editor { width: 100%; height: min(60vh, 560px); resize: none; border: 1px solid #acbbc4; padding: 10px; outline: 0; background: #132c3d; color: #eef5f7; font: 13px/1.5 "Cascadia Mono", Consolas, monospace; tab-size: 4; }
-.transfer-queue { max-height: 92px; overflow: auto; border-top: 1px solid #bac6cd; background: #f5f8f9; }
-.transfer-task { display: grid; height: 30px; grid-template-columns: 46px minmax(100px, 1fr) minmax(100px, 220px) 125px 28px; align-items: center; gap: 7px; padding: 0 7px; border-bottom: 1px solid #dce3e7; font-size: 11px; }
-.transfer-task strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.transfer-task progress { width: 100%; height: 8px; accent-color: #2c95c5; }
+.transfer-toggle { position: relative; }
+.transfer-toggle > span { display: grid; position: absolute; top: 1px; right: 1px; min-width: 13px; height: 13px; place-items: center; border-radius: 7px; padding: 0 3px; background: #d45454; color: white; font-size: 9px; line-height: 1; }
+.transfer-panel { display: grid; position: absolute; top: 38px; right: 6px; width: min(680px, calc(100% - 12px)); height: min(280px, calc(100% - 44px)); min-height: 120px; grid-template-rows: 36px minmax(0, 1fr); border: 1px solid #9fadb6; background: white; box-shadow: 0 7px 22px #17354442; z-index: 6; }
+.transfer-panel > header { display: flex; align-items: center; gap: 4px; border-bottom: 1px solid #c3cdd3; padding: 0 4px 0 9px; background: #f2f5f7; }
+.transfer-panel > header > div { display: flex; min-width: 0; flex: 1; align-items: baseline; gap: 10px; }
+.transfer-panel > header strong { font-size: 12px; }
+.transfer-panel > header span { overflow: hidden; color: #6b7d87; font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
+.transfer-list { min-height: 0; overflow: auto; }
+.transfer-task { display: grid; min-height: 44px; grid-template-columns: 54px minmax(120px, 1fr) minmax(105px, 165px) 55px 26px; align-items: center; gap: 7px; padding: 3px 6px; border-bottom: 1px solid #dce3e7; font-size: 11px; }
+.transfer-direction { display: flex; align-items: center; gap: 4px; color: #2a779f; }
+.transfer-file, .transfer-progress { display: grid; min-width: 0; gap: 2px; }
+.transfer-file strong, .transfer-file span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.transfer-file span, .transfer-progress span { color: #74858e; font-size: 10px; }
+.transfer-progress progress { width: 100%; height: 8px; accent-color: #2c95c5; }
 .transfer-task em { color: #657984; font-style: normal; text-align: right; }
 .transfer-task.completed { color: #24744c; }
 .transfer-task.error, .transfer-task.canceled { color: #a04444; }

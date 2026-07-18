@@ -200,6 +200,7 @@ export const api = {
   remoteFiles: (sessionId: string, path: string) => call<RemoteFileEntry[]>("list_remote_files", { sessionId, path }),
   readRemoteText: (sessionId: string, path: string) => call<{ path: string; content: string; size: number }>("read_remote_text", { sessionId, path }),
   writeRemoteText: (sessionId: string, path: string, content: string) => call<void>("write_remote_text", { sessionId, path, content }),
+  createRemoteFile: (sessionId: string, path: string) => call<void>("create_remote_file", { sessionId, path }),
   createRemoteDirectory: (sessionId: string, path: string) => call<void>("create_remote_directory", { sessionId, path }),
   renameRemotePath: (sessionId: string, from: string, to: string) => call<void>("rename_remote_path", { sessionId, from, to }),
   deleteRemotePath: (sessionId: string, path: string, directory: boolean, recursive = false) => call<void>("delete_remote_path", { sessionId, path, directory, recursive }),
