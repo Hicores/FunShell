@@ -13,6 +13,45 @@ use tracing_subscriber::EnvFilter;
 
 use crate::{paths::AppPaths, state::AppState};
 
+#[cfg(target_os = "windows")]
+fn force_windows_foreground<R: Runtime>(window: &tauri::WebviewWindow<R>) {
+    use windows_sys::Win32::{
+        System::Threading::{AttachThreadInput, GetCurrentThreadId},
+        UI::WindowsAndMessaging::{
+            BringWindowToTop, GetForegroundWindow, GetWindowThreadProcessId, SW_RESTORE,
+            SetForegroundWindow, ShowWindow,
+        },
+    };
+
+    let Ok(hwnd) = window.hwnd() else {
+        tracing::warn!("failed to obtain the main window handle");
+        return;
+    };
+    let hwnd = hwnd.0 as windows_sys::Win32::Foundation::HWND;
+
+    // Joining the foreground input queue lets a second-launch notification activate the
+    // existing process even when Windows foreground-lock rules reject a plain set_focus().
+    unsafe {
+        let current_thread = GetCurrentThreadId();
+        let foreground_thread =
+            GetWindowThreadProcessId(GetForegroundWindow(), std::ptr::null_mut());
+        let attached = foreground_thread != 0
+            && foreground_thread != current_thread
+            && AttachThreadInput(current_thread, foreground_thread, true.into()) != 0;
+
+        ShowWindow(hwnd, SW_RESTORE);
+        BringWindowToTop(hwnd);
+        let activated = SetForegroundWindow(hwnd) != 0;
+
+        if attached {
+            AttachThreadInput(current_thread, foreground_thread, false.into());
+        }
+        if !activated {
+            tracing::warn!("Windows rejected foreground activation for the main window");
+        }
+    }
+}
+
 fn activate_main_window<R: Runtime>(app: &AppHandle<R>) {
     let Some(window) = app.get_webview_window("main") else {
         tracing::warn!("main window was not available for single-instance activation");
@@ -27,6 +66,8 @@ fn activate_main_window<R: Runtime>(app: &AppHandle<R>) {
     if let Err(error) = window.set_focus() {
         tracing::warn!(%error, "failed to focus the main window");
     }
+    #[cfg(target_os = "windows")]
+    force_windows_foreground(&window);
 }
 
 pub fn run() {
