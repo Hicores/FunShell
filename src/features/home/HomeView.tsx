@@ -7,16 +7,12 @@ export function HomeView() {
   const folders = useAppStore((state) => state.folders);
   const connect = useAppStore((state) => state.connect);
   const openManager = useAppStore((state) => state.openConnectionManager);
+  const collapsedFolderIds = useAppStore((state) => state.quickConnectionCollapsedFolderIds);
+  const setFolderCollapsed = useAppStore((state) => state.setQuickConnectionFolderCollapsed);
   const [query, setQuery] = useState("");
-  const [collapsedFolders, setCollapsedFolders] = useState<Set<string>>(() => new Set());
   const filtered = useMemo(() => connections.filter((item) => `${item.name} ${item.host} ${item.username}`.toLowerCase().includes(query.toLowerCase())), [connections, query]);
   const searchActive = Boolean(query.trim());
-  const toggleFolder = (id: string) => setCollapsedFolders((current) => {
-    const next = new Set(current);
-    if (next.has(id)) next.delete(id);
-    else next.add(id);
-    return next;
-  });
+  const collapsedFolders = useMemo(() => new Set(collapsedFolderIds), [collapsedFolderIds]);
 
   return (
     <section className="home-view">
@@ -33,7 +29,7 @@ export function HomeView() {
             const expanded = searchActive || !collapsedFolders.has(folder.id);
             return (
               <div key={folder.id} className="quick-group">
-                <button className="quick-group-title" type="button" aria-expanded={expanded} aria-label={`${folder.name}，${children.length} 个连接`} onClick={() => toggleFolder(folder.id)}>
+                <button className="quick-group-title" type="button" aria-expanded={expanded} aria-label={`${folder.name}，${children.length} 个连接`} onClick={() => void setFolderCollapsed(folder.id, !collapsedFolders.has(folder.id))}>
                   {expanded ? <ChevronDown className="folder-chevron" size={14} /> : <ChevronRight className="folder-chevron" size={14} />}
                   <Folder size={15} /><strong>{folder.name}</strong><span>{children.length}</span>
                 </button>

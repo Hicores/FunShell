@@ -13,6 +13,16 @@ pub fn save_settings(state: State<'_, AppState>, settings: AppSettings) -> AppRe
 }
 
 #[tauri::command]
+pub fn save_quick_connection_collapsed_folders(
+    state: State<'_, AppState>,
+    folder_ids: Vec<String>,
+) -> AppResult<AppSettings> {
+    state
+        .settings
+        .save_quick_connection_collapsed_folders(folder_ids)
+}
+
+#[tauri::command]
 pub async fn lookup_geo_ip(state: State<'_, AppState>, ip: String) -> AppResult<GeoIpInfo> {
     state.geoip.lookup(&ip).await
 }

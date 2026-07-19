@@ -48,6 +48,7 @@ let mockSettings: AppSettings = {
   confirmCloseActiveSessions: true,
   terminalFontFamily: '"Cascadia Mono", Consolas, "Microsoft YaHei UI", monospace',
   terminalFontSize: 13,
+  quickConnectionCollapsedFolderIds: [],
 };
 let mockSessionSequence = 0;
 let mockSocketTick = 0;
@@ -98,6 +99,13 @@ function mockCall(command: string, args?: Record<string, unknown>): unknown {
     case "get_settings": return { ...mockSettings };
     case "save_settings": {
       mockSettings = { ...(args?.settings as AppSettings) };
+      return { ...mockSettings };
+    }
+    case "save_quick_connection_collapsed_folders": {
+      mockSettings = {
+        ...mockSettings,
+        quickConnectionCollapsedFolderIds: [...(args?.folderIds as string[])],
+      };
       return { ...mockSettings };
     }
     case "lookup_geo_ip": {
@@ -251,6 +259,7 @@ export async function onEvent<T>(name: string, callback: EventCallback<T>): Prom
 export const api = {
   getSettings: () => call<AppSettings>("get_settings"),
   saveSettings: (settings: AppSettings) => call<AppSettings>("save_settings", { settings }),
+  saveQuickConnectionCollapsedFolders: (folderIds: string[]) => call<AppSettings>("save_quick_connection_collapsed_folders", { folderIds }),
   geoIp: (ip: string) => call<GeoIpInfo>("lookup_geo_ip", { ip }),
   listConnections: (includeDeleted = false) => call<ConnectionProfile[]>("list_connections", { includeDeleted }),
   saveConnection: (input: SaveConnectionInput) => call<ConnectionProfile>("save_connection", { input }),

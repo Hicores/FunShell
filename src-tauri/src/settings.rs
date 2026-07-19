@@ -13,6 +13,7 @@ pub struct AppSettings {
     pub confirm_close_active_sessions: bool,
     pub terminal_font_family: String,
     pub terminal_font_size: u16,
+    pub quick_connection_collapsed_folder_ids: Vec<String>,
 }
 
 impl Default for AppSettings {
@@ -24,6 +25,7 @@ impl Default for AppSettings {
             terminal_font_family: "\"Cascadia Mono\", Consolas, \"Microsoft YaHei UI\", monospace"
                 .into(),
             terminal_font_size: 13,
+            quick_connection_collapsed_folder_ids: Vec::new(),
         }
     }
 }
@@ -60,12 +62,32 @@ impl SettingsService {
 
     pub fn save(&self, value: AppSettings) -> AppResult<AppSettings> {
         validate(&value)?;
-        let encoded = serde_json::to_vec_pretty(&value)?;
+        let mut current = self.value.write();
+        self.write(&value)?;
+        *current = value.clone();
+        Ok(value)
+    }
+
+    pub fn save_quick_connection_collapsed_folders(
+        &self,
+        mut folder_ids: Vec<String>,
+    ) -> AppResult<AppSettings> {
+        folder_ids.sort_unstable();
+        folder_ids.dedup();
+        let mut current = self.value.write();
+        let mut next = current.clone();
+        next.quick_connection_collapsed_folder_ids = folder_ids;
+        validate(&next)?;
+        self.write(&next)?;
+        *current = next.clone();
+        Ok(next)
+    }
+
+    fn write(&self, value: &AppSettings) -> AppResult<()> {
+        let encoded = serde_json::to_vec_pretty(value)?;
         fs::write(&self.path, encoded).map_err(|error| {
             AppError::Message(format!("设置文件不可写 {}: {error}", self.path.display()))
-        })?;
-        *self.value.write() = value.clone();
-        Ok(value)
+        })
     }
 }
 
@@ -92,11 +114,23 @@ fn validate(value: &AppSettings) -> AppResult<()> {
             "终端字体大小必须在 9 到 32 之间".into(),
         ));
     }
+    if value.quick_connection_collapsed_folder_ids.len() > 10_000
+        || value
+            .quick_connection_collapsed_folder_ids
+            .iter()
+            .any(|id| id.is_empty() || id.len() > 200 || id.chars().any(char::is_control))
+    {
+        return Err(AppError::Validation(
+            "快速连接目录折叠状态包含无效目录标识".into(),
+        ));
+    }
     Ok(())
 }
 
 #[cfg(test)]
 mod tests {
+    use std::fs;
+
     use tempfile::tempdir;
 
     use super::{AppSettings, SettingsService};
@@ -114,6 +148,51 @@ mod tests {
                 .expect("reload")
                 .get()
                 .geoip_enabled
+        );
+    }
+
+    #[test]
+    fn persists_quick_connection_folder_state_without_overwriting_other_settings() {
+        let directory = tempdir().expect("tempdir");
+        let path = directory.path().join("settings.json");
+        let settings = SettingsService::load(path.clone()).expect("load");
+        let mut value = settings.get();
+        value.geoip_enabled = false;
+        settings.save(value).expect("save");
+
+        let saved = settings
+            .save_quick_connection_collapsed_folders(vec![
+                "folder-b".into(),
+                "folder-a".into(),
+                "folder-b".into(),
+            ])
+            .expect("save folder state");
+
+        assert!(!saved.geoip_enabled);
+        assert_eq!(
+            saved.quick_connection_collapsed_folder_ids,
+            ["folder-a", "folder-b"]
+        );
+        let reloaded = SettingsService::load(path).expect("reload").get();
+        assert_eq!(
+            reloaded.quick_connection_collapsed_folder_ids,
+            ["folder-a", "folder-b"]
+        );
+    }
+
+    #[test]
+    fn defaults_missing_quick_connection_folder_state_for_existing_settings() {
+        let directory = tempdir().expect("tempdir");
+        let path = directory.path().join("settings.json");
+        fs::write(&path, "{}").expect("write legacy settings");
+
+        let settings = SettingsService::load(path).expect("load");
+
+        assert!(
+            settings
+                .get()
+                .quick_connection_collapsed_folder_ids
+                .is_empty()
         );
     }
 

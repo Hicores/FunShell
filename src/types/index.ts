@@ -272,6 +272,7 @@ export interface AppSettings {
   confirmCloseActiveSessions: boolean;
   terminalFontFamily: string;
   terminalFontSize: number;
+  quickConnectionCollapsedFolderIds: string[];
 }
 
 export interface GeoIpInfo {

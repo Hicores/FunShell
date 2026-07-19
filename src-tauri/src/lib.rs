@@ -36,6 +36,7 @@ pub fn run() {
             commands::paths::get_runtime_paths,
             commands::settings::get_settings,
             commands::settings::save_settings,
+            commands::settings::save_quick_connection_collapsed_folders,
             commands::settings::lookup_geo_ip,
             commands::connections::list_connections,
             commands::connections::save_connection,

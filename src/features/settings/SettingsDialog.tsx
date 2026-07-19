@@ -53,6 +53,7 @@ export function SettingsDialog() {
         ...appSettings,
         terminalFontFamily: current.terminalFontFamily,
         terminalFontSize: current.terminalFontSize,
+        quickConnectionCollapsedFolderIds: current.quickConnectionCollapsedFolderIds,
       }));
       notify("设置已保存");
     } catch (error) {

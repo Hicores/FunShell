@@ -1,10 +1,27 @@
 import { describe, expect, it, vi } from "vitest";
 import { api } from "../lib/ipc";
-import { mockConnections } from "../lib/mock";
+import { mockConnections, mockFolders } from "../lib/mock";
 import type { SessionDescriptor } from "../types";
 import { useAppStore } from "./appStore";
 
 describe("appStore tab lifecycle", () => {
+  it("hydrates the saved quick-connect folder state during startup", async () => {
+    const folderId = mockFolders[0].id;
+    vi.spyOn(api, "getSettings").mockResolvedValue({
+      geoipEnabled: true,
+      geoipProviderUrl: "https://ipwho.is/{ip}",
+      confirmCloseActiveSessions: true,
+      terminalFontFamily: "Consolas, monospace",
+      terminalFontSize: 13,
+      quickConnectionCollapsedFolderIds: [folderId],
+    });
+    useAppStore.setState({ initialized: false, quickConnectionCollapsedFolderIds: [] });
+
+    await useAppStore.getState().initialize();
+
+    expect(useAppStore.getState().quickConnectionCollapsedFolderIds).toEqual([folderId]);
+  });
+
   it("opens a connecting terminal tab before SSH finishes", async () => {
     useAppStore.setState({ connections: mockConnections, sessions: [], tabs: [], activeTabId: null, snapshots: {}, toast: null });
     let resolveConnect: ((session: SessionDescriptor) => void) | undefined;

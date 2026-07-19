@@ -1,12 +1,13 @@
-import { fireEvent, render, screen } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { describe, expect, it, vi } from "vitest";
+import { api } from "../../lib/ipc";
 import { mockConnections, mockFolders } from "../../lib/mock";
 import { useAppStore } from "../../stores/appStore";
 import { HomeView } from "./HomeView";
 
 describe("HomeView", () => {
   it("expands and collapses quick-connect folders while preserving state across search", () => {
-    useAppStore.setState({ connections: mockConnections, folders: mockFolders });
+    useAppStore.setState({ connections: mockConnections, folders: mockFolders, quickConnectionCollapsedFolderIds: [] });
     render(<HomeView />);
 
     const productionFolder = screen.getByRole("button", { name: /生产环境，2 个连接/ });
@@ -31,5 +32,31 @@ describe("HomeView", () => {
     fireEvent.click(screen.getByRole("button", { name: /生产环境，2 个连接/ }));
     expect(screen.getByText("模块-腾讯云Gateway")).toBeInTheDocument();
     expect(screen.getByText("模块-边缘网关")).toBeInTheDocument();
+  });
+
+  it("restores a collapsed folder and persists its next expanded state", async () => {
+    const folderId = mockFolders[0].id;
+    const saveState = vi.spyOn(api, "saveQuickConnectionCollapsedFolders").mockResolvedValue({
+      geoipEnabled: true,
+      geoipProviderUrl: "https://ipwho.is/{ip}",
+      confirmCloseActiveSessions: true,
+      terminalFontFamily: "Consolas, monospace",
+      terminalFontSize: 13,
+      quickConnectionCollapsedFolderIds: [],
+    });
+    useAppStore.setState({
+      connections: mockConnections,
+      folders: mockFolders,
+      quickConnectionCollapsedFolderIds: [folderId],
+    });
+    render(<HomeView />);
+
+    const productionFolder = screen.getByRole("button", { name: /生产环境，2 个连接/ });
+    expect(productionFolder).toHaveAttribute("aria-expanded", "false");
+
+    fireEvent.click(productionFolder);
+
+    expect(productionFolder).toHaveAttribute("aria-expanded", "true");
+    await waitFor(() => expect(saveState).toHaveBeenCalledWith([]));
   });
 });

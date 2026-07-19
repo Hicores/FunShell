@@ -27,6 +27,7 @@ interface AppStore {
   tabs: WorkspaceTab[];
   activeTabId: string | null;
   snapshots: Record<string, ServerSnapshot>;
+  quickConnectionCollapsedFolderIds: string[];
   connectionManagerOpen: boolean;
   connectionEditorOpen: boolean;
   keyManagerOpen: boolean;
@@ -43,6 +44,7 @@ interface AppStore {
   setActiveTab: (id: string) => void;
   openWorkspace: (kind: Exclude<WorkspaceKind, "terminal">) => void;
   setSnapshot: (sessionId: string, snapshot: ServerSnapshot) => void;
+  setQuickConnectionFolderCollapsed: (folderId: string, collapsed: boolean) => Promise<void>;
   openConnectionManager: (open: boolean) => void;
   editConnection: (connection?: ConnectionProfile, folderId?: string | null) => void;
   closeConnectionEditor: () => void;
@@ -80,6 +82,7 @@ export const useAppStore = create<AppStore>((set, get) => ({
   tabs: [],
   activeTabId: null,
   snapshots: {},
+  quickConnectionCollapsedFolderIds: [],
   connectionManagerOpen: false,
   connectionEditorOpen: false,
   keyManagerOpen: false,
@@ -93,10 +96,10 @@ export const useAppStore = create<AppStore>((set, get) => ({
     if (get().initialized) return;
     set({ busy: true });
     try {
-      const [connections, folders, keys, proxies, routes, tunnelProfiles] = await Promise.all([
-        api.listConnections(), api.listFolders(), api.listKeys(), api.listProxies(), api.listRoutes(), api.tunnelProfiles(),
+      const [connections, folders, keys, proxies, routes, tunnelProfiles, settings] = await Promise.all([
+        api.listConnections(), api.listFolders(), api.listKeys(), api.listProxies(), api.listRoutes(), api.tunnelProfiles(), api.getSettings(),
       ]);
-      set({ connections, folders, keys, proxies, routes, tunnelProfiles, initialized: true });
+      set({ connections, folders, keys, proxies, routes, tunnelProfiles, quickConnectionCollapsedFolderIds: settings.quickConnectionCollapsedFolderIds, initialized: true });
     } catch (error) {
       set({ toast: String(error), initialized: true });
     } finally {
@@ -254,6 +257,21 @@ export const useAppStore = create<AppStore>((set, get) => ({
   },
 
   setSnapshot: (sessionId, snapshot) => set((state) => ({ snapshots: { ...state.snapshots, [sessionId]: snapshot } })),
+  setQuickConnectionFolderCollapsed: async (folderId, collapsed) => {
+    let folderIds: string[] = [];
+    set((state) => {
+      const next = new Set(state.quickConnectionCollapsedFolderIds);
+      if (collapsed) next.add(folderId);
+      else next.delete(folderId);
+      folderIds = [...next];
+      return { quickConnectionCollapsedFolderIds: folderIds };
+    });
+    try {
+      await api.saveQuickConnectionCollapsedFolders(folderIds);
+    } catch (error) {
+      set({ toast: String(error) });
+    }
+  },
   openConnectionManager: (connectionManagerOpen) => set({ connectionManagerOpen }),
   editConnection: (editingConnection, folderId = null) => set({
     editingConnection: editingConnection ?? null,
