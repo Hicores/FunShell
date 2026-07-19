@@ -185,8 +185,8 @@ impl VaultService {
 }
 
 fn validate_master_password(password: &str) -> AppResult<()> {
-    if password.chars().count() < 10 {
-        return Err(AppError::Validation("主密码至少需要 10 个字符".into()));
+    if password.chars().count() < 9 {
+        return Err(AppError::Validation("主密码至少需要 9 个字符".into()));
     }
     Ok(())
 }
@@ -196,6 +196,14 @@ mod tests {
     use tempfile::tempdir;
 
     use crate::{domain::VaultMode, persistence::Database, security::VaultService};
+
+    use super::validate_master_password;
+
+    #[test]
+    fn requires_at_least_nine_master_password_characters() {
+        assert!(validate_master_password("123456789").is_ok());
+        assert!(validate_master_password("12345678").is_err());
+    }
 
     #[test]
     fn stores_dpapi_and_migrates_to_master_password() {

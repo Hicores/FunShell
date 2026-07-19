@@ -34,7 +34,7 @@ export function SettingsDialog() {
     if (!vault) return;
     try {
       if (vault.mode === "dpapi") {
-        const password = window.prompt("设置主密码（至少 10 个字符）");
+        const password = window.prompt("设置主密码（至少 9 个字符）");
         if (!password) return;
         await api.changeVaultMode("master_password", password);
       } else {
