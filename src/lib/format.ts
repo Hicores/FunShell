@@ -41,6 +41,5 @@ export function formatMode(mode: number | null, kind: PermissionFileKind = "file
 }
 
 export function formatIdentity(name: string | null | undefined, id: number | null | undefined) {
-  if (name && id != null) return `${name} (${id})`;
   return name ?? (id != null ? String(id) : "-");
 }

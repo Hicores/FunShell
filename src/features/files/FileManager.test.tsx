@@ -28,7 +28,8 @@ describe("FileManager", () => {
     const fileName = await screen.findByText("deploy.sh");
     fireEvent.click(fileName);
     expect(screen.getByRole("button", { name: "下载" })).toBeEnabled();
-    expect(screen.getAllByText("root (0)/root (0)").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("root/root").length).toBeGreaterThan(0);
+    expect(screen.queryByText("root (0)/root (0)")).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "删除" }));
     await waitFor(() => expect(remove).toHaveBeenCalledWith("session-1", "/root/deploy.sh", false, false));
