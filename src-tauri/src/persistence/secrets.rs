@@ -101,4 +101,19 @@ impl Database {
             Ok(())
         })
     }
+
+    pub fn set_vault_meta_batch(&self, values: &[(&str, &[u8])]) -> AppResult<()> {
+        self.with_connection_mut(|connection| {
+            let transaction = connection.transaction()?;
+            for (key, value) in values {
+                transaction.execute(
+                    "INSERT INTO vault_meta(key,value) VALUES(?1,?2)
+                     ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+                    params![key, value],
+                )?;
+            }
+            transaction.commit()?;
+            Ok(())
+        })
+    }
 }
