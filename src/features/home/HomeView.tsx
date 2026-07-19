@@ -34,7 +34,7 @@ export function HomeView() {
                   <Folder size={15} /><strong>{folder.name}</strong><span>{children.length}</span>
                 </button>
                 {expanded && children.map((connection) => (
-                  <button key={connection.id} type="button" onDoubleClick={() => void connect(connection)} onClick={() => undefined}>
+                  <button key={connection.id} type="button" onClick={() => void connect(connection)}>
                     <Server size={15} /><strong>{connection.name}</strong><span>{connection.host}</span><span>{connection.username}</span><ChevronRight size={14} />
                   </button>
                 ))}
@@ -42,7 +42,7 @@ export function HomeView() {
             );
           })}
           {filtered.filter((connection) => !connection.folderId).map((connection) => (
-            <button key={connection.id} type="button" onDoubleClick={() => void connect(connection)}>
+            <button key={connection.id} type="button" onClick={() => void connect(connection)}>
               <Server size={15} /><strong>{connection.name}</strong><span>{connection.host}</span><span>{connection.username}</span><ChevronRight size={14} />
             </button>
           ))}

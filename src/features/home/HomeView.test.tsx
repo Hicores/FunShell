@@ -59,4 +59,20 @@ describe("HomeView", () => {
     expect(productionFolder).toHaveAttribute("aria-expanded", "true");
     await waitFor(() => expect(saveState).toHaveBeenCalledWith([]));
   });
+
+  it("connects from a quick-connect item with one click", () => {
+    const connect = vi.fn().mockResolvedValue(undefined);
+    useAppStore.setState({
+      connections: mockConnections,
+      folders: mockFolders,
+      quickConnectionCollapsedFolderIds: [],
+      connect,
+    });
+    render(<HomeView />);
+
+    fireEvent.click(screen.getByText(mockConnections[0].name).closest("button")!);
+
+    expect(connect).toHaveBeenCalledOnce();
+    expect(connect).toHaveBeenCalledWith(mockConnections[0]);
+  });
 });
