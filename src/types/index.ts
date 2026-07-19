@@ -195,6 +195,16 @@ export interface RemoteFileEntry {
   groupId?: number | null;
 }
 
+export interface RemoteIdentity {
+  name: string;
+  id: number;
+}
+
+export interface RemoteIdentities {
+  users: RemoteIdentity[];
+  groups: RemoteIdentity[];
+}
+
 export interface CommandHistoryEntry {
   id: string;
   connectionId: string | null;

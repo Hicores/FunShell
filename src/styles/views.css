@@ -87,9 +87,14 @@
 .permission-ownership { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
 .permission-ownership label { display: grid; gap: 4px; color: #4c6270; font-size: 12px; }
 .permission-identity { display: flex; min-width: 0; align-items: center; gap: 5px; }
-.permission-ownership input { width: 100%; height: 29px; border: 1px solid #b8c5cc; padding: 0 7px; outline: 0; background: white; color: #263f4d; }
+.permission-ownership input { width: 100%; height: 29px; min-width: 0; flex: 1; border: 1px solid #b8c5cc; padding: 0 7px; outline: 0; background: white; color: #263f4d; }
 .permission-identity small { color: #6e808a; font: 11px "Cascadia Mono", Consolas, monospace; white-space: nowrap; }
 .permission-ownership input:focus { border-color: #5b9fc2; box-shadow: inset 0 0 0 1px #5b9fc233; }
+.permission-identity select { width: 105px; height: 29px; min-width: 0; border: 1px solid #b8c5cc; padding: 0 4px; background: white; color: #405b68; font-size: 11px; }
+.permission-identity select:focus { border-color: #5b9fc2; outline: 0; box-shadow: inset 0 0 0 1px #5b9fc233; }
+.permission-identity select:disabled { color: #87969e; background: #f3f6f7; }
+.permission-identities-error { display: flex; align-items: center; justify-content: space-between; gap: 10px; border: 1px solid #e4b8b8; padding: 6px 8px; background: #fff5f5; color: #9b4b4b; font-size: 11px; }
+.permission-identities-error button { border: 1px solid #c98d8d; padding: 3px 9px; background: white; color: #9b4b4b; }
 .permission-groups { display: grid; gap: 7px; }
 .permission-groups fieldset { margin: 0; padding: 6px 10px 9px; }
 .permission-groups legend { font-size: 12px; }

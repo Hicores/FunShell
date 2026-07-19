@@ -76,6 +76,20 @@ pub struct RemoteFileEntry {
     pub group_id: Option<u32>,
 }
 
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct RemoteIdentity {
+    pub name: String,
+    pub id: u32,
+}
+
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct RemoteIdentities {
+    pub users: Vec<RemoteIdentity>,
+    pub groups: Vec<RemoteIdentity>,
+}
+
 #[derive(Debug, Clone, Copy, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum RemoteFileKind {

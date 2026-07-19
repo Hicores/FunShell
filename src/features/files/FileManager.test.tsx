@@ -57,6 +57,10 @@ describe("FileManager", () => {
   });
 
   it("edits basic and extended file permission bits visually", async () => {
+    const listIdentities = vi.spyOn(api, "remoteIdentities").mockResolvedValue({
+      users: [{ name: "root", id: 0 }, { name: "deploy", id: 1000 }],
+      groups: [{ name: "root", id: 0 }, { name: "release", id: 1000 }],
+    });
     const chown = vi.spyOn(api, "chownRemotePath").mockResolvedValue(undefined);
     const chmod = vi.spyOn(api, "chmodRemotePath").mockResolvedValue(undefined);
     render(<FileManager tab={tab} />);
@@ -68,14 +72,20 @@ describe("FileManager", () => {
     expect(within(dialog).getByText("0755")).toBeInTheDocument();
     expect(within(dialog).getByRole("textbox", { name: "所有者" })).toHaveValue("root");
     expect(within(dialog).getByRole("textbox", { name: "用户组" })).toHaveValue("root");
+    await waitFor(() => expect(within(dialog).getByRole("combobox", { name: "服务器用户" })).toBeEnabled());
+    expect(listIdentities).toHaveBeenCalledOnce();
+    expect(within(dialog).getByRole("option", { name: "deploy" })).toBeInTheDocument();
+    expect(within(dialog).getByRole("option", { name: "release" })).toBeInTheDocument();
     expect(within(dialog).getByRole("checkbox", { name: "所有者 读取" })).toBeChecked();
     expect(within(dialog).getByRole("checkbox", { name: "组 写入" })).not.toBeChecked();
     expect(within(dialog).getByRole("checkbox", { name: "设置用户 ID (setuid)" })).not.toBeChecked();
 
     fireEvent.click(within(dialog).getByRole("checkbox", { name: "组 写入" }));
     fireEvent.click(within(dialog).getByRole("checkbox", { name: "粘滞位 (sticky)" }));
-    fireEvent.change(within(dialog).getByRole("textbox", { name: "所有者" }), { target: { value: "deploy" } });
-    fireEvent.change(within(dialog).getByRole("textbox", { name: "用户组" }), { target: { value: "release" } });
+    fireEvent.change(within(dialog).getByRole("combobox", { name: "服务器用户" }), { target: { value: "deploy" } });
+    fireEvent.change(within(dialog).getByRole("combobox", { name: "服务器用户组" }), { target: { value: "release" } });
+    expect(within(dialog).getByRole("textbox", { name: "所有者" })).toHaveValue("deploy");
+    expect(within(dialog).getByRole("textbox", { name: "用户组" })).toHaveValue("release");
     expect(within(dialog).getByText("1775")).toBeInTheDocument();
     fireEvent.click(within(dialog).getByRole("button", { name: "确定" }));
 

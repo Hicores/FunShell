@@ -7,7 +7,7 @@ import { Modal } from "../../components/common/Modal";
 import { formatBytes, formatIdentity, formatMode } from "../../lib/format";
 import { api, isTauri } from "../../lib/ipc";
 import { useAppStore } from "../../stores/appStore";
-import type { RemoteFileEntry, WorkspaceTab } from "../../types";
+import type { RemoteFileEntry, RemoteIdentities, WorkspaceTab } from "../../types";
 import { PermissionDialog } from "./PermissionDialog";
 import { RemoteDirectoryTree } from "./RemoteDirectoryTree";
 import { openRemoteEditorWindow } from "./openEditorWindow";
@@ -62,6 +62,10 @@ export function FileManager({ tab }: { tab: WorkspaceTab }) {
   const [editorPickerOpen, setEditorPickerOpen] = useState(false);
   const [permissionFile, setPermissionFile] = useState<RemoteFileEntry | null>(null);
   const [savingPermissions, setSavingPermissions] = useState(false);
+  const [remoteIdentities, setRemoteIdentities] = useState<RemoteIdentities | null>(null);
+  const [identitiesSessionId, setIdentitiesSessionId] = useState<string | null>(null);
+  const [identitiesLoading, setIdentitiesLoading] = useState(false);
+  const [identitiesError, setIdentitiesError] = useState<string | null>(null);
   const [context, setContext] = useState<{ x: number; y: number; file: RemoteFileEntry | null; targetPath: string } | null>(null);
   const [createDialog, setCreateDialog] = useState<{ kind: "file" | "directory"; name: string; parentPath: string } | null>(null);
   const dropTargetRef = useRef<HTMLDivElement>(null);
@@ -69,7 +73,30 @@ export function FileManager({ tab }: { tab: WorkspaceTab }) {
   const fileRequestRef = useRef(0);
   const editorRequestRef = useRef(new Map<string, number>());
   const editorRequestSequenceRef = useRef(0);
+  const identityRequestRef = useRef(0);
   const editor = editorDocuments.find((document) => document.path === activeEditorPath) ?? editorDocuments[0] ?? null;
+
+  const loadRemoteIdentities = useCallback(async (force = false) => {
+    if (!force && identitiesSessionId === tab.sessionId && remoteIdentities) return;
+    const requestId = ++identityRequestRef.current;
+    const sessionId = tab.sessionId;
+    setIdentitiesLoading(true);
+    setIdentitiesError(null);
+    try {
+      const identities = await api.remoteIdentities(sessionId);
+      if (identityRequestRef.current !== requestId) return;
+      setRemoteIdentities(identities);
+      setIdentitiesSessionId(sessionId);
+    } catch (error) {
+      if (identityRequestRef.current === requestId) setIdentitiesError(String(error));
+    } finally {
+      if (identityRequestRef.current === requestId) setIdentitiesLoading(false);
+    }
+  }, [identitiesSessionId, remoteIdentities, tab.sessionId]);
+
+  useEffect(() => {
+    if (permissionFile) void loadRemoteIdentities();
+  }, [loadRemoteIdentities, permissionFile]);
 
   const refresh = useCallback(async () => {
     const requestId = ++fileRequestRef.current;
@@ -427,7 +454,16 @@ export function FileManager({ tab }: { tab: WorkspaceTab }) {
           {!visibleFiles.some((file) => file.kind === "file") && <div className="empty-state">当前目录没有可编辑文件</div>}
         </div>
       </Modal>
-      <PermissionDialog file={permissionFile} saving={savingPermissions} onClose={() => setPermissionFile(null)} onSave={(mode, owner, group) => void savePermissions(mode, owner, group)} />
+      <PermissionDialog
+        file={permissionFile}
+        saving={savingPermissions}
+        identities={identitiesSessionId === tab.sessionId ? remoteIdentities : null}
+        identitiesLoading={identitiesLoading}
+        identitiesError={identitiesError}
+        onReloadIdentities={() => void loadRemoteIdentities(true)}
+        onClose={() => setPermissionFile(null)}
+        onSave={(mode, owner, group) => void savePermissions(mode, owner, group)}
+      />
     </div>
   );
 }

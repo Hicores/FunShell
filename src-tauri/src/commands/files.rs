@@ -2,7 +2,7 @@ use chrono::Utc;
 use futures_util::{StreamExt, stream};
 use russh_sftp::protocol::{FileAttributes, FileType, OpenFlags};
 use std::{
-    collections::{HashMap, hash_map::Entry},
+    collections::{HashMap, HashSet, hash_map::Entry},
     path::PathBuf,
     time::Instant,
 };
@@ -16,7 +16,10 @@ use tokio_util::sync::CancellationToken;
 use uuid::Uuid;
 
 use crate::{
-    domain::{RemoteFileEntry, RemoteFileKind, TextFileContent, TransferProgressEvent},
+    domain::{
+        RemoteFileEntry, RemoteFileKind, RemoteIdentities, RemoteIdentity, TextFileContent,
+        TransferProgressEvent,
+    },
     error::{AppError, AppResult},
     services::ssh::{PipelinedSftpReader, client::map_sftp},
     state::AppState,
@@ -25,6 +28,8 @@ use crate::{
 const MAX_TEXT_FILE_SIZE: u64 = 5 * 1024 * 1024;
 const DOWNLOAD_CHUNK_SIZE: u64 = 128 * 1024;
 const DOWNLOAD_PIPELINE_DEPTH: usize = 32;
+const USERS_MARKER: &str = "__FUNSHELL_USERS__";
+const GROUPS_MARKER: &str = "__FUNSHELL_GROUPS__";
 
 #[tauri::command]
 pub async fn list_remote_files(
@@ -105,6 +110,75 @@ pub async fn list_remote_files(
         )
     });
     Ok(output)
+}
+
+#[tauri::command]
+pub async fn list_remote_identities(
+    state: State<'_, AppState>,
+    session_id: String,
+) -> AppResult<RemoteIdentities> {
+    let command = format!(
+        "printf '%s\\n' '{USERS_MARKER}'; \
+         if command -v getent >/dev/null 2>&1; then getent passwd 2>/dev/null || cat /etc/passwd 2>/dev/null; else cat /etc/passwd 2>/dev/null; fi; \
+         printf '%s\\n' '{GROUPS_MARKER}'; \
+         if command -v getent >/dev/null 2>&1; then getent group 2>/dev/null || cat /etc/group 2>/dev/null; else cat /etc/group 2>/dev/null; fi"
+    );
+    let result = state.sessions.execute(&session_id, &command).await?;
+    let identities = parse_remote_identities(&result.stdout);
+    if identities.users.is_empty() || identities.groups.is_empty() {
+        let detail = result.stderr.trim();
+        return Err(AppError::Message(if detail.is_empty() {
+            "服务器未返回可用的用户或用户组".into()
+        } else {
+            format!("读取服务器用户和用户组失败: {detail}")
+        }));
+    }
+    Ok(identities)
+}
+
+fn parse_remote_identities(content: &str) -> RemoteIdentities {
+    #[derive(Clone, Copy)]
+    enum Section {
+        None,
+        Users,
+        Groups,
+    }
+
+    let mut section = Section::None;
+    let mut users = Vec::new();
+    let mut groups = Vec::new();
+    for line in content.lines() {
+        section = match line.trim() {
+            USERS_MARKER => Section::Users,
+            GROUPS_MARKER => Section::Groups,
+            _ => {
+                let fields = line.split(':').collect::<Vec<_>>();
+                if fields.len() > 2 && !fields[0].is_empty() {
+                    if let Ok(id) = fields[2].parse::<u32>() {
+                        let identity = RemoteIdentity {
+                            name: fields[0].to_owned(),
+                            id,
+                        };
+                        match section {
+                            Section::Users => users.push(identity),
+                            Section::Groups => groups.push(identity),
+                            Section::None => {}
+                        }
+                    }
+                }
+                section
+            }
+        };
+    }
+    sort_and_deduplicate_identities(&mut users);
+    sort_and_deduplicate_identities(&mut groups);
+    RemoteIdentities { users, groups }
+}
+
+fn sort_and_deduplicate_identities(identities: &mut Vec<RemoteIdentity>) {
+    identities.sort_by(|left, right| left.id.cmp(&right.id).then(left.name.cmp(&right.name)));
+    let mut names = HashSet::new();
+    identities.retain(|identity| names.insert(identity.name.clone()));
 }
 
 type OwnerIdentity = (Option<String>, Option<String>, Option<u32>, Option<u32>);
@@ -698,7 +772,8 @@ fn chown_command(owner: &str, group: &str, path: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::{
-        DOWNLOAD_CHUNK_SIZE, chown_command, download_ranges, parse_owner_map, shell_quote,
+        DOWNLOAD_CHUNK_SIZE, chown_command, download_ranges, parse_owner_map,
+        parse_remote_identities, shell_quote,
     };
 
     #[test]
@@ -739,5 +814,29 @@ mod tests {
         assert_eq!(users.get(&1000).map(String::as_str), Some("worker"));
         assert_eq!(groups.get(&0).map(String::as_str), Some("root"));
         assert_eq!(groups.get(&1000).map(String::as_str), Some("workers"));
+    }
+
+    #[test]
+    fn parses_and_sorts_remote_users_and_groups() {
+        let identities = parse_remote_identities(
+            "noise before markers\n__FUNSHELL_USERS__\ndeploy:x:1000:1000::/home/deploy:/bin/bash\nroot:x:0:0:root:/root:/bin/bash\ndeploy:x:1001:1001::/srv/deploy:/bin/false\n__FUNSHELL_GROUPS__\nworkers:x:1000:deploy\nroot:x:0:\n",
+        );
+
+        assert_eq!(
+            identities
+                .users
+                .iter()
+                .map(|identity| (identity.name.as_str(), identity.id))
+                .collect::<Vec<_>>(),
+            vec![("root", 0), ("deploy", 1000)]
+        );
+        assert_eq!(
+            identities
+                .groups
+                .iter()
+                .map(|identity| (identity.name.as_str(), identity.id))
+                .collect::<Vec<_>>(),
+            vec![("root", 0), ("workers", 1000)]
+        );
     }
 }

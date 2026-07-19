@@ -1,10 +1,14 @@
 import { useEffect, useState } from "react";
 import { Modal } from "../../components/common/Modal";
-import type { RemoteFileEntry } from "../../types";
+import type { RemoteFileEntry, RemoteIdentities } from "../../types";
 
 interface PermissionDialogProps {
   file: RemoteFileEntry | null;
   saving: boolean;
+  identities: RemoteIdentities | null;
+  identitiesLoading: boolean;
+  identitiesError: string | null;
+  onReloadIdentities: () => void;
   onClose: () => void;
   onSave: (mode: number, owner: string, group: string) => void;
 }
@@ -29,7 +33,7 @@ export function formatPermissionMode(mode: number) {
   return (mode & 0o7777).toString(8).padStart(4, "0");
 }
 
-export function PermissionDialog({ file, saving, onClose, onSave }: PermissionDialogProps) {
+export function PermissionDialog({ file, saving, identities, identitiesLoading, identitiesError, onReloadIdentities, onClose, onSave }: PermissionDialogProps) {
   const [mode, setMode] = useState(0);
   const [owner, setOwner] = useState("");
   const [group, setGroup] = useState("");
@@ -54,6 +58,29 @@ export function PermissionDialog({ file, saving, onClose, onSave }: PermissionDi
     </label>
   );
 
+  const userNames = new Set(identities?.users.map((identity) => identity.name));
+  const groupNames = new Set(identities?.groups.map((identity) => identity.name));
+  const userOptions = identities?.users ?? [];
+  const groupOptions = identities?.groups ?? [];
+  const identityPicker = (kind: "user" | "group") => {
+    const value = kind === "user" ? owner : group;
+    const options = kind === "user" ? userOptions : groupOptions;
+    const knownNames = kind === "user" ? userNames : groupNames;
+    const label = kind === "user" ? "服务器用户" : "服务器用户组";
+    return (
+      <select
+        aria-label={label}
+        title={identitiesLoading ? "正在读取服务器账户" : label}
+        value={knownNames.has(value) ? value : ""}
+        disabled={identitiesLoading || options.length === 0}
+        onChange={(event) => (kind === "user" ? setOwner(event.target.value) : setGroup(event.target.value))}
+      >
+        <option value="">{identitiesLoading ? "加载中..." : `选择${kind === "user" ? "用户" : "用户组"}`}</option>
+        {options.map((identity) => <option key={`${identity.name}:${identity.id}`} value={identity.name}>{identity.name}</option>)}
+      </select>
+    );
+  };
+
   return (
     <Modal
       open={file != null}
@@ -69,9 +96,10 @@ export function PermissionDialog({ file, saving, onClose, onSave }: PermissionDi
           <code>{formatPermissionMode(mode)}</code>
         </div>
         <div className="permission-ownership">
-          <label>所有者<span className="permission-identity"><input aria-label="所有者" placeholder="用户名或 UID" value={owner} onChange={(event) => setOwner(event.target.value)} />{file?.userId != null && <small>({file.userId})</small>}</span></label>
-          <label>用户组<span className="permission-identity"><input aria-label="用户组" placeholder="组名或 GID" value={group} onChange={(event) => setGroup(event.target.value)} />{file?.groupId != null && <small>({file.groupId})</small>}</span></label>
+          <label>所有者<span className="permission-identity"><input aria-label="所有者" placeholder="用户名或 UID" value={owner} onChange={(event) => setOwner(event.target.value)} />{identityPicker("user")}</span></label>
+          <label>用户组<span className="permission-identity"><input aria-label="用户组" placeholder="组名或 GID" value={group} onChange={(event) => setGroup(event.target.value)} />{identityPicker("group")}</span></label>
         </div>
+        {identitiesError && <div className="permission-identities-error" role="alert"><span>{identitiesError}</span><button type="button" onClick={onReloadIdentities}>重试</button></div>}
         <div className="permission-groups">
           {permissionGroups.map((group) => (
             <fieldset key={group.label}>

@@ -20,6 +20,7 @@ import type {
   ProcessInfo,
   ProxyProfile,
   RemoteFileEntry,
+  RemoteIdentities,
   RouteProfile,
   SaveConnectionInput,
   ServerSnapshot,
@@ -176,6 +177,10 @@ function mockCall(command: string, args?: Record<string, unknown>): unknown {
       if (path === "/root") return mockRemoteFiles;
       return [];
     }
+    case "list_remote_identities": return {
+      users: [{ name: "root", id: 0 }, { name: "www-data", id: 33 }, { name: "deploy", id: 1000 }],
+      groups: [{ name: "root", id: 0 }, { name: "www-data", id: 33 }, { name: "release", id: 1000 }],
+    } satisfies RemoteIdentities;
     case "read_remote_text": {
       const path = String(args?.path ?? "");
       return { path, content: `# FunShell demo editor\n# ${path}\n`, size: path.length };
@@ -292,6 +297,7 @@ export const api = {
   terminateProcess: (sessionId: string, pid: number, force = false) => call<void>("terminate_process", { sessionId, pid, force }),
   sockets: (sessionId: string) => call<SocketInfo[]>("list_sockets", { sessionId }),
   remoteFiles: (sessionId: string, path: string) => call<RemoteFileEntry[]>("list_remote_files", { sessionId, path }),
+  remoteIdentities: (sessionId: string) => call<RemoteIdentities>("list_remote_identities", { sessionId }),
   readRemoteText: (sessionId: string, path: string) => call<{ path: string; content: string; size: number }>("read_remote_text", { sessionId, path }),
   writeRemoteText: (sessionId: string, path: string, content: string) => call<void>("write_remote_text", { sessionId, path, content }),
   createRemoteFile: (sessionId: string, path: string) => call<void>("create_remote_file", { sessionId, path }),

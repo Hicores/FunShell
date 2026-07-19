@@ -127,6 +127,7 @@ pub fn run() {
             commands::session::execute_command,
             commands::session::submit_terminal_command,
             commands::files::list_remote_files,
+            commands::files::list_remote_identities,
             commands::files::read_remote_text,
             commands::files::write_remote_text,
             commands::files::create_remote_file,
