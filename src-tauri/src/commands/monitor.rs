@@ -9,8 +9,9 @@ use crate::{
     },
     error::{AppError, AppResult},
     services::monitor::{
-        PROCESS_SCRIPT, SNAPSHOT_SCRIPT, SOCKET_SCRIPT, SYSTEM_SCRIPT, parse_process_details,
-        parse_processes, parse_snapshot, parse_sockets, parse_system_info,
+        PROCESS_SCRIPT, SNAPSHOT_SCRIPT, SOCKET_LISTENER_SCRIPT, SYSTEM_SCRIPT,
+        parse_process_details, parse_processes, parse_snapshot, parse_sockets, parse_system_info,
+        socket_connection_script,
     },
     state::AppState,
 };
@@ -103,11 +104,28 @@ pub async fn terminate_process(
 }
 
 #[tauri::command]
-pub async fn list_sockets(
+pub async fn list_socket_listeners(
     state: State<'_, AppState>,
     session_id: String,
 ) -> AppResult<Vec<SocketInfo>> {
-    let result = state.sessions.execute(&session_id, SOCKET_SCRIPT).await?;
+    let result = state
+        .sessions
+        .execute(&session_id, SOCKET_LISTENER_SCRIPT)
+        .await?;
+    Ok(parse_sockets(&result.stdout))
+}
+
+#[tauri::command]
+pub async fn list_socket_connections(
+    state: State<'_, AppState>,
+    session_id: String,
+    protocol: String,
+    address_family: String,
+    local_port: u16,
+) -> AppResult<Vec<SocketInfo>> {
+    let script = socket_connection_script(&protocol, &address_family, local_port)
+        .ok_or_else(|| AppError::Validation("网络连接筛选参数无效".into()))?;
+    let result = state.sessions.execute(&session_id, &script).await?;
     Ok(parse_sockets(&result.stdout))
 }
 

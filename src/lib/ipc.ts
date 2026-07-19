@@ -152,13 +152,19 @@ function mockCall(command: string, args?: Record<string, unknown>): unknown {
       const process = mockProcesses.find((item) => item.pid === args?.pid) ?? mockProcesses[0];
       return { pid: process.pid, name: process.name, executable: `/usr/bin/${process.name}`, workingDirectory: "/opt/apps", command: process.command, environment: { HOME: "/root", LANG: "en_US.UTF-8", PATH: "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin" } } satisfies ProcessDetails;
     }
-    case "list_sockets": {
+    case "list_socket_listeners": {
+      return mockSockets.filter((socket) => socket.state === "LISTEN" || (socket.protocol === "udp" && socket.state === "UNCONN"));
+    }
+    case "list_socket_connections": {
       mockSocketTick += 1;
-      return mockSockets.map((socket, index) => ({
-        ...socket,
-        sentBytes: socket.sentBytes == null ? null : socket.sentBytes + mockSocketTick * (index + 1) * 2_400,
-        receivedBytes: socket.receivedBytes == null ? null : socket.receivedBytes + mockSocketTick * (index + 1) * 1_700,
-      }));
+      return mockSockets
+        .filter((socket) => socket.state !== "LISTEN" && socket.state !== "UNCONN")
+        .filter((socket) => socket.protocol === args?.protocol && socket.addressFamily === args?.addressFamily && socket.localPort === args?.localPort)
+        .map((socket, index) => ({
+          ...socket,
+          sentBytes: socket.sentBytes == null ? null : socket.sentBytes + mockSocketTick * (index + 1) * 2_400,
+          receivedBytes: socket.receivedBytes == null ? null : socket.receivedBytes + mockSocketTick * (index + 1) * 1_700,
+        }));
     }
     case "trace_route": return {
       target: String(args?.target ?? "8.8.8.8"),
@@ -295,7 +301,8 @@ export const api = {
   processes: (sessionId: string) => call<ProcessInfo[]>("list_processes", { sessionId }),
   processDetails: (sessionId: string, pid: number) => call<ProcessDetails>("get_process_details", { sessionId, pid }),
   terminateProcess: (sessionId: string, pid: number, force = false) => call<void>("terminate_process", { sessionId, pid, force }),
-  sockets: (sessionId: string) => call<SocketInfo[]>("list_sockets", { sessionId }),
+  socketListeners: (sessionId: string) => call<SocketInfo[]>("list_socket_listeners", { sessionId }),
+  socketConnections: (sessionId: string, protocol: string, addressFamily: string, localPort: number) => call<SocketInfo[]>("list_socket_connections", { sessionId, protocol, addressFamily, localPort }),
   remoteFiles: (sessionId: string, path: string) => call<RemoteFileEntry[]>("list_remote_files", { sessionId, path }),
   remoteIdentities: (sessionId: string) => call<RemoteIdentities>("list_remote_identities", { sessionId }),
   readRemoteText: (sessionId: string, path: string) => call<{ path: string; content: string; size: number }>("read_remote_text", { sessionId, path }),

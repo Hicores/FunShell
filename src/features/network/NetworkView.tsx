@@ -87,61 +87,64 @@ function connectionSortValue(socket: RatedSocket, key: ConnectionSortKey, locati
 
 export function NetworkView({ tab, active = true }: { tab: WorkspaceTab; active?: boolean }) {
   const notify = useAppStore((state) => state.notify);
-  const [sockets, setSockets] = useState<RatedSocket[]>([]);
+  const [listenerSockets, setListenerSockets] = useState<RatedSocket[]>([]);
+  const [connectionSockets, setConnectionSockets] = useState<RatedSocket[]>([]);
   const [query, setQuery] = useState("");
   const [familyFilter, setFamilyFilter] = useState("all");
   const [interfaceFilter, setInterfaceFilter] = useState("all");
   const [listenerSort, setListenerSort] = useState<SortState<ListenerSortKey>>({ key: "connectionCount", direction: "desc" });
   const [connectionSort, setConnectionSort] = useState<SortState<ConnectionSortKey> | null>(null);
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
+  const [detailsLoadedKey, setDetailsLoadedKey] = useState<string | null>(null);
   const [locations, setLocations] = useState<Record<string, GeoIpInfo>>({});
   const [locationErrors, setLocationErrors] = useState<Record<string, string>>({});
-  const [loading, setLoading] = useState(false);
-  const previousRef = useRef<Map<string, SocketInfo>>(new Map());
-  const sampledAtRef = useRef<number | null>(null);
-  const refreshingRef = useRef(false);
+  const [listenerLoading, setListenerLoading] = useState(false);
+  const [detailLoading, setDetailLoading] = useState(false);
+  const detailPreviousRef = useRef<Map<string, SocketInfo>>(new Map());
+  const detailSampledAtRef = useRef<number | null>(null);
+  const listenerRefreshingRef = useRef(false);
+  const detailRefreshingRef = useRef(false);
+  const selectedRef = useRef<ListenerInfo | null>(null);
+  const activeRef = useRef(active);
   const pendingGeoIpsRef = useRef(new Set<string>());
   const mountedRef = useRef(true);
+  activeRef.current = active;
 
   useEffect(() => {
     mountedRef.current = true;
     return () => { mountedRef.current = false; };
   }, []);
 
-  const refresh = useCallback(async () => {
-    if (refreshingRef.current) return;
-    refreshingRef.current = true;
-    setLoading(true);
+  const refreshListeners = useCallback(async () => {
+    if (listenerRefreshingRef.current) return;
+    listenerRefreshingRef.current = true;
+    setListenerLoading(true);
     try {
-      const next = await api.sockets(tab.sessionId);
-      const now = Date.now();
-      const elapsed = sampledAtRef.current == null ? 3_000 : Math.max(250, now - sampledAtRef.current);
-      setSockets(rateSocketSamples(next, previousRef.current, elapsed));
-      previousRef.current = new Map(next.map((socket) => [socketKey(socket), socket]));
-      sampledAtRef.current = now;
+      const next = await api.socketListeners(tab.sessionId);
+      if (mountedRef.current && activeRef.current) {
+        setListenerSockets(rateSocketSamples(next, new Map(), 1_000));
+      }
     } catch (error) {
       notify(String(error));
     } finally {
-      refreshingRef.current = false;
-      setLoading(false);
+      listenerRefreshingRef.current = false;
+      if (mountedRef.current) setListenerLoading(false);
     }
   }, [notify, tab.sessionId]);
 
   useEffect(() => {
     if (!active) return;
-    previousRef.current.clear();
-    sampledAtRef.current = null;
     let disposed = false;
     let timer = 0;
     const poll = async () => {
-      await refresh();
-      if (!disposed) timer = window.setTimeout(() => void poll(), 2_000);
+      await refreshListeners();
+      if (!disposed) timer = window.setTimeout(() => void poll(), 5_000);
     };
     void poll();
     return () => { disposed = true; window.clearTimeout(timer); };
-  }, [active, refresh]);
+  }, [active, refreshListeners]);
 
-  const listeners = useMemo(() => buildListeners(sockets), [sockets]);
+  const listeners = useMemo(() => buildListeners([...listenerSockets, ...connectionSockets]), [connectionSockets, listenerSockets]);
   const interfaceOptions = useMemo(() => [...new Set(listeners.flatMap((listener) => [listener.interfaceName, ...listener.connections.map((socket) => socket.interfaceName)]).filter((name): name is string => Boolean(name)))].sort(), [listeners]);
   const filtered = useMemo(() => {
     const value = query.toLowerCase();
@@ -158,6 +161,56 @@ export function NetworkView({ tab, active = true }: { tab: WorkspaceTab; active?
   const sortedListeners = useMemo(() => sortRows(filtered, (listener) => listenerSortValue(listener, listenerSort.key), listenerSort.direction), [filtered, listenerSort]);
   const virtualListeners = useVirtualRows(sortedListeners, 27);
   const selected = listeners.find((listener) => listener.key === selectedKey) ?? null;
+  selectedRef.current = selected;
+
+  const refreshConnections = useCallback(async () => {
+    const target = selectedRef.current;
+    if (!target || detailRefreshingRef.current) return;
+    const targetKey = target.key;
+    detailRefreshingRef.current = true;
+    setDetailLoading(true);
+    try {
+      const next = await api.socketConnections(tab.sessionId, target.protocol, target.addressFamily, target.localPort);
+      if (!mountedRef.current || !activeRef.current || selectedRef.current?.key !== targetKey) return;
+      const now = Date.now();
+      const elapsed = detailSampledAtRef.current == null ? 2_000 : Math.max(250, now - detailSampledAtRef.current);
+      setConnectionSockets(rateSocketSamples(next, detailPreviousRef.current, elapsed));
+      detailPreviousRef.current = new Map(next.map((socket) => [socketKey(socket), socket]));
+      detailSampledAtRef.current = now;
+      setDetailsLoadedKey(targetKey);
+    } catch (error) {
+      notify(String(error));
+    } finally {
+      detailRefreshingRef.current = false;
+      if (mountedRef.current) setDetailLoading(false);
+    }
+  }, [notify, tab.sessionId]);
+
+  useEffect(() => {
+    if (!selectedKey) {
+      setConnectionSockets([]);
+      setDetailsLoadedKey(null);
+      return;
+    }
+    if (!active) return;
+    detailPreviousRef.current.clear();
+    detailSampledAtRef.current = null;
+    setConnectionSockets([]);
+    setDetailsLoadedKey(null);
+    let disposed = false;
+    let timer = 0;
+    const poll = async () => {
+      await refreshConnections();
+      if (!disposed) timer = window.setTimeout(() => void poll(), 2_000);
+    };
+    void poll();
+    return () => { disposed = true; window.clearTimeout(timer); };
+  }, [active, refreshConnections, selectedKey]);
+
+  useEffect(() => {
+    if (selectedKey && !selected) setSelectedKey(null);
+  }, [selected, selectedKey]);
+
   const sortedConnections = useMemo(() => {
     const connections = selected?.connections ?? [];
     return connectionSort
@@ -186,11 +239,24 @@ export function NetworkView({ tab, active = true }: { tab: WorkspaceTab; active?
   }, [active, locationErrors, locations, tab.sessionId, visibleRemoteIpKey]);
 
   useEffect(() => {
+    setListenerSockets([]);
+    setConnectionSockets([]);
+    setSelectedKey(null);
+    setDetailsLoadedKey(null);
+    detailPreviousRef.current.clear();
+    detailSampledAtRef.current = null;
     setLocations({});
     setLocationErrors({});
   }, [tab.sessionId]);
 
-  const choose = (listener: ListenerInfo) => setSelectedKey(listener.key);
+  const choose = (listener: ListenerInfo) => {
+    if (listener.key === selectedKey) return;
+    setConnectionSockets([]);
+    setDetailsLoadedKey(null);
+    setSelectedKey(listener.key);
+  };
+  const refresh = () => Promise.all([refreshListeners(), refreshConnections()]);
+  const loading = listenerLoading || detailLoading;
   const sortListeners = (key: ListenerSortKey, defaultDirection: "asc" | "desc") => setListenerSort((current) => nextSortState(current, key, defaultDirection));
   const sortConnections = (key: ConnectionSortKey, defaultDirection: "asc" | "desc") => setConnectionSort((current) => nextSortState(current, key, defaultDirection));
 
@@ -198,7 +264,7 @@ export function NetworkView({ tab, active = true }: { tab: WorkspaceTab; active?
     <section className="detail-view network-view">
       <header className="view-toolbar">
         <strong>网络监听</strong>
-        <span>{listeners.length} 个监听端口 · 每 2 秒采样速率</span>
+        <span>{listeners.length} 个监听端口{selected ? " · 已按需采样所选端口" : ""}</span>
         <select className="network-filter" aria-label="筛选 IP 版本" value={familyFilter} onChange={(event) => setFamilyFilter(event.target.value)}><option value="all">全部 IP</option><option value="IPv4">IPv4</option><option value="IPv6">IPv6</option></select>
         <select className="network-filter interface-filter" aria-label="筛选网卡" value={interfaceFilter} onChange={(event) => setInterfaceFilter(event.target.value)}><option value="all">全部网卡范围</option><option value="wildcard">监听全部网卡</option>{interfaceOptions.map((name) => <option key={name} value={name}>{name}</option>)}</select>
         <label><Search size={15} /><input placeholder="搜索程序、PID、IP、网卡或端口" value={query} onChange={(event) => setQuery(event.target.value)} /></label>
@@ -224,7 +290,7 @@ export function NetworkView({ tab, active = true }: { tab: WorkspaceTab; active?
             <VirtualTableSpacer height={virtualListeners.beforeHeight} columns={11} />
             {virtualListeners.rows.map(({ item: listener, index }) => (
             <tr key={listener.key} className={`${selectedKey === listener.key ? "selected " : ""}${index % 2 ? "virtual-even" : ""}`} onClick={() => choose(listener)}>
-              <td>{listener.pid ?? "-"}</td><td>{listener.process ?? "未知程序"}</td><td>{listener.protocol.toUpperCase()}</td><td>{listener.addressFamily}</td><td>{interfaceText(listener.interfaceName)}</td><td>{listener.localAddress}</td><td>{listener.localPort}</td><td>{listener.ipCount}</td><td>{listener.connectionCount}</td><td>{rate(listener.sentBps)}</td><td>{rate(listener.receivedBps)}</td>
+              <td>{listener.pid ?? "-"}</td><td>{listener.process ?? "未知程序"}</td><td>{listener.protocol.toUpperCase()}</td><td>{listener.addressFamily}</td><td>{interfaceText(listener.interfaceName)}</td><td>{listener.localAddress}</td><td>{listener.localPort}</td><td>{detailsLoadedKey === listener.key ? listener.ipCount : "-"}</td><td>{detailsLoadedKey === listener.key ? listener.connectionCount : "-"}</td><td>{rate(detailsLoadedKey === listener.key ? listener.sentBps : null)}</td><td>{rate(detailsLoadedKey === listener.key ? listener.receivedBps : null)}</td>
             </tr>
             ))}
             <VirtualTableSpacer height={virtualListeners.afterHeight} columns={11} />
@@ -234,7 +300,7 @@ export function NetworkView({ tab, active = true }: { tab: WorkspaceTab; active?
       </div>
 
       <section className="listener-connections">
-        <header><strong>{selected ? endpoint(selected.localAddress, selected.localPort) : "连接明细"}</strong><span>{selected ? `${selected.process ?? "未知程序"} · ${selected.addressFamily} · ${interfaceText(selected.interfaceName)} · ${selected.connectionCount} 个连接` : "选择上方监听程序查看连接"}</span></header>
+        <header><strong>{selected ? endpoint(selected.localAddress, selected.localPort) : "连接明细"}</strong><span>{selected ? `${selected.process ?? "未知程序"} · ${selected.addressFamily} · ${interfaceText(selected.interfaceName)} · ${detailsLoadedKey === selected.key ? `${selected.connectionCount} 个连接` : "正在加载"}` : "选择上方监听程序查看连接"}</span></header>
         <div ref={virtualConnections.containerRef} className="listener-connections-table-wrap">
           <table className="data-table listener-connections-table virtualized-table">
             <thead><tr>

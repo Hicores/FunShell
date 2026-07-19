@@ -8,10 +8,26 @@ import { lookupGeoIps, mergeBoundedRecord, NetworkView } from "./NetworkView";
 
 describe("NetworkView", () => {
   it("does not poll while its workspace tab is hidden", () => {
-    const sockets = vi.spyOn(api, "sockets");
+    const listeners = vi.spyOn(api, "socketListeners");
+    const connections = vi.spyOn(api, "socketConnections");
     const tab: WorkspaceTab = { id: "network-hidden", sessionId: "network-hidden", connectionId: mockConnections[0].id, title: "网络", kind: "network", state: "connected" };
     render(<NetworkView tab={tab} active={false} />);
-    expect(sockets).not.toHaveBeenCalled();
+    expect(listeners).not.toHaveBeenCalled();
+    expect(connections).not.toHaveBeenCalled();
+  });
+
+  it("does not request connection details before a listener is selected", async () => {
+    const listeners = vi.spyOn(api, "socketListeners");
+    const connections = vi.spyOn(api, "socketConnections");
+    const tab: WorkspaceTab = { id: "network-demand", sessionId: "network-demand", connectionId: mockConnections[0].id, title: "网络", kind: "network", state: "connected" };
+    const { container } = render(<NetworkView tab={tab} />);
+    const listenerTable = container.querySelector<HTMLTableElement>(".listener-table")!;
+
+    await waitFor(() => expect(listeners).toHaveBeenCalledOnce());
+    expect(connections).not.toHaveBeenCalled();
+    const nginxRow = within(listenerTable).getAllByRole("row").find((row) => row.textContent?.includes("nginx"))!;
+    fireEvent.click(nginxRow);
+    await waitFor(() => expect(connections).toHaveBeenCalledWith("network-demand", "tcp", "IPv4", 80));
   });
 
   it("evicts the oldest IP metadata when the frontend cache reaches its limit", () => {

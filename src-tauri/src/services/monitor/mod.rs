@@ -34,11 +34,55 @@ pub const PROCESS_SCRIPT: &str = r#"LC_ALL=C
 ps -eo pid=,user=,rss=,pcpu=,comm=,args= --sort=-pcpu 2>/dev/null || ps 2>/dev/null
 "#;
 
-pub const SOCKET_SCRIPT: &str = r#"LC_ALL=C
+pub const SOCKET_LISTENER_SCRIPT: &str = r#"LC_ALL=C
 echo __ADDRESSES__
 ip -o addr show 2>/dev/null
 echo __SOCKETS__
-ss -H -tunap 2>/dev/null
+ss -H -lnutp 2>/dev/null
 echo __TCPINFO__
-ss -H -tinp 2>/dev/null
 "#;
+
+pub fn socket_connection_script(
+    protocol: &str,
+    address_family: &str,
+    local_port: u16,
+) -> Option<String> {
+    let protocol_flag = match protocol.to_ascii_lowercase().as_str() {
+        "tcp" => "t",
+        "udp" => "u",
+        _ => return None,
+    };
+    let family_flag = match address_family {
+        "IPv4" => "4",
+        "IPv6" => "6",
+        _ => return None,
+    };
+    let filter = format!("'( sport = :{local_port} )'");
+    let tcp_info = if protocol_flag == "t" {
+        format!("ss -H -{family_flag}tinp state connected {filter} 2>/dev/null")
+    } else {
+        String::new()
+    };
+    Some(format!(
+        "LC_ALL=C\necho __ADDRESSES__\nip -o addr show 2>/dev/null\necho __SOCKETS__\nss -H -{family_flag}{protocol_flag}nap state connected {filter} 2>/dev/null\necho __TCPINFO__\n{tcp_info}\n"
+    ))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::socket_connection_script;
+
+    #[test]
+    fn filters_socket_details_on_the_remote_host() {
+        let script = socket_connection_script("tcp", "IPv4", 22).expect("script");
+        assert!(script.contains("ss -H -4tnap state connected '( sport = :22 )'"));
+        assert!(script.contains("ss -H -4tinp state connected '( sport = :22 )'"));
+        assert!(!script.contains("ss -H -tunap"));
+
+        let udp = socket_connection_script("udp", "IPv6", 53).expect("UDP script");
+        assert!(udp.contains("ss -H -6unap state connected '( sport = :53 )'"));
+        assert!(!udp.contains("ss -H -6uinp"));
+        assert!(socket_connection_script("raw", "IPv4", 1).is_none());
+        assert!(socket_connection_script("tcp", "未知", 1).is_none());
+    }
+}
