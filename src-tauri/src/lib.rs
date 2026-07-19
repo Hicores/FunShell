@@ -8,10 +8,26 @@ mod services;
 mod settings;
 mod state;
 
-use tauri::Manager;
+use tauri::{AppHandle, Manager, Runtime};
 use tracing_subscriber::EnvFilter;
 
 use crate::{paths::AppPaths, state::AppState};
+
+fn activate_main_window<R: Runtime>(app: &AppHandle<R>) {
+    let Some(window) = app.get_webview_window("main") else {
+        tracing::warn!("main window was not available for single-instance activation");
+        return;
+    };
+    if let Err(error) = window.show() {
+        tracing::warn!(%error, "failed to show the main window");
+    }
+    if let Err(error) = window.unminimize() {
+        tracing::warn!(%error, "failed to restore the main window");
+    }
+    if let Err(error) = window.set_focus() {
+        tracing::warn!(%error, "failed to focus the main window");
+    }
+}
 
 pub fn run() {
     tracing_subscriber::fmt()
@@ -20,6 +36,9 @@ pub fn run() {
         .init();
 
     tauri::Builder::default()
+        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
+            activate_main_window(app);
+        }))
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         .setup(|app| {
