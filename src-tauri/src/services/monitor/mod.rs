@@ -141,7 +141,8 @@ pub fn socket_connection_script(
     address_family: &str,
     local_port: u16,
 ) -> Option<String> {
-    let protocol_flag = match protocol.to_ascii_lowercase().as_str() {
+    let protocol = protocol.to_ascii_lowercase();
+    let protocol_flag = match protocol.as_str() {
         "tcp" => "t",
         "udp" => "u",
         _ => return None,
@@ -158,7 +159,7 @@ pub fn socket_connection_script(
         String::new()
     };
     Some(format!(
-        "LC_ALL=C\necho __ADDRESSES__\nip -o addr show 2>/dev/null\necho __SOCKETS__\nss -H -{family_flag}{protocol_flag}nap state connected {filter} 2>/dev/null\necho __TCPINFO__\n{tcp_info}\n"
+        "LC_ALL=C\necho __ADDRESSES__\nip -o addr show 2>/dev/null\necho __SOCKETS__\nss -H -{family_flag}{protocol_flag}nap state connected {filter} 2>/dev/null | sed 's/^/{protocol} /'\necho __TCPINFO__\n{tcp_info}\n"
     ))
 }
 
@@ -173,11 +174,13 @@ mod tests {
         assert!(SOCKET_LISTENER_SCRIPT.contains("awk -v protocol="));
         let script = socket_connection_script("tcp", "IPv4", 22).expect("script");
         assert!(script.contains("ss -H -4tnap state connected '( sport = :22 )'"));
+        assert!(script.contains("| sed 's/^/tcp /'"));
         assert!(script.contains("ss -H -4tinp state connected '( sport = :22 )'"));
         assert!(!script.contains("ss -H -tunap"));
 
         let udp = socket_connection_script("udp", "IPv6", 53).expect("UDP script");
         assert!(udp.contains("ss -H -6unap state connected '( sport = :53 )'"));
+        assert!(udp.contains("| sed 's/^/udp /'"));
         assert!(!udp.contains("ss -H -6uinp"));
         assert!(socket_connection_script("raw", "IPv4", 1).is_none());
         assert!(socket_connection_script("tcp", "未知", 1).is_none());
