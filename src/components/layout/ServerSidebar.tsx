@@ -74,7 +74,6 @@ export function ServerSidebar() {
   return (
     <aside className="server-sidebar">
       <div className="sidebar-block identity-block">
-        <div className="sync-row"><span>同步状态</span><span className={`status-dot ${connection ? "online" : ""}`} /></div>
         <div className="ip-row">
           <span>IP</span><strong>{connection?.host ?? "-"}</strong>
           <button type="button" title="复制 IP" disabled={!connection} onClick={() => connection && void navigator.clipboard.writeText(connection.host)}><Copy size={13} /></button>
