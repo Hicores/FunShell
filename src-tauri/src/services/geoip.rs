@@ -299,6 +299,11 @@ mod tests {
         let ipv4 = service.lookup("1.1.2.1").expect("IPv4 lookup");
         assert_eq!(ipv4.country.as_deref(), Some("中国"));
         assert_eq!(ipv4.region.as_deref(), Some("福建省"));
+        let reported_ip = service
+            .lookup("220.167.110.40")
+            .expect("reported IPv4 lookup");
+        assert_eq!(reported_ip.country.as_deref(), Some("中国"));
+        assert!(reported_ip.region.is_some());
         let ipv6 = service
             .lookup("240e:3b7:3273:51d0:cd38:8ae1:e3c0:b708")
             .expect("IPv6 lookup");

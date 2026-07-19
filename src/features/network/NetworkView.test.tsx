@@ -3,8 +3,8 @@ import { describe, expect, it, vi } from "vitest";
 import { api } from "../../lib/ipc";
 import { mockConnections } from "../../lib/mock";
 import { useAppStore } from "../../stores/appStore";
-import type { WorkspaceTab } from "../../types";
-import { mergeBoundedRecord, NetworkView } from "./NetworkView";
+import type { GeoIpInfo, WorkspaceTab } from "../../types";
+import { lookupGeoIps, mergeBoundedRecord, NetworkView } from "./NetworkView";
 
 describe("NetworkView", () => {
   it("does not poll while its workspace tab is hidden", () => {
@@ -16,6 +16,20 @@ describe("NetworkView", () => {
 
   it("evicts the oldest IP metadata when the frontend cache reaches its limit", () => {
     expect(mergeBoundedRecord({ first: 1, second: 2 }, [["third", 3]], 2)).toEqual({ second: 2, third: 3 });
+  });
+
+  it("publishes each IP result without waiting for the whole lookup batch", async () => {
+    let releaseSlowLookup: (value: GeoIpInfo) => void = () => undefined;
+    const slowLookup = new Promise<GeoIpInfo>((resolve) => { releaseSlowLookup = resolve; });
+    const result = (ip: string): GeoIpInfo => ({ ip, private: false, country: "中国", region: "四川省", city: null, isp: null, latitude: null, longitude: null, cachedAt: "2026-07-19T00:00:00Z" });
+    const received = vi.fn();
+    const lookup = vi.fn((ip: string) => ip === "slow" ? slowLookup : Promise.resolve(result(ip)));
+
+    const complete = lookupGeoIps(["slow", "220.167.110.40"], received, lookup);
+    await waitFor(() => expect(received).toHaveBeenCalledWith(expect.objectContaining({ ip: "220.167.110.40", info: expect.objectContaining({ country: "中国" }) })));
+    expect(received).not.toHaveBeenCalledWith(expect.objectContaining({ ip: "slow" }));
+    releaseSlowLookup(result("slow"));
+    await complete;
   });
 
   it("sorts listener names and connection traffic from their headers", async () => {

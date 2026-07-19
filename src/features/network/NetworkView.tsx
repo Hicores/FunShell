@@ -33,15 +33,20 @@ export function mergeBoundedRecord<T>(current: Record<string, T>, additions: Arr
   return Object.fromEntries(entries);
 }
 
-async function lookupGeoIps(ips: string[]) {
+export async function lookupGeoIps(
+  ips: string[],
+  onResult: (result: GeoIpLookupResult) => void,
+  lookup: (ip: string) => Promise<GeoIpInfo> = api.geoIp,
+) {
   const results = new Array<GeoIpLookupResult>(ips.length);
   let nextIndex = 0;
   const worker = async () => {
     while (nextIndex < ips.length) {
       const index = nextIndex++;
       const ip = ips[index];
-      try { results[index] = { ip, info: await api.geoIp(ip), error: null }; }
+      try { results[index] = { ip, info: await lookup(ip), error: null }; }
       catch (error) { results[index] = { ip, info: null, error: String(error) }; }
+      onResult(results[index]);
     }
   };
   await Promise.all(Array.from({ length: Math.min(GEO_IP_CONCURRENCY, ips.length) }, worker));
@@ -95,6 +100,13 @@ export function NetworkView({ tab, active = true }: { tab: WorkspaceTab; active?
   const previousRef = useRef<Map<string, SocketInfo>>(new Map());
   const sampledAtRef = useRef<number | null>(null);
   const refreshingRef = useRef(false);
+  const pendingGeoIpsRef = useRef(new Set<string>());
+  const mountedRef = useRef(true);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => { mountedRef.current = false; };
+  }, []);
 
   const refresh = useCallback(async () => {
     if (refreshingRef.current) return;
@@ -152,32 +164,26 @@ export function NetworkView({ tab, active = true }: { tab: WorkspaceTab; active?
       ? sortRows(connections, (socket) => connectionSortValue(socket, connectionSort.key, locations, locationErrors), connectionSort.direction)
       : connections;
   }, [connectionSort, locationErrors, locations, selected]);
-  const remoteIpKey = useMemo(() => {
-    if (!selected) return "";
-    const seen = new Set<string>();
-    const ips: string[] = [];
-    for (const socket of selected.connections) {
-      const ip = socket.remoteAddress;
-      if (!ip || seen.has(ip)) continue;
-      seen.add(ip);
-      ips.push(ip);
-      if (ips.length >= GEO_IP_CACHE_LIMIT) break;
-    }
-    return ips.sort().join("|");
-  }, [selected]);
   const virtualConnections = useVirtualRows(sortedConnections, 27);
+  const visibleRemoteIpKey = useMemo(() => [...new Set(virtualConnections.rows.map(({ item }) => item.remoteAddress).filter(Boolean))].sort().join("|"), [virtualConnections.rows]);
 
   useEffect(() => {
-    if (!active || !remoteIpKey) return;
-    let disposed = false;
-    const ips = remoteIpKey.split("|");
-    void lookupGeoIps(ips).then((results) => {
-      if (disposed) return;
-      setLocations((current) => mergeBoundedRecord(current, results.flatMap((result): Array<[string, GeoIpInfo]> => result.info ? [[result.ip, result.info]] : [])));
-      setLocationErrors((current) => mergeBoundedRecord(current, results.flatMap((result): Array<[string, string]> => result.error ? [[result.ip, result.error]] : [])));
+    if (!active || !visibleRemoteIpKey) return;
+    const ips = visibleRemoteIpKey
+      .split("|")
+      .filter((ip) => !locations[ip] && !locationErrors[ip] && !pendingGeoIpsRef.current.has(ip));
+    if (!ips.length) return;
+    ips.forEach((ip) => pendingGeoIpsRef.current.add(ip));
+    void lookupGeoIps(ips, (result) => {
+      pendingGeoIpsRef.current.delete(result.ip);
+      if (!mountedRef.current) return;
+      if (result.info) {
+        setLocations((current) => mergeBoundedRecord(current, [[result.ip, result.info!]]));
+      } else if (result.error) {
+        setLocationErrors((current) => mergeBoundedRecord(current, [[result.ip, result.error!]]));
+      }
     });
-    return () => { disposed = true; };
-  }, [active, remoteIpKey, tab.sessionId]);
+  }, [active, locationErrors, locations, tab.sessionId, visibleRemoteIpKey]);
 
   useEffect(() => {
     setLocations({});
