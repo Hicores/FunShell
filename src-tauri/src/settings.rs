@@ -13,6 +13,7 @@ pub struct AppSettings {
     pub confirm_close_active_sessions: bool,
     pub terminal_font_family: String,
     pub terminal_font_size: u16,
+    pub terminal_scrollback_lines: u32,
     pub quick_connection_collapsed_folder_ids: Vec<String>,
 }
 
@@ -25,6 +26,7 @@ impl Default for AppSettings {
             terminal_font_family: "\"Cascadia Mono\", Consolas, \"Microsoft YaHei UI\", monospace"
                 .into(),
             terminal_font_size: 13,
+            terminal_scrollback_lines: 3_000,
             quick_connection_collapsed_folder_ids: Vec::new(),
         }
     }
@@ -114,6 +116,11 @@ fn validate(value: &AppSettings) -> AppResult<()> {
             "终端字体大小必须在 9 到 32 之间".into(),
         ));
     }
+    if !(500..=50_000).contains(&value.terminal_scrollback_lines) {
+        return Err(AppError::Validation(
+            "终端滚屏行数必须在 500 到 50000 之间".into(),
+        ));
+    }
     if value.quick_connection_collapsed_folder_ids.len() > 10_000
         || value
             .quick_connection_collapsed_folder_ids
@@ -194,6 +201,7 @@ mod tests {
                 .quick_connection_collapsed_folder_ids
                 .is_empty()
         );
+        assert_eq!(settings.get().terminal_scrollback_lines, 3_000);
     }
 
     #[test]
@@ -211,6 +219,7 @@ mod tests {
     #[test]
     fn defaults_to_a_compact_terminal_font_size() {
         assert_eq!(AppSettings::default().terminal_font_size, 13);
+        assert_eq!(AppSettings::default().terminal_scrollback_lines, 3_000);
         assert!(
             AppSettings::default()
                 .terminal_font_family
@@ -224,6 +233,17 @@ mod tests {
         let settings = SettingsService::load(directory.path().join("settings.json")).expect("load");
         let value = AppSettings {
             terminal_font_size: 8,
+            ..AppSettings::default()
+        };
+        assert!(settings.save(value).is_err());
+    }
+
+    #[test]
+    fn rejects_terminal_scrollback_outside_the_supported_range() {
+        let directory = tempdir().expect("tempdir");
+        let settings = SettingsService::load(directory.path().join("settings.json")).expect("load");
+        let value = AppSettings {
+            terminal_scrollback_lines: 50_001,
             ..AppSettings::default()
         };
         assert!(settings.save(value).is_err());

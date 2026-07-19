@@ -1,6 +1,7 @@
 import { Modal } from "../../components/common/Modal";
 
 export const DEFAULT_TERMINAL_FONT_FAMILY = '"Cascadia Mono", Consolas, "Microsoft YaHei UI", monospace';
+export const DEFAULT_TERMINAL_SCROLLBACK_LINES = 3000;
 
 export const TERMINAL_FONT_OPTIONS = [
   '"Cascadia Mono", Consolas, monospace',
@@ -16,14 +17,16 @@ interface TerminalSettingsDialogProps {
   open: boolean;
   fontFamily: string;
   fontSize: number;
+  scrollbackLines: number;
   saving: boolean;
   onFontFamilyChange: (value: string) => void;
   onFontSizeChange: (value: number) => void;
+  onScrollbackLinesChange: (value: number) => void;
   onClose: () => void;
   onSave: () => void;
 }
 
-export function TerminalSettingsDialog({ open, fontFamily, fontSize, saving, onFontFamilyChange, onFontSizeChange, onClose, onSave }: TerminalSettingsDialogProps) {
+export function TerminalSettingsDialog({ open, fontFamily, fontSize, scrollbackLines, saving, onFontFamilyChange, onFontSizeChange, onScrollbackLinesChange, onClose, onSave }: TerminalSettingsDialogProps) {
   return (
     <Modal
       open={open}
@@ -39,6 +42,9 @@ export function TerminalSettingsDialog({ open, fontFamily, fontSize, saving, onF
         </label>
         <label>字体大小（px）
           <input type="number" min={9} max={32} step={1} value={fontSize} onChange={(event) => onFontSizeChange(Number(event.target.value))} />
+        </label>
+        <label>滚屏行数
+          <input type="number" min={500} max={50000} step={500} value={scrollbackLines} onChange={(event) => onScrollbackLinesChange(Number(event.target.value))} />
         </label>
       </div>
     </Modal>

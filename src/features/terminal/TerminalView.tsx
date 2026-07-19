@@ -9,7 +9,7 @@ import { bindAsyncDisposer } from "../../lib/asyncDisposer";
 import { api, isTauri, onEvent } from "../../lib/ipc";
 import { useAppStore } from "../../stores/appStore";
 import type { TerminalOutputEvent, WorkspaceTab } from "../../types";
-import { DEFAULT_TERMINAL_FONT_FAMILY, TerminalSettingsDialog } from "./TerminalSettingsDialog";
+import { DEFAULT_TERMINAL_FONT_FAMILY, DEFAULT_TERMINAL_SCROLLBACK_LINES, TerminalSettingsDialog } from "./TerminalSettingsDialog";
 
 function encodeBase64(value: string) {
   const bytes = new TextEncoder().encode(value);
@@ -55,6 +55,7 @@ export function TerminalView({ tab, active }: TerminalViewProps) {
   const contextRequestRef = useRef(0);
   const [terminalFontFamily, setTerminalFontFamily] = useState(DEFAULT_TERMINAL_FONT_FAMILY);
   const [terminalFontSize, setTerminalFontSize] = useState(13);
+  const [terminalScrollbackLines, setTerminalScrollbackLines] = useState(DEFAULT_TERMINAL_SCROLLBACK_LINES);
   const [terminalSettingsOpen, setTerminalSettingsOpen] = useState(false);
   const [savingTerminalSettings, setSavingTerminalSettings] = useState(false);
   sessionIdRef.current = tab.sessionId;
@@ -71,7 +72,7 @@ export function TerminalView({ tab, active }: TerminalViewProps) {
       fontFamily: terminalFontFamily,
       fontSize: terminalFontSize,
       lineHeight: 1.18,
-      scrollback: 10000,
+      scrollback: DEFAULT_TERMINAL_SCROLLBACK_LINES,
       theme: {
         background: "#173245",
         foreground: "#eef6f8",
@@ -161,13 +162,15 @@ export function TerminalView({ tab, active }: TerminalViewProps) {
     };
   }, []);
 
-  const applyTerminalSettings = (fontFamily: string, fontSize: number) => {
+  const applyTerminalSettings = (fontFamily: string, fontSize: number, scrollbackLines: number) => {
     setTerminalFontFamily(fontFamily);
     setTerminalFontSize(fontSize);
+    setTerminalScrollbackLines(scrollbackLines);
     const terminal = terminalRef.current;
     if (terminal) {
       terminal.options.fontFamily = fontFamily;
       terminal.options.fontSize = fontSize;
+      terminal.options.scrollback = scrollbackLines;
       fitRef.current?.fit();
     }
   };
@@ -186,15 +189,17 @@ export function TerminalView({ tab, active }: TerminalViewProps) {
   useEffect(() => {
     let active = true;
     void api.getSettings().then((settings) => {
-      if (active) applyTerminalSettings(settings.terminalFontFamily, settings.terminalFontSize);
+      if (active) applyTerminalSettings(settings.terminalFontFamily, settings.terminalFontSize, settings.terminalScrollbackLines);
     }).catch((error) => notify(String(error)));
     return () => { active = false; };
   }, [notify, tab.sessionId]);
 
   useEffect(() => {
     const onSettingsChanged = (event: Event) => {
-      const detail = (event as CustomEvent<{ fontFamily: string; fontSize: number }>).detail;
-      if (detail?.fontFamily && Number.isFinite(detail.fontSize)) applyTerminalSettings(detail.fontFamily, detail.fontSize);
+      const detail = (event as CustomEvent<{ fontFamily: string; fontSize: number; scrollbackLines: number }>).detail;
+      if (detail?.fontFamily && Number.isFinite(detail.fontSize) && Number.isFinite(detail.scrollbackLines)) {
+        applyTerminalSettings(detail.fontFamily, detail.fontSize, detail.scrollbackLines);
+      }
     };
     window.addEventListener("funshell-terminal-settings-changed", onSettingsChanged);
     return () => window.removeEventListener("funshell-terminal-settings-changed", onSettingsChanged);
@@ -285,16 +290,17 @@ export function TerminalView({ tab, active }: TerminalViewProps) {
   const saveTerminalSettings = async () => {
     const fontFamily = terminalFontFamily.trim();
     const fontSize = Math.round(terminalFontSize);
-    if (!fontFamily || !Number.isFinite(fontSize) || fontSize < 9 || fontSize > 32) {
-      notify("终端字体大小必须在 9 到 32 之间，字体名称不能为空");
+    const scrollbackLines = Math.round(terminalScrollbackLines);
+    if (!fontFamily || !Number.isFinite(fontSize) || fontSize < 9 || fontSize > 32 || !Number.isFinite(scrollbackLines) || scrollbackLines < 500 || scrollbackLines > 50000) {
+      notify("终端字体大小必须在 9 到 32 之间，滚屏行数必须在 500 到 50000 之间，字体名称不能为空");
       return;
     }
     setSavingTerminalSettings(true);
     try {
       const current = await api.getSettings();
-      const saved = await api.saveSettings({ ...current, terminalFontFamily: fontFamily, terminalFontSize: fontSize });
-      applyTerminalSettings(saved.terminalFontFamily, saved.terminalFontSize);
-      window.dispatchEvent(new CustomEvent("funshell-terminal-settings-changed", { detail: { fontFamily: saved.terminalFontFamily, fontSize: saved.terminalFontSize } }));
+      const saved = await api.saveSettings({ ...current, terminalFontFamily: fontFamily, terminalFontSize: fontSize, terminalScrollbackLines: scrollbackLines });
+      applyTerminalSettings(saved.terminalFontFamily, saved.terminalFontSize, saved.terminalScrollbackLines);
+      window.dispatchEvent(new CustomEvent("funshell-terminal-settings-changed", { detail: { fontFamily: saved.terminalFontFamily, fontSize: saved.terminalFontSize, scrollbackLines: saved.terminalScrollbackLines } }));
       setTerminalSettingsOpen(false);
       notify("终端设置已保存");
     } catch (error) {
@@ -316,9 +322,11 @@ export function TerminalView({ tab, active }: TerminalViewProps) {
         open={terminalSettingsOpen}
         fontFamily={terminalFontFamily}
         fontSize={terminalFontSize}
+        scrollbackLines={terminalScrollbackLines}
         saving={savingTerminalSettings}
         onFontFamilyChange={setTerminalFontFamily}
         onFontSizeChange={setTerminalFontSize}
+        onScrollbackLinesChange={setTerminalScrollbackLines}
         onClose={() => setTerminalSettingsOpen(false)}
         onSave={() => void saveTerminalSettings()}
       />

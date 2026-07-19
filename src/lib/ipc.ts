@@ -49,6 +49,7 @@ let mockSettings: AppSettings = {
   confirmCloseActiveSessions: true,
   terminalFontFamily: '"Cascadia Mono", Consolas, "Microsoft YaHei UI", monospace',
   terminalFontSize: 13,
+  terminalScrollbackLines: 3000,
   quickConnectionCollapsedFolderIds: [],
 };
 let mockSessionSequence = 0;

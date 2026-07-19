@@ -90,6 +90,7 @@ export function SettingsDialog() {
         ...appSettings,
         terminalFontFamily: current.terminalFontFamily,
         terminalFontSize: current.terminalFontSize,
+        terminalScrollbackLines: current.terminalScrollbackLines,
         quickConnectionCollapsedFolderIds: current.quickConnectionCollapsedFolderIds,
       }));
       notify("设置已保存");

@@ -13,6 +13,7 @@ describe("appStore tab lifecycle", () => {
       confirmCloseActiveSessions: true,
       terminalFontFamily: "Consolas, monospace",
       terminalFontSize: 13,
+      terminalScrollbackLines: 3000,
       quickConnectionCollapsedFolderIds: [folderId],
     });
     useAppStore.setState({ initialized: false, quickConnectionCollapsedFolderIds: [] });

@@ -282,6 +282,7 @@ export interface AppSettings {
   confirmCloseActiveSessions: boolean;
   terminalFontFamily: string;
   terminalFontSize: number;
+  terminalScrollbackLines: number;
   quickConnectionCollapsedFolderIds: string[];
 }
 
