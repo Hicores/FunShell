@@ -61,7 +61,7 @@ function parseHostKey(error: unknown) {
   return { changed: marker.startsWith("HOST_KEY_CHANGED"), host, port: Number(port), algorithm, fingerprint };
 }
 
-function emitTerminalStatus(tabId: string, state: "disconnected" | "reconnecting" | "reconnected" | "error", message: string) {
+function emitTerminalStatus(tabId: string, state: "connecting" | "connected" | "disconnected" | "reconnecting" | "reconnected" | "error", message: string) {
   if (typeof window !== "undefined") {
     window.dispatchEvent(new CustomEvent("funshell-terminal-status", { detail: { tabId, state, message } }));
   }
@@ -112,8 +112,35 @@ export const useAppStore = create<AppStore>((set, get) => ({
   },
 
   connect: async (connection) => {
-    set({ busy: true, toast: null });
-    const connectOnce = () => api.connectSession(connection.id);
+    const existing = get().tabs.find((tab) => tab.kind === "terminal" && tab.connectionId === connection.id && tab.state === "connecting");
+    if (existing) {
+      set({ activeTabId: existing.id, toast: null });
+      return;
+    }
+    const requestedSessionId = typeof crypto.randomUUID === "function"
+      ? crypto.randomUUID()
+      : `session-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    const pendingSession: SessionDescriptor = {
+      id: requestedSessionId,
+      connectionId: connection.id,
+      title: connection.name,
+      state: "connecting",
+    };
+    const pendingTab: WorkspaceTab = {
+      id: requestedSessionId,
+      sessionId: requestedSessionId,
+      connectionId: connection.id,
+      title: connection.name,
+      kind: "terminal",
+      state: "connecting",
+    };
+    set((state) => ({
+      sessions: [...state.sessions, pendingSession],
+      tabs: [...state.tabs, pendingTab],
+      activeTabId: pendingTab.id,
+      toast: null,
+    }));
+    const connectOnce = () => api.connectSession(connection.id, 120, 32, requestedSessionId);
     try {
       let session: SessionDescriptor;
       try {
@@ -124,24 +151,33 @@ export const useAppStore = create<AppStore>((set, get) => ({
         const accepted = window.confirm(
           `${hostKey.changed ? "服务器主机指纹已变化" : "首次连接需要确认主机指纹"}\n\n${hostKey.algorithm}\n${hostKey.fingerprint}\n\n确认信任此主机？`,
         );
-        if (!accepted) return;
+        if (!accepted) throw new Error("已取消主机指纹确认");
         await api.trustHost(hostKey.host, hostKey.port, hostKey.algorithm, hostKey.fingerprint);
         session = await connectOnce();
       }
-      const tab: WorkspaceTab = {
-        id: session.id,
-        sessionId: session.id,
-        connectionId: connection.id,
-        title: connection.name,
-        kind: "terminal",
-        state: session.state,
-      };
-      set((state) => ({ sessions: [...state.sessions, session], tabs: [...state.tabs, tab], activeTabId: tab.id }));
+      if (!get().tabs.some((tab) => tab.id === pendingTab.id)) {
+        await api.disconnectSession(session.id).catch(() => undefined);
+        set((state) => ({ sessions: state.sessions.filter((item) => item.id !== requestedSessionId) }));
+        return;
+      }
+      set((state) => ({
+        sessions: [...state.sessions.filter((item) => item.id !== requestedSessionId), session],
+        tabs: state.tabs.map((tab) => tab.id === pendingTab.id ? { ...tab, sessionId: session.id, state: session.state } : tab),
+      }));
       if (!isTauri()) set((state) => ({ snapshots: { ...state.snapshots, [session.id]: mockSnapshot } }));
+      emitTerminalStatus(pendingTab.id, "connected", "连接成功");
     } catch (error) {
-      set({ toast: String(error) });
-    } finally {
-      set({ busy: false });
+      if (!get().tabs.some((tab) => tab.id === pendingTab.id)) {
+        set((state) => ({ sessions: state.sessions.filter((item) => item.id !== requestedSessionId) }));
+        return;
+      }
+      const message = `连接失败: ${String(error)}`;
+      set((state) => ({
+        sessions: state.sessions.map((item) => item.id === requestedSessionId ? { ...item, state: "error" } : item),
+        tabs: state.tabs.map((tab) => tab.id === pendingTab.id ? { ...tab, state: "error" } : tab),
+        toast: message,
+      }));
+      emitTerminalStatus(pendingTab.id, "error", message);
     }
   },
 

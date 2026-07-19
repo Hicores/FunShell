@@ -122,8 +122,10 @@
 .session-tab.active { background: white; box-shadow: inset 0 2px #278ecb; }
 .session-tab strong { min-width: 0; flex: 1; overflow: hidden; font-size: 12px; font-weight: 600; text-overflow: ellipsis; }
 .session-status { width: 6px; height: 6px; flex: 0 0 6px; border-radius: 50%; background: #9aa8b0; }
+.session-status.connecting { background: #e4a63b; animation: status-pulse 1s ease-in-out infinite; }
 .session-status.connected { background: #23b75b; }
 .session-status.error { background: #d84b4b; }
+@keyframes status-pulse { 50% { opacity: .35; } }
 .tab-close { display: grid; width: 17px; height: 17px; flex: 0 0 17px; place-items: center; color: #71818b; }
 .tab-close:hover { background: #dde3e7; color: #263842; }
 .new-tab-button { width: 28px; height: 28px; align-self: center; margin-left: 2px; }

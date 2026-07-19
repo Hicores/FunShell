@@ -1,8 +1,26 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+import { api } from "../lib/ipc";
 import { mockConnections } from "../lib/mock";
+import type { SessionDescriptor } from "../types";
 import { useAppStore } from "./appStore";
 
 describe("appStore tab lifecycle", () => {
+  it("opens a connecting terminal tab before SSH finishes", async () => {
+    useAppStore.setState({ connections: mockConnections, sessions: [], tabs: [], activeTabId: null, snapshots: {}, toast: null });
+    let resolveConnect: ((session: SessionDescriptor) => void) | undefined;
+    const connectSession = vi.spyOn(api, "connectSession").mockImplementation(() => new Promise((resolve) => { resolveConnect = resolve; }));
+
+    const connecting = useAppStore.getState().connect(mockConnections[0]);
+    const pending = useAppStore.getState().tabs[0];
+    expect(pending).toMatchObject({ connectionId: mockConnections[0].id, kind: "terminal", state: "connecting" });
+    expect(useAppStore.getState().activeTabId).toBe(pending.id);
+    expect(connectSession).toHaveBeenCalledWith(mockConnections[0].id, 120, 32, pending.sessionId);
+
+    resolveConnect?.({ id: pending.sessionId, connectionId: mockConnections[0].id, title: mockConnections[0].name, state: "connected" });
+    await connecting;
+    expect(useAppStore.getState().tabs[0]).toMatchObject({ id: pending.id, sessionId: pending.sessionId, state: "connected" });
+  });
+
   it("opens one tool tab per session and closes the session after its last tab", async () => {
     useAppStore.setState({ connections: mockConnections, sessions: [], tabs: [], activeTabId: null, snapshots: {}, toast: null });
 

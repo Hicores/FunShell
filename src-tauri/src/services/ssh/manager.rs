@@ -53,12 +53,17 @@ impl SessionManager {
     pub async fn connect(
         &self,
         app: AppHandle,
+        requested_session_id: Option<String>,
         profile: ConnectionProfile,
         database: Database,
         vault: &VaultService,
-        columns: u32,
-        rows: u32,
+        terminal_size: (u32, u32),
     ) -> AppResult<SessionDescriptor> {
+        let (columns, rows) = terminal_size;
+        let session_id = requested_session_id.unwrap_or_else(|| Uuid::new_v4().to_string());
+        if self.sessions.contains_key(&session_id) {
+            return Err(AppError::Validation("会话标识已存在".into()));
+        }
         let stream = connect_for_profile(&profile, &database, vault).await?;
         let config = client_config(&profile);
         let (forwarded_sender, mut forwarded_receiver) =
@@ -81,7 +86,6 @@ impl SessionManager {
             channel.data(format!("{command}\n").as_bytes()).await?;
         }
 
-        let session_id = Uuid::new_v4().to_string();
         let remote_routes = Arc::new(DashMap::<(String, u32), (String, u16)>::new());
         let forwarded_routes = remote_routes.clone();
         tokio::spawn(async move {

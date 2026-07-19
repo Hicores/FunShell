@@ -19,6 +19,7 @@ pub async fn connect_session(
     connection_id: String,
     columns: Option<u32>,
     rows: Option<u32>,
+    requested_session_id: Option<String>,
 ) -> AppResult<SessionDescriptor> {
     let profile = state
         .database
@@ -29,11 +30,11 @@ pub async fn connect_session(
         .sessions
         .connect(
             app,
+            requested_session_id,
             profile,
             state.database.clone(),
             &state.vault,
-            columns.unwrap_or(120),
-            rows.unwrap_or(32),
+            (columns.unwrap_or(120), rows.unwrap_or(32)),
         )
         .await
 }

@@ -39,6 +39,7 @@ export function TerminalView({ tab, active }: TerminalViewProps) {
   const hostRef = useRef<HTMLDivElement>(null);
   const sessionIdRef = useRef(tab.sessionId);
   const connectionIdRef = useRef(tab.connectionId);
+  const stateRef = useRef(tab.state);
   const terminalRef = useRef<Terminal | null>(null);
   const fitRef = useRef<FitAddon | null>(null);
   const searchRef = useRef<SearchAddon | null>(null);
@@ -57,6 +58,7 @@ export function TerminalView({ tab, active }: TerminalViewProps) {
   const [savingTerminalSettings, setSavingTerminalSettings] = useState(false);
   sessionIdRef.current = tab.sessionId;
   connectionIdRef.current = tab.connectionId;
+  stateRef.current = tab.state;
 
   useEffect(() => {
     if (!hostRef.current) return;
@@ -97,7 +99,9 @@ export function TerminalView({ tab, active }: TerminalViewProps) {
     fitRef.current = fit;
     searchRef.current = searchAddon;
 
-    if (!isTauri()) {
+    if (tab.state === "connecting") {
+      terminal.writeln(`\x1b[36m正在连接 ${tab.title}...\x1b[0m`);
+    } else if (!isTauri()) {
       terminal.writeln("\x1b[36m连接主机...\x1b[0m");
       terminal.writeln("\x1b[32m连接主机成功\x1b[0m");
       terminal.writeln("Last login: Fri Jul 18 09:18:32 2026 from 127.0.0.1");
@@ -105,6 +109,7 @@ export function TerminalView({ tab, active }: TerminalViewProps) {
     }
 
     const input = terminal.onData((data) => {
+      if (stateRef.current !== "connected") return;
       void api.terminalInput(sessionIdRef.current, encodeBase64(data));
       let line = inputBufferRef.current;
       let inEscapeSequence = escapeSequenceRef.current;
@@ -132,10 +137,12 @@ export function TerminalView({ tab, active }: TerminalViewProps) {
       inputBufferRef.current = line;
       escapeSequenceRef.current = inEscapeSequence;
     });
-    const resize = terminal.onResize(({ cols, rows }) => void api.resizeTerminal(sessionIdRef.current, cols, rows));
+    const resize = terminal.onResize(({ cols, rows }) => {
+      if (stateRef.current === "connected") void api.resizeTerminal(sessionIdRef.current, cols, rows);
+    });
     const observer = new ResizeObserver(() => {
       fit.fit();
-      void api.resizeTerminal(sessionIdRef.current, terminal.cols, terminal.rows);
+      if (stateRef.current === "connected") void api.resizeTerminal(sessionIdRef.current, terminal.cols, terminal.rows);
     });
     observer.observe(hostRef.current);
 
@@ -169,7 +176,7 @@ export function TerminalView({ tab, active }: TerminalViewProps) {
     const onTerminalStatus = (event: Event) => {
       const detail = (event as CustomEvent<{ tabId: string; state: string; message: string }>).detail;
       if (detail?.tabId !== tab.id || !detail.message || !terminalRef.current) return;
-      const color = detail.state === "reconnected" ? "32" : detail.state === "error" ? "31" : "33";
+      const color = detail.state === "connected" || detail.state === "reconnected" ? "32" : detail.state === "error" ? "31" : "33";
       terminalRef.current.writeln(`\r\n\x1b[${color}m${detail.message}\x1b[0m`);
     };
     window.addEventListener("funshell-terminal-status", onTerminalStatus);
@@ -210,7 +217,21 @@ export function TerminalView({ tab, active }: TerminalViewProps) {
     if (active) window.setTimeout(() => fitRef.current?.fit(), 0);
   }, [active]);
 
+  useEffect(() => {
+    if (tab.state !== "connected") return;
+    const timer = window.setTimeout(() => {
+      fitRef.current?.fit();
+      const terminal = terminalRef.current;
+      if (terminal) void api.resizeTerminal(sessionIdRef.current, terminal.cols, terminal.rows);
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [tab.state]);
+
   const submit = async () => {
+    if (stateRef.current !== "connected") {
+      notify("服务器仍在连接中");
+      return;
+    }
     const value = command.trimEnd();
     if (!value) return;
     setCommand("");
@@ -312,7 +333,8 @@ export function TerminalView({ tab, active }: TerminalViewProps) {
       <div className="command-bar">
         <input
           value={command}
-          placeholder="命令输入（Enter 执行，终端区域支持完整交互）"
+          disabled={tab.state !== "connected"}
+          placeholder={tab.state === "connecting" ? "正在连接服务器..." : tab.state === "error" ? "连接失败，请重新连接" : "命令输入（Enter 执行，终端区域支持完整交互）"}
           onChange={(event) => { setCommand(event.target.value); setHistoryIndex(null); }}
           onKeyDown={(event) => {
             if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); void submit(); return; }
@@ -328,7 +350,7 @@ export function TerminalView({ tab, active }: TerminalViewProps) {
             }
           }}
         />
-        <button type="button" title="执行" onClick={() => void submit()}><Zap size={17} /></button>
+        <button type="button" title="执行" disabled={tab.state !== "connected"} onClick={() => void submit()}><Zap size={17} /></button>
         <button type="button" title="搜索" onClick={() => setSearchOpen((value) => !value)}><Search size={17} /></button>
         <button type="button" aria-label="终端设置" title="终端设置" onClick={() => setTerminalSettingsOpen(true)}><Settings size={17} /></button>
       </div>

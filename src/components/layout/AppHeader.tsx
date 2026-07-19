@@ -25,7 +25,7 @@ export function AppHeader() {
         <IconButton label="私钥管理" onClick={() => openKeyManager(true)}><KeyRound size={18} /></IconButton>
       </div>
       <div className="header-spacer" />
-      <IconButton label="重新连接" disabled={!active} onClick={() => active && void reconnect(active.sessionId)}><RefreshCw size={17} /></IconButton>
+      <IconButton label="重新连接" disabled={!active || active.state === "connecting"} onClick={() => active && active.state !== "connecting" && void reconnect(active.sessionId)}><RefreshCw size={17} /></IconButton>
       <IconButton label="工具" active={toolsOpen} onClick={toggleTools}><Grid2X2 size={18} /></IconButton>
       <IconButton label="设置" onClick={() => openSettings(true)}><Settings size={18} /></IconButton>
       <TransferCenter />

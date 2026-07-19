@@ -117,7 +117,7 @@ function mockCall(command: string, args?: Record<string, unknown>): unknown {
     }
     case "connect_session": {
       const connection = mockConnections.find((item) => item.id === args?.connectionId) ?? mockConnections[0];
-      const session = { id: `mock-${Date.now()}-${++mockSessionSequence}`, connectionId: connection.id, title: connection.name, state: "connected" } satisfies SessionDescriptor;
+      const session = { id: String(args?.requestedSessionId ?? `mock-${Date.now()}-${++mockSessionSequence}`), connectionId: connection.id, title: connection.name, state: "connected" } satisfies SessionDescriptor;
       mockSessionConnections.set(session.id, connection.id);
       return session;
     }
@@ -267,7 +267,7 @@ export const api = {
   saveProxy: (input: { id?: string; name: string; kind: "http_connect" | "socks5"; host: string; port: number; username?: string | null; password?: string | null }) => call<ProxyProfile>("save_proxy", { input }),
   listRoutes: () => call<RouteProfile[]>("list_routes"),
   saveRoute: (route: RouteProfile) => call<RouteProfile>("save_route", { route }),
-  connectSession: (connectionId: string, columns = 120, rows = 32) => call<SessionDescriptor>("connect_session", { connectionId, columns, rows }),
+  connectSession: (connectionId: string, columns = 120, rows = 32, requestedSessionId?: string) => call<SessionDescriptor>("connect_session", { connectionId, columns, rows, requestedSessionId }),
   disconnectSession: (sessionId: string) => call<void>("disconnect_session", { sessionId }),
   terminalInput: (sessionId: string, dataBase64: string) => call<void>("send_terminal_input", { sessionId, dataBase64 }),
   terminalCommand: (sessionId: string, command: string) => call<void>("submit_terminal_command", { sessionId, command }),

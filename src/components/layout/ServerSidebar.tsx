@@ -15,8 +15,9 @@ export function ServerSidebar() {
   const connections = useAppStore((state) => state.connections);
   const activeTab = tabs.find((tab) => tab.id === activeTabId);
   const sessionTab = activeTab && tabs.find((tab) => tab.sessionId === activeTab.sessionId && tab.kind === "terminal");
+  const sessionConnected = sessionTab?.state === "connected";
   const connection = connections.find((item) => item.id === sessionTab?.connectionId);
-  const snapshot = sessionTab ? snapshots[sessionTab.sessionId] : undefined;
+  const snapshot = sessionConnected ? snapshots[sessionTab.sessionId] : undefined;
   const [networkName, setNetworkName] = useState("eth0");
   const [networkHistory, setNetworkHistory] = useState<Record<string, NetworkRateSample[]>>({});
   const [latencies, setLatencies] = useState<Record<string, number>>({});
@@ -25,7 +26,7 @@ export function ServerSidebar() {
   const latency = sessionTab ? latencies[sessionTab.sessionId] : undefined;
 
   useEffect(() => {
-    if (!sessionTab) return;
+    if (!sessionTab || !sessionConnected) return;
     let disposed = false;
     let refreshing = false;
     const refresh = async () => {
@@ -51,7 +52,7 @@ export function ServerSidebar() {
     void refresh();
     const timer = window.setInterval(refresh, 2200);
     return () => { disposed = true; window.clearInterval(timer); };
-  }, [sessionTab?.sessionId, setSnapshot]);
+  }, [sessionConnected, sessionTab?.sessionId, setSnapshot]);
 
   useEffect(() => {
     if (!sessionTab || !snapshot) return;
@@ -78,7 +79,7 @@ export function ServerSidebar() {
           <span>IP</span><strong>{connection?.host ?? "-"}</strong>
           <button type="button" title="复制 IP" disabled={!connection} onClick={() => connection && void navigator.clipboard.writeText(connection.host)}><Copy size={13} /></button>
         </div>
-        <button className="system-info-button" type="button" disabled={!sessionTab} onClick={() => openWorkspace("system")}>
+        <button className="system-info-button" type="button" disabled={!sessionConnected} onClick={() => openWorkspace("system")}>
           <ServerCog size={15} />系统信息
         </button>
       </div>
@@ -92,13 +93,13 @@ export function ServerSidebar() {
       </div>
 
       <div
-        className={`sidebar-block process-mini ${sessionTab ? "clickable" : ""}`}
+        className={`sidebar-block process-mini ${sessionConnected ? "clickable" : ""}`}
         role="button"
-        tabIndex={sessionTab ? 0 : -1}
+        tabIndex={sessionConnected ? 0 : -1}
         aria-label="打开进程管理"
-        aria-disabled={!sessionTab}
-        onClick={() => sessionTab && openWorkspace("processes")}
-        onKeyDown={(event) => { if (sessionTab && (event.key === "Enter" || event.key === " ")) { event.preventDefault(); openWorkspace("processes"); } }}
+        aria-disabled={!sessionConnected}
+        onClick={() => sessionConnected && openWorkspace("processes")}
+        onKeyDown={(event) => { if (sessionConnected && (event.key === "Enter" || event.key === " ")) { event.preventDefault(); openWorkspace("processes"); } }}
       >
         <div className="mini-table-head"><span>内存</span><span>CPU</span><span>命令</span></div>
         {(snapshot?.topProcesses ?? []).slice(0, 5).map((process) => (
@@ -110,13 +111,13 @@ export function ServerSidebar() {
       </div>
 
       <div
-        className={`sidebar-block network-mini ${sessionTab ? "clickable" : ""}`}
+        className={`sidebar-block network-mini ${sessionConnected ? "clickable" : ""}`}
         role="button"
-        tabIndex={sessionTab ? 0 : -1}
+        tabIndex={sessionConnected ? 0 : -1}
         aria-label="打开网络监听"
-        aria-disabled={!sessionTab}
-        onClick={() => sessionTab && openWorkspace("network")}
-        onKeyDown={(event) => { if (sessionTab && (event.key === "Enter" || event.key === " ")) { event.preventDefault(); openWorkspace("network"); } }}
+        aria-disabled={!sessionConnected}
+        onClick={() => sessionConnected && openWorkspace("network")}
+        onKeyDown={(event) => { if (sessionConnected && (event.key === "Enter" || event.key === " ")) { event.preventDefault(); openWorkspace("network"); } }}
       >
         <div className="network-summary">
           <span className="upload">↑ {formatRate(selectedNetwork?.transmitBps ?? 0)}</span>
@@ -130,7 +131,7 @@ export function ServerSidebar() {
         <NetworkRateChart samples={networkHistory[networkHistoryKey] ?? []} />
       </div>
 
-      <button className="latency-block" type="button" disabled={!sessionTab} title="SSH 数据往返延迟" onClick={() => openWorkspace("network")}>
+      <button className="latency-block" type="button" disabled={!sessionConnected} title="SSH 数据往返延迟" onClick={() => openWorkspace("network")}>
         <Network size={15} /><strong>{latency == null ? "-" : `${latency} ms`}</strong><span>数据往返</span>
       </button>
 

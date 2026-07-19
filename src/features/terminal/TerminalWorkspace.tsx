@@ -11,19 +11,19 @@ interface TerminalWorkspaceProps {
 export function TerminalWorkspace({ tab, active }: TerminalWorkspaceProps) {
   const [bottomHeight, setBottomHeight] = useState(330);
   const [collapsed, setCollapsed] = useState(false);
+  const connected = tab.state === "connected";
   return (
     <div className="terminal-workspace">
-      <div className="terminal-region" style={{ bottom: collapsed ? 34 : bottomHeight }}>
+      <div className="terminal-region" style={{ bottom: connected ? (collapsed ? 34 : bottomHeight) : 0 }}>
         <TerminalView tab={tab} active={active} />
       </div>
-      <BottomPanel
+      {connected && <BottomPanel
         tab={tab}
         height={collapsed ? 34 : bottomHeight}
         collapsed={collapsed}
         onToggle={() => setCollapsed((value) => !value)}
         onResize={setBottomHeight}
-      />
+      />}
     </div>
   );
 }
-
