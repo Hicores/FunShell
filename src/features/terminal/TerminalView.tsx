@@ -5,6 +5,7 @@ import { SearchAddon } from "@xterm/addon-search";
 import { WebLinksAddon } from "@xterm/addon-web-links";
 import { Terminal } from "@xterm/xterm";
 import { ContextMenu } from "../../components/common/ContextMenu";
+import { bindAsyncDisposer } from "../../lib/asyncDisposer";
 import { api, isTauri, onEvent } from "../../lib/ipc";
 import { useAppStore } from "../../stores/appStore";
 import type { TerminalOutputEvent, WorkspaceTab } from "../../types";
@@ -146,13 +147,12 @@ export function TerminalView({ tab, active }: TerminalViewProps) {
     });
     observer.observe(hostRef.current);
 
-    let unlisten: (() => void) | undefined;
-    void onEvent<TerminalOutputEvent>("terminal-output", (event) => {
+    const disposeOutput = bindAsyncDisposer(onEvent<TerminalOutputEvent>("terminal-output", (event) => {
       if (event.payload.sessionId === sessionIdRef.current) terminal.write(decodeBase64(event.payload.dataBase64));
-    }).then((dispose) => { unlisten = dispose; });
+    }));
 
     return () => {
-      unlisten?.();
+      disposeOutput();
       observer.disconnect();
       input.dispose();
       resize.dispose();
