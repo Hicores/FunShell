@@ -62,6 +62,15 @@ pub fn delete_connection(
 }
 
 #[tauri::command]
+pub fn move_connection(
+    state: State<'_, AppState>,
+    id: String,
+    folder_id: Option<String>,
+) -> AppResult<()> {
+    state.database.move_connection(&id, folder_id.as_deref())
+}
+
+#[tauri::command]
 pub fn list_folders(
     state: State<'_, AppState>,
     include_deleted: Option<bool>,

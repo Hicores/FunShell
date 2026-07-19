@@ -26,7 +26,7 @@
 .modal-footer { display: flex; min-height: 47px; flex: 0 0 47px; align-items: center; justify-content: flex-end; gap: 8px; padding: 0 12px; border-top: 1px solid #c4cdd3; background: #f7f8f9; }
 .modal-footer button, .manager-actions button, .key-toolbar button, .view-toolbar > button, .settings-section button, .candidate-toolbar button { display: inline-flex; min-width: 82px; height: 30px; align-items: center; justify-content: center; gap: 6px; border: 1px solid #b3c0c8; border-radius: 3px; padding: 0 12px; background: white; }
 .primary-button { border-color: #257eae !important; background: #2d8fc2 !important; color: white !important; }
-.danger-button { display: inline-flex; height: 29px; align-items: center; gap: 6px; border: 1px solid #cb6b6b; border-radius: 3px; padding: 0 9px; background: #c95353; color: white; }
+.danger-button, .modal-footer button.danger-button { display: inline-flex; height: 29px; align-items: center; gap: 6px; border: 1px solid #cb6b6b; border-radius: 3px; padding: 0 9px; background: #c95353; color: white; }
 .danger-button.ghost { background: white; color: #b54242; }
 
 .data-table { width: 100%; border-collapse: collapse; table-layout: fixed; font-size: 12px; }
@@ -81,6 +81,9 @@ legend { padding: 0 6px; color: #2b566d; font-weight: 600; }
 .manager-actions { display: flex; justify-content: flex-end; gap: 8px; padding-top: 9px; }
 .manager-footer { margin-right: auto; color: #6d7e88; }
 .folder-create-form { padding: 5px 3px 2px; }
+.connection-action-form { padding: 5px 3px 2px; }
+.connection-delete-message { margin: 4px 3px; color: #435862; line-height: 1.6; }
+.connection-delete-message strong { color: #243b47; }
 
 .connection-editor { display: grid; grid-template-columns: 190px 1fr; min-height: 510px; border: 1px solid #c4ced4; background: #f7f8f9; }
 .connection-editor > aside { display: flex; flex-direction: column; border-right: 1px solid #c4ced4; background: white; }

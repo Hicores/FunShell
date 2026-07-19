@@ -101,6 +101,7 @@ pub fn run() {
             commands::connections::list_connections,
             commands::connections::save_connection,
             commands::connections::delete_connection,
+            commands::connections::move_connection,
             commands::connections::list_folders,
             commands::connections::save_folder,
             commands::connections::delete_folder,

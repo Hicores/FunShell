@@ -134,6 +134,29 @@ impl Database {
         })
     }
 
+    pub fn move_connection(&self, id: &str, folder_id: Option<&str>) -> AppResult<()> {
+        self.with_connection(|connection| {
+            if let Some(folder_id) = folder_id {
+                let folder_exists = connection.query_row(
+                    "SELECT EXISTS(SELECT 1 FROM folders WHERE id=?1 AND deleted=0)",
+                    [folder_id],
+                    |row| row.get::<_, bool>(0),
+                )?;
+                if !folder_exists {
+                    return Err(AppError::Validation("目标目录不存在或已删除".into()));
+                }
+            }
+            let changed = connection.execute(
+                "UPDATE connections SET folder_id=?2, updated_at=?3 WHERE id=?1 AND deleted=0",
+                params![id, folder_id, Utc::now().to_rfc3339()],
+            )?;
+            if changed == 0 {
+                return Err(AppError::Validation("连接不存在或已删除".into()));
+            }
+            Ok(())
+        })
+    }
+
     pub fn list_folders(&self, include_deleted: bool) -> AppResult<Vec<ConnectionFolder>> {
         self.with_connection(|connection| {
             let mut statement = connection.prepare(

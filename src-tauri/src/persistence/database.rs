@@ -195,7 +195,7 @@ mod tests {
     use tempfile::tempdir;
 
     use crate::{
-        domain::{AuthMethod, SaveConnectionInput},
+        domain::{AuthMethod, ConnectionFolder, SaveConnectionInput},
         persistence::Database,
     };
 
@@ -229,6 +229,25 @@ mod tests {
         assert_eq!(listed.len(), 1);
         assert_eq!(listed[0].id, saved.id);
         assert_eq!(listed[0].secret_id.as_deref(), Some("secret-1"));
+
+        let folder = database
+            .save_folder(ConnectionFolder {
+                id: "folder-test".into(),
+                parent_id: None,
+                name: "Test folder".into(),
+                sort_order: 0,
+                deleted: false,
+            })
+            .expect("save folder");
+        database
+            .move_connection(&saved.id, Some(&folder.id))
+            .expect("move connection");
+        let moved = database
+            .connection_by_id(&saved.id)
+            .expect("read moved connection")
+            .expect("moved connection");
+        assert_eq!(moved.folder_id.as_deref(), Some(folder.id.as_str()));
+        assert_eq!(moved.secret_id.as_deref(), Some("secret-1"));
     }
 
     #[test]

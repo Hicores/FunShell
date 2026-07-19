@@ -246,6 +246,7 @@ function mockCall(command: string, args?: Record<string, unknown>): unknown {
       recordMockHistory(mockSessionConnections.get(String(args?.sessionId ?? "")) ?? null, String(args?.command ?? ""));
       return null;
     }
+    case "move_connection": return null;
     case "save_connection": return { ...mockConnections[0], ...(args?.input as object), id: (args?.input as SaveConnectionInput)?.id ?? `connection-${Date.now()}` };
     default: return null;
   }
@@ -264,6 +265,7 @@ export const api = {
   listConnections: (includeDeleted = false) => call<ConnectionProfile[]>("list_connections", { includeDeleted }),
   saveConnection: (input: SaveConnectionInput) => call<ConnectionProfile>("save_connection", { input }),
   deleteConnection: (id: string, deleted = true) => call<void>("delete_connection", { id, deleted }),
+  moveConnection: (id: string, folderId: string | null) => call<void>("move_connection", { id, folderId }),
   listFolders: (includeDeleted = false) => call<ConnectionFolder[]>("list_folders", { includeDeleted }),
   saveFolder: (folder: ConnectionFolder) => call<ConnectionFolder>("save_folder", { folder }),
   deleteFolder: (id: string, deleted = true) => call<void>("delete_folder", { id, deleted }),
