@@ -152,9 +152,19 @@ export function NetworkView({ tab, active = true }: { tab: WorkspaceTab; active?
       ? sortRows(connections, (socket) => connectionSortValue(socket, connectionSort.key, locations, locationErrors), connectionSort.direction)
       : connections;
   }, [connectionSort, locationErrors, locations, selected]);
-  const remoteIpKey = useMemo(() => selected
-    ? [...new Set(selected.connections.map((socket) => socket.remoteAddress).filter(Boolean))].sort().join("|")
-    : "", [selected]);
+  const remoteIpKey = useMemo(() => {
+    if (!selected) return "";
+    const seen = new Set<string>();
+    const ips: string[] = [];
+    for (const socket of selected.connections) {
+      const ip = socket.remoteAddress;
+      if (!ip || seen.has(ip)) continue;
+      seen.add(ip);
+      ips.push(ip);
+      if (ips.length >= GEO_IP_CACHE_LIMIT) break;
+    }
+    return ips.sort().join("|");
+  }, [selected]);
   const virtualConnections = useVirtualRows(sortedConnections, 27);
 
   useEffect(() => {
