@@ -2,7 +2,7 @@ use std::collections::{BTreeMap, HashMap};
 
 use crate::domain::{
     FilesystemInfo, NetworkInterface, ProcessDetails, ProcessInfo, ServerSnapshot, SocketInfo,
-    SystemInfo,
+    SocketListenerSnapshot, SocketListenerSummary, SystemInfo,
 };
 
 pub fn parse_snapshot(output: &str) -> ServerSnapshot {
@@ -173,6 +173,20 @@ pub fn parse_sockets(output: &str) -> Vec<SocketInfo> {
         }
     }
     sockets
+}
+
+pub fn parse_socket_listener_snapshot(output: &str) -> SocketListenerSnapshot {
+    let values = sections(output);
+    let summaries = values
+        .get("SUMMARIES")
+        .into_iter()
+        .flatten()
+        .filter_map(|line| parse_socket_summary_line(line))
+        .collect();
+    SocketListenerSnapshot {
+        listeners: parse_sockets(output),
+        summaries,
+    }
 }
 
 fn sections(output: &str) -> HashMap<String, Vec<String>> {
@@ -358,6 +372,24 @@ fn parse_socket_line(
     })
 }
 
+fn parse_socket_summary_line(line: &str) -> Option<SocketListenerSummary> {
+    let fields = line.split('\t').collect::<Vec<_>>();
+    if fields.len() != 7 {
+        return None;
+    }
+    let (local_address, local_port) = split_endpoint(fields[2]);
+    Some(SocketListenerSummary {
+        protocol: fields[0].to_owned(),
+        address_family: fields[1].to_owned(),
+        local_address,
+        local_port: local_port?,
+        connection_count: fields[3].parse().ok()?,
+        ip_count: fields[4].parse().ok()?,
+        sent_bytes: fields[5].parse().ok(),
+        received_bytes: fields[6].parse().ok(),
+    })
+}
+
 fn parse_interface_address(line: &str) -> Option<(String, String)> {
     let fields = line.split_whitespace().collect::<Vec<_>>();
     if fields.len() < 4 || !matches!(fields[2], "inet" | "inet6") {
@@ -428,7 +460,7 @@ fn extract_number_after(value: &str, marker: &str) -> Option<u32> {
 
 #[cfg(test)]
 mod tests {
-    use super::{parse_processes, parse_snapshot, parse_sockets};
+    use super::{parse_processes, parse_snapshot, parse_socket_listener_snapshot, parse_sockets};
 
     #[test]
     fn parses_core_snapshot_values() {
@@ -467,5 +499,17 @@ mod tests {
         assert_eq!(sockets[0].interface_name.as_deref(), Some("eth0"));
         assert_eq!(sockets[1].address_family, "IPv6");
         assert_eq!(sockets[1].interface_name.as_deref(), Some("eth1"));
+    }
+
+    #[test]
+    fn parses_compact_listener_summaries() {
+        let output = "__ADDRESSES__\n2: eth0 inet 10.0.0.2/24 scope global eth0\n__SOCKETS__\ntcp LISTEN 0 4096 0.0.0.0:22 0.0.0.0:* users:((\"sshd\",pid=10,fd=3))\n__TCPINFO__\n__SUMMARIES__\ntcp\tIPv4\t10.0.0.2:22\t4200\t3180\t987654321\t123456789\n";
+        let snapshot = parse_socket_listener_snapshot(output);
+        assert_eq!(snapshot.listeners.len(), 1);
+        assert_eq!(snapshot.summaries.len(), 1);
+        assert_eq!(snapshot.summaries[0].connection_count, 4_200);
+        assert_eq!(snapshot.summaries[0].ip_count, 3_180);
+        assert_eq!(snapshot.summaries[0].sent_bytes, Some(987_654_321));
+        assert_eq!(snapshot.summaries[0].received_bytes, Some(123_456_789));
     }
 }

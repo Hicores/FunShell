@@ -1,6 +1,12 @@
-import type { SocketInfo } from "../../types";
+import type { SocketInfo, SocketListenerSummary } from "../../types";
 
 export interface RatedSocket extends SocketInfo {
+  key: string;
+  sentBps: number | null;
+  receivedBps: number | null;
+}
+
+export interface RatedSocketListenerSummary extends SocketListenerSummary {
   key: string;
   sentBps: number | null;
   receivedBps: number | null;
@@ -24,6 +30,33 @@ export interface ListenerInfo {
 
 export function socketKey(socket: SocketInfo) {
   return [socket.protocol, socket.addressFamily, socket.interfaceName ?? "", socket.localAddress, socket.localPort ?? "", socket.remoteAddress, socket.remotePort ?? "", socket.pid ?? ""].join("|");
+}
+
+export function listenerSummaryKey(summary: SocketListenerSummary) {
+  return [summary.protocol, summary.addressFamily, summary.localAddress, summary.localPort].join("|");
+}
+
+export function rateListenerSummarySamples(
+  summaries: SocketListenerSummary[],
+  previous: ReadonlyMap<string, SocketListenerSummary>,
+  elapsedMilliseconds: number,
+): RatedSocketListenerSummary[] {
+  const elapsedSeconds = Math.max(elapsedMilliseconds / 1000, 0.001);
+  return summaries.map((summary) => {
+    const key = listenerSummaryKey(summary);
+    const old = previous.get(key);
+    const rate = (current: number | null, before: number | null | undefined) => {
+      if (current == null) return null;
+      if (before == null) return 0;
+      return Math.round(Math.max(0, current - before) / elapsedSeconds);
+    };
+    return {
+      ...summary,
+      key,
+      sentBps: rate(summary.sentBytes, old?.sentBytes),
+      receivedBps: rate(summary.receivedBytes, old?.receivedBytes),
+    };
+  });
 }
 
 export function rateSocketSamples(
@@ -64,16 +97,25 @@ function accepts(listener: RatedSocket, connection: RatedSocket) {
   return wildcard || listener.localAddress === connection.localAddress;
 }
 
+function acceptsSummary(listener: RatedSocket, summary: RatedSocketListenerSummary) {
+  if (listener.protocol.toLowerCase() !== summary.protocol.toLowerCase()) return false;
+  if (listener.addressFamily !== summary.addressFamily) return false;
+  if (listener.localPort !== summary.localPort) return false;
+  const wildcard = ["0.0.0.0", "::", "*"].includes(listener.localAddress);
+  return wildcard || listener.localAddress === summary.localAddress;
+}
+
 function sumKnown(values: Array<number | null>) {
   const known = values.filter((value): value is number => value != null);
   return known.length ? known.reduce((total, value) => total + value, 0) : null;
 }
 
-export function buildListeners(sockets: RatedSocket[]): ListenerInfo[] {
+export function buildListeners(sockets: RatedSocket[], summaries?: RatedSocketListenerSummary[]): ListenerInfo[] {
   return sockets
     .filter(isListener)
     .map((listener) => {
       const connections = sockets.filter((socket) => accepts(listener, socket));
+      const matchingSummaries = summaries?.filter((summary) => acceptsSummary(listener, summary));
       return {
         key: listener.key,
         pid: listener.pid,
@@ -83,10 +125,14 @@ export function buildListeners(sockets: RatedSocket[]): ListenerInfo[] {
         interfaceName: listener.interfaceName,
         localAddress: listener.localAddress,
         localPort: listener.localPort!,
-        ipCount: new Set(connections.map((socket) => socket.remoteAddress).filter((ip) => ip && !["0.0.0.0", "::", "*"].includes(ip))).size,
-        connectionCount: connections.length,
-        sentBps: sumKnown(connections.map((socket) => socket.sentBps)),
-        receivedBps: sumKnown(connections.map((socket) => socket.receivedBps)),
+        ipCount: matchingSummaries
+          ? matchingSummaries.reduce((total, summary) => total + summary.ipCount, 0)
+          : new Set(connections.map((socket) => socket.remoteAddress).filter((ip) => ip && !["0.0.0.0", "::", "*"].includes(ip))).size,
+        connectionCount: matchingSummaries
+          ? matchingSummaries.reduce((total, summary) => total + summary.connectionCount, 0)
+          : connections.length,
+        sentBps: sumKnown(matchingSummaries ? matchingSummaries.map((summary) => summary.sentBps) : connections.map((socket) => socket.sentBps)),
+        receivedBps: sumKnown(matchingSummaries ? matchingSummaries.map((summary) => summary.receivedBps) : connections.map((socket) => socket.receivedBps)),
         connections,
       };
     })

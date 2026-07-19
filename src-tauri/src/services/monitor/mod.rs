@@ -1,7 +1,8 @@
 mod parser;
 
 pub use parser::{
-    parse_process_details, parse_processes, parse_snapshot, parse_sockets, parse_system_info,
+    parse_process_details, parse_processes, parse_snapshot, parse_socket_listener_snapshot,
+    parse_sockets, parse_system_info,
 };
 
 pub const SNAPSHOT_SCRIPT: &str = r#"LC_ALL=C
@@ -40,6 +41,60 @@ ip -o addr show 2>/dev/null
 echo __SOCKETS__
 ss -H -lnutp 2>/dev/null
 echo __TCPINFO__
+echo __SUMMARIES__
+aggregate_sockets() {
+    protocol="$1"
+    family="$2"
+    options="$3"
+    with_metrics="$4"
+    ss -H "$options" state connected 2>/dev/null | awk -v protocol="$protocol" -v family="$family" -v with_metrics="$with_metrics" '
+function endpoint_host(value, result) {
+    result = value
+    if (substr(result, 1, 1) == "[") {
+        sub(/^\[/, "", result)
+        sub(/\]:[^:]*$/, "", result)
+    } else {
+        sub(/:[^:]*$/, "", result)
+    }
+    sub(/%.*/, "", result)
+    return result
+}
+function metric_value(line, label, position, value) {
+    position = index(line, label)
+    if (position == 0) return -1
+    value = substr(line, position + length(label))
+    sub(/[^0-9].*$/, "", value)
+    if (value == "") return -1
+    return value + 0
+}
+$2 ~ /^[0-9]+$/ && $3 ~ /^[0-9]+$/ && NF >= 5 {
+    current = protocol SUBSEP family SUBSEP $4
+    connection_count[current]++
+    remote = endpoint_host($5)
+    unique = current SUBSEP remote
+    if (remote != "" && remote != "*" && !seen[unique]++) ip_count[current]++
+    next
+}
+{
+    if (with_metrics != "1" || current == "") next
+    sent = metric_value($0, "bytes_sent:")
+    received = metric_value($0, "bytes_received:")
+    if (sent >= 0) { sent_bytes[current] += sent; sent_known[current] = 1 }
+    if (received >= 0) { received_bytes[current] += received; received_known[current] = 1 }
+}
+END {
+    for (key in connection_count) {
+        split(key, parts, SUBSEP)
+        sent = sent_known[key] ? sprintf("%.0f", sent_bytes[key]) : "-"
+        received = received_known[key] ? sprintf("%.0f", received_bytes[key]) : "-"
+        printf "%s\t%s\t%s\t%d\t%d\t%s\t%s\n", parts[1], parts[2], parts[3], connection_count[key], ip_count[key], sent, received
+    }
+}'
+}
+aggregate_sockets tcp IPv4 -4tinp 1
+aggregate_sockets tcp IPv6 -6tinp 1
+aggregate_sockets udp IPv4 -4unap 0
+aggregate_sockets udp IPv6 -6unap 0
 "#;
 
 pub fn socket_connection_script(
@@ -70,10 +125,12 @@ pub fn socket_connection_script(
 
 #[cfg(test)]
 mod tests {
-    use super::socket_connection_script;
+    use super::{SOCKET_LISTENER_SCRIPT, socket_connection_script};
 
     #[test]
     fn filters_socket_details_on_the_remote_host() {
+        assert!(SOCKET_LISTENER_SCRIPT.contains("ss -H \"$options\" state connected"));
+        assert!(SOCKET_LISTENER_SCRIPT.contains("| awk"));
         let script = socket_connection_script("tcp", "IPv4", 22).expect("script");
         assert!(script.contains("ss -H -4tnap state connected '( sport = :22 )'"));
         assert!(script.contains("ss -H -4tinp state connected '( sport = :22 )'"));

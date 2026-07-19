@@ -5,13 +5,14 @@ use tokio::process::Command;
 
 use crate::{
     domain::{
-        ProcessDetails, ProcessInfo, RouteTraceResult, ServerSnapshot, SocketInfo, SystemInfo,
+        ProcessDetails, ProcessInfo, RouteTraceResult, ServerSnapshot, SocketInfo,
+        SocketListenerSnapshot, SystemInfo,
     },
     error::{AppError, AppResult},
     services::monitor::{
         PROCESS_SCRIPT, SNAPSHOT_SCRIPT, SOCKET_LISTENER_SCRIPT, SYSTEM_SCRIPT,
-        parse_process_details, parse_processes, parse_snapshot, parse_sockets, parse_system_info,
-        socket_connection_script,
+        parse_process_details, parse_processes, parse_snapshot, parse_socket_listener_snapshot,
+        parse_sockets, parse_system_info, socket_connection_script,
     },
     state::AppState,
 };
@@ -107,12 +108,12 @@ pub async fn terminate_process(
 pub async fn list_socket_listeners(
     state: State<'_, AppState>,
     session_id: String,
-) -> AppResult<Vec<SocketInfo>> {
+) -> AppResult<SocketListenerSnapshot> {
     let result = state
         .sessions
         .execute(&session_id, SOCKET_LISTENER_SCRIPT)
         .await?;
-    Ok(parse_sockets(&result.stdout))
+    Ok(parse_socket_listener_snapshot(&result.stdout))
 }
 
 #[tauri::command]

@@ -92,6 +92,26 @@ pub struct SocketInfo {
     pub sent_bytes: Option<u64>,
 }
 
+#[derive(Debug, Clone, Serialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct SocketListenerSummary {
+    pub protocol: String,
+    pub address_family: String,
+    pub local_address: String,
+    pub local_port: u16,
+    pub connection_count: u64,
+    pub ip_count: u64,
+    pub received_bytes: Option<u64>,
+    pub sent_bytes: Option<u64>,
+}
+
+#[derive(Debug, Clone, Serialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct SocketListenerSnapshot {
+    pub listeners: Vec<SocketInfo>,
+    pub summaries: Vec<SocketListenerSummary>,
+}
+
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct RouteTraceResult {

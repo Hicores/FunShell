@@ -6,9 +6,9 @@ import { formatBytes, formatRate } from "../../lib/format";
 import { api } from "../../lib/ipc";
 import { nextSortState, sortRows, type SortState, type SortValue } from "../../lib/sort";
 import { useAppStore } from "../../stores/appStore";
-import type { GeoIpInfo, SocketInfo, WorkspaceTab } from "../../types";
+import type { GeoIpInfo, SocketInfo, SocketListenerSummary, WorkspaceTab } from "../../types";
 import { useVirtualRows, VirtualTableSpacer } from "../../components/common/useVirtualRows";
-import { buildListeners, rateSocketSamples, socketKey, type ListenerInfo, type RatedSocket } from "./networkModel";
+import { buildListeners, listenerSummaryKey, rateListenerSummarySamples, rateSocketSamples, socketKey, type ListenerInfo, type RatedSocket, type RatedSocketListenerSummary } from "./networkModel";
 
 const GEO_IP_CACHE_LIMIT = 256;
 const GEO_IP_CONCURRENCY = 6;
@@ -88,6 +88,7 @@ function connectionSortValue(socket: RatedSocket, key: ConnectionSortKey, locati
 export function NetworkView({ tab, active = true }: { tab: WorkspaceTab; active?: boolean }) {
   const notify = useAppStore((state) => state.notify);
   const [listenerSockets, setListenerSockets] = useState<RatedSocket[]>([]);
+  const [listenerSummaries, setListenerSummaries] = useState<RatedSocketListenerSummary[]>([]);
   const [connectionSockets, setConnectionSockets] = useState<RatedSocket[]>([]);
   const [query, setQuery] = useState("");
   const [familyFilter, setFamilyFilter] = useState("all");
@@ -100,6 +101,8 @@ export function NetworkView({ tab, active = true }: { tab: WorkspaceTab; active?
   const [locationErrors, setLocationErrors] = useState<Record<string, string>>({});
   const [listenerLoading, setListenerLoading] = useState(false);
   const [detailLoading, setDetailLoading] = useState(false);
+  const listenerSummaryPreviousRef = useRef<Map<string, SocketListenerSummary>>(new Map());
+  const listenerSummarySampledAtRef = useRef<number | null>(null);
   const detailPreviousRef = useRef<Map<string, SocketInfo>>(new Map());
   const detailSampledAtRef = useRef<number | null>(null);
   const listenerRefreshingRef = useRef(false);
@@ -122,7 +125,12 @@ export function NetworkView({ tab, active = true }: { tab: WorkspaceTab; active?
     try {
       const next = await api.socketListeners(tab.sessionId);
       if (mountedRef.current && activeRef.current) {
-        setListenerSockets(rateSocketSamples(next, new Map(), 1_000));
+        const now = Date.now();
+        const elapsed = listenerSummarySampledAtRef.current == null ? 2_000 : Math.max(250, now - listenerSummarySampledAtRef.current);
+        setListenerSockets(rateSocketSamples(next.listeners, new Map(), elapsed));
+        setListenerSummaries(rateListenerSummarySamples(next.summaries, listenerSummaryPreviousRef.current, elapsed));
+        listenerSummaryPreviousRef.current = new Map(next.summaries.map((summary) => [listenerSummaryKey(summary), summary]));
+        listenerSummarySampledAtRef.current = now;
       }
     } catch (error) {
       notify(String(error));
@@ -138,13 +146,13 @@ export function NetworkView({ tab, active = true }: { tab: WorkspaceTab; active?
     let timer = 0;
     const poll = async () => {
       await refreshListeners();
-      if (!disposed) timer = window.setTimeout(() => void poll(), 5_000);
+      if (!disposed) timer = window.setTimeout(() => void poll(), 2_000);
     };
     void poll();
     return () => { disposed = true; window.clearTimeout(timer); };
   }, [active, refreshListeners]);
 
-  const listeners = useMemo(() => buildListeners([...listenerSockets, ...connectionSockets]), [connectionSockets, listenerSockets]);
+  const listeners = useMemo(() => buildListeners([...listenerSockets, ...connectionSockets], listenerSummaries), [connectionSockets, listenerSockets, listenerSummaries]);
   const interfaceOptions = useMemo(() => [...new Set(listeners.flatMap((listener) => [listener.interfaceName, ...listener.connections.map((socket) => socket.interfaceName)]).filter((name): name is string => Boolean(name)))].sort(), [listeners]);
   const filtered = useMemo(() => {
     const value = query.toLowerCase();
@@ -240,11 +248,14 @@ export function NetworkView({ tab, active = true }: { tab: WorkspaceTab; active?
 
   useEffect(() => {
     setListenerSockets([]);
+    setListenerSummaries([]);
     setConnectionSockets([]);
     setSelectedKey(null);
     setDetailsLoadedKey(null);
     detailPreviousRef.current.clear();
     detailSampledAtRef.current = null;
+    listenerSummaryPreviousRef.current.clear();
+    listenerSummarySampledAtRef.current = null;
     setLocations({});
     setLocationErrors({});
   }, [tab.sessionId]);
@@ -264,7 +275,7 @@ export function NetworkView({ tab, active = true }: { tab: WorkspaceTab; active?
     <section className="detail-view network-view">
       <header className="view-toolbar">
         <strong>网络监听</strong>
-        <span>{listeners.length} 个监听端口{selected ? " · 已按需采样所选端口" : ""}</span>
+        <span>{listeners.length} 个监听端口</span>
         <select className="network-filter" aria-label="筛选 IP 版本" value={familyFilter} onChange={(event) => setFamilyFilter(event.target.value)}><option value="all">全部 IP</option><option value="IPv4">IPv4</option><option value="IPv6">IPv6</option></select>
         <select className="network-filter interface-filter" aria-label="筛选网卡" value={interfaceFilter} onChange={(event) => setInterfaceFilter(event.target.value)}><option value="all">全部网卡范围</option><option value="wildcard">监听全部网卡</option>{interfaceOptions.map((name) => <option key={name} value={name}>{name}</option>)}</select>
         <label><Search size={15} /><input placeholder="搜索程序、PID、IP、网卡或端口" value={query} onChange={(event) => setQuery(event.target.value)} /></label>
@@ -290,7 +301,7 @@ export function NetworkView({ tab, active = true }: { tab: WorkspaceTab; active?
             <VirtualTableSpacer height={virtualListeners.beforeHeight} columns={11} />
             {virtualListeners.rows.map(({ item: listener, index }) => (
             <tr key={listener.key} className={`${selectedKey === listener.key ? "selected " : ""}${index % 2 ? "virtual-even" : ""}`} onClick={() => choose(listener)}>
-              <td>{listener.pid ?? "-"}</td><td>{listener.process ?? "未知程序"}</td><td>{listener.protocol.toUpperCase()}</td><td>{listener.addressFamily}</td><td>{interfaceText(listener.interfaceName)}</td><td>{listener.localAddress}</td><td>{listener.localPort}</td><td>{detailsLoadedKey === listener.key ? listener.ipCount : "-"}</td><td>{detailsLoadedKey === listener.key ? listener.connectionCount : "-"}</td><td>{rate(detailsLoadedKey === listener.key ? listener.sentBps : null)}</td><td>{rate(detailsLoadedKey === listener.key ? listener.receivedBps : null)}</td>
+              <td>{listener.pid ?? "-"}</td><td>{listener.process ?? "未知程序"}</td><td>{listener.protocol.toUpperCase()}</td><td>{listener.addressFamily}</td><td>{interfaceText(listener.interfaceName)}</td><td>{listener.localAddress}</td><td>{listener.localPort}</td><td>{listener.ipCount}</td><td>{listener.connectionCount}</td><td>{rate(listener.sentBps)}</td><td>{rate(listener.receivedBps)}</td>
             </tr>
             ))}
             <VirtualTableSpacer height={virtualListeners.afterHeight} columns={11} />
@@ -300,7 +311,7 @@ export function NetworkView({ tab, active = true }: { tab: WorkspaceTab; active?
       </div>
 
       <section className="listener-connections">
-        <header><strong>{selected ? endpoint(selected.localAddress, selected.localPort) : "连接明细"}</strong><span>{selected ? `${selected.process ?? "未知程序"} · ${selected.addressFamily} · ${interfaceText(selected.interfaceName)} · ${detailsLoadedKey === selected.key ? `${selected.connectionCount} 个连接` : "正在加载"}` : "选择上方监听程序查看连接"}</span></header>
+        <header><strong>{selected ? endpoint(selected.localAddress, selected.localPort) : "连接明细"}</strong><span>{selected ? `${selected.process ?? "未知程序"} · ${selected.addressFamily} · ${interfaceText(selected.interfaceName)} · ${selected.connectionCount} 个连接${detailsLoadedKey === selected.key ? "" : " · 正在加载明细"}` : "选择上方监听程序查看连接"}</span></header>
         <div ref={virtualConnections.containerRef} className="listener-connections-table-wrap">
           <table className="data-table listener-connections-table virtualized-table">
             <thead><tr>
@@ -323,7 +334,8 @@ export function NetworkView({ tab, active = true }: { tab: WorkspaceTab; active?
               <VirtualTableSpacer height={virtualConnections.afterHeight} columns={10} />
             </tbody>
           </table>
-          {selected && !selected.connections.length && <div className="empty-state">该监听端口当前没有活动连接</div>}
+          {selected && detailsLoadedKey !== selected.key && <div className="empty-state">正在加载连接明细...</div>}
+          {selected && detailsLoadedKey === selected.key && !selected.connections.length && <div className="empty-state">该监听端口当前没有活动连接</div>}
           {!selected && <div className="empty-state">点击监听程序后在这里查看连接速率与 IP 信息</div>}
         </div>
       </section>

@@ -26,6 +26,11 @@ describe("NetworkView", () => {
     await waitFor(() => expect(listeners).toHaveBeenCalledOnce());
     expect(connections).not.toHaveBeenCalled();
     const nginxRow = within(listenerTable).getAllByRole("row").find((row) => row.textContent?.includes("nginx"))!;
+    const cells = within(nginxRow).getAllByRole("cell");
+    expect(cells[7]).toHaveTextContent("2");
+    expect(cells[8]).toHaveTextContent("2");
+    expect(cells[9]).not.toHaveTextContent("-");
+    expect(cells[10]).not.toHaveTextContent("-");
     fireEvent.click(nginxRow);
     await waitFor(() => expect(connections).toHaveBeenCalledWith("network-demand", "tcp", "IPv4", 80));
   });

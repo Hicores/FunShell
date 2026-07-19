@@ -181,6 +181,22 @@ export interface SocketInfo {
   sentBytes: number | null;
 }
 
+export interface SocketListenerSummary {
+  protocol: string;
+  addressFamily: string;
+  localAddress: string;
+  localPort: number;
+  connectionCount: number;
+  ipCount: number;
+  receivedBytes: number | null;
+  sentBytes: number | null;
+}
+
+export interface SocketListenerSnapshot {
+  listeners: SocketInfo[];
+  summaries: SocketListenerSummary[];
+}
+
 export interface RemoteFileEntry {
   name: string;
   path: string;

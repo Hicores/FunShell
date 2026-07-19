@@ -26,6 +26,8 @@ import type {
   ServerSnapshot,
   SessionDescriptor,
   SocketInfo,
+  SocketListenerSnapshot,
+  SocketListenerSummary,
   SystemInfo,
   TunnelProfile,
   TunnelRuntime,
@@ -53,6 +55,7 @@ let mockSettings: AppSettings = {
 };
 let mockSessionSequence = 0;
 let mockSocketTick = 0;
+let mockListenerTick = 0;
 let mockSnapshotTick = 0;
 const mockSessionConnections = new Map<string, string>();
 const mockNetworkTotals = new Map(mockSnapshot.interfaces.map((item) => [item.name, { receivedBytes: item.receivedBytes, transmittedBytes: item.transmittedBytes }]));
@@ -153,7 +156,25 @@ function mockCall(command: string, args?: Record<string, unknown>): unknown {
       return { pid: process.pid, name: process.name, executable: `/usr/bin/${process.name}`, workingDirectory: "/opt/apps", command: process.command, environment: { HOME: "/root", LANG: "en_US.UTF-8", PATH: "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin" } } satisfies ProcessDetails;
     }
     case "list_socket_listeners": {
-      return mockSockets.filter((socket) => socket.state === "LISTEN" || (socket.protocol === "udp" && socket.state === "UNCONN"));
+      mockListenerTick += 1;
+      const listeners = mockSockets.filter((socket) => socket.state === "LISTEN" || (socket.protocol === "udp" && socket.state === "UNCONN"));
+      const groups = new Map<string, { summary: SocketListenerSummary; ips: Set<string> }>();
+      mockSockets
+        .filter((socket) => socket.state !== "LISTEN" && socket.state !== "UNCONN")
+        .forEach((socket, index) => {
+          const key = [socket.protocol, socket.addressFamily, socket.localAddress, socket.localPort].join("|");
+          const group = groups.get(key) ?? {
+            summary: { protocol: socket.protocol, addressFamily: socket.addressFamily, localAddress: socket.localAddress, localPort: socket.localPort!, connectionCount: 0, ipCount: 0, receivedBytes: null, sentBytes: null },
+            ips: new Set<string>(),
+          };
+          group.summary.connectionCount += 1;
+          group.ips.add(socket.remoteAddress);
+          if (socket.sentBytes != null) group.summary.sentBytes = (group.summary.sentBytes ?? 0) + socket.sentBytes + mockListenerTick * (index + 1) * 2_400;
+          if (socket.receivedBytes != null) group.summary.receivedBytes = (group.summary.receivedBytes ?? 0) + socket.receivedBytes + mockListenerTick * (index + 1) * 1_700;
+          groups.set(key, group);
+        });
+      const summaries = [...groups.values()].map(({ summary, ips }) => ({ ...summary, ipCount: ips.size }));
+      return { listeners, summaries } satisfies SocketListenerSnapshot;
     }
     case "list_socket_connections": {
       mockSocketTick += 1;
@@ -301,7 +322,7 @@ export const api = {
   processes: (sessionId: string) => call<ProcessInfo[]>("list_processes", { sessionId }),
   processDetails: (sessionId: string, pid: number) => call<ProcessDetails>("get_process_details", { sessionId, pid }),
   terminateProcess: (sessionId: string, pid: number, force = false) => call<void>("terminate_process", { sessionId, pid, force }),
-  socketListeners: (sessionId: string) => call<SocketInfo[]>("list_socket_listeners", { sessionId }),
+  socketListeners: (sessionId: string) => call<SocketListenerSnapshot>("list_socket_listeners", { sessionId }),
   socketConnections: (sessionId: string, protocol: string, addressFamily: string, localPort: number) => call<SocketInfo[]>("list_socket_connections", { sessionId, protocol, addressFamily, localPort }),
   remoteFiles: (sessionId: string, path: string) => call<RemoteFileEntry[]>("list_remote_files", { sessionId, path }),
   remoteIdentities: (sessionId: string) => call<RemoteIdentities>("list_remote_identities", { sessionId }),
