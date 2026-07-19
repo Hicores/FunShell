@@ -217,10 +217,18 @@ export const useAppStore = create<AppStore>((set, get) => ({
     const state = get();
     const tab = state.tabs.find((item) => item.id === id);
     const remaining = state.tabs.filter((item) => item.id !== id);
-    if (tab?.kind === "terminal" && !remaining.some((item) => item.sessionId === tab.sessionId)) {
+    const disconnect = tab?.kind === "terminal" && !remaining.some((item) => item.sessionId === tab.sessionId);
+    const snapshots = { ...state.snapshots };
+    if (disconnect) delete snapshots[tab.sessionId];
+    set({
+      tabs: remaining,
+      sessions: disconnect ? state.sessions.filter((item) => item.id !== tab.sessionId) : state.sessions,
+      snapshots,
+      activeTabId: state.activeTabId === id ? remaining.at(-1)?.id ?? null : state.activeTabId,
+    });
+    if (disconnect) {
       await api.disconnectSession(tab.sessionId).catch(() => undefined);
     }
-    set({ tabs: remaining, activeTabId: remaining.at(-1)?.id ?? null });
   },
 
   setActiveTab: (activeTabId) => set({ activeTabId }),

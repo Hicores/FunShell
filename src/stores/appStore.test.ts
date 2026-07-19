@@ -47,7 +47,11 @@ describe("appStore tab lifecycle", () => {
     await useAppStore.getState().closeTab(processTab!.id);
     expect(useAppStore.getState().tabs).toHaveLength(1);
 
+    const disconnect = vi.spyOn(api, "disconnectSession").mockImplementation(async (sessionId) => {
+      expect(useAppStore.getState().tabs.some((tab) => tab.sessionId === sessionId)).toBe(false);
+    });
     await useAppStore.getState().closeTab(reconnectedTerminal!.id);
+    expect(disconnect).toHaveBeenCalledWith(reconnectedTerminal!.sessionId);
     expect(useAppStore.getState().tabs).toHaveLength(0);
     expect(useAppStore.getState().activeTabId).toBeNull();
   });
