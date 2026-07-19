@@ -1,5 +1,5 @@
 import { CircleStop, Play, Plus, RefreshCw, Trash2 } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "../../lib/ipc";
 import { formatBytes } from "../../lib/format";
 import type { TunnelKind, TunnelProfile, TunnelRuntime, WorkspaceTab } from "../../types";
@@ -9,16 +9,30 @@ import { IconButton } from "../../components/common/IconButton";
 
 const blank = (connectionId: string): TunnelProfile => ({ id: "", connectionId, name: "", kind: "local", bindHost: "127.0.0.1", bindPort: 0, targetHost: "127.0.0.1", targetPort: 80, autoStart: false });
 
-export function TunnelView({ tab }: { tab: WorkspaceTab }) {
+export function TunnelView({ tab, active = true }: { tab: WorkspaceTab; active?: boolean }) {
   const notify = useAppStore((state) => state.notify);
   const [profiles, setProfiles] = useState<TunnelProfile[]>([]);
   const [statuses, setStatuses] = useState<TunnelRuntime[]>([]);
   const [editor, setEditor] = useState<TunnelProfile | null>(null);
+  const refreshingRef = useRef(false);
   const refresh = useCallback(async () => {
+    if (refreshingRef.current) return;
+    refreshingRef.current = true;
     try { const [nextProfiles, nextStatuses] = await Promise.all([api.tunnelProfiles(), api.tunnelStatuses()]); setProfiles(nextProfiles); setStatuses(nextStatuses); }
     catch (error) { notify(String(error)); }
+    finally { refreshingRef.current = false; }
   }, [notify]);
-  useEffect(() => { void refresh(); const timer = window.setInterval(refresh, 1800); return () => window.clearInterval(timer); }, [refresh]);
+  useEffect(() => {
+    if (!active) return;
+    let disposed = false;
+    let timer = 0;
+    const poll = async () => {
+      await refresh();
+      if (!disposed) timer = window.setTimeout(() => void poll(), 1800);
+    };
+    void poll();
+    return () => { disposed = true; window.clearTimeout(timer); };
+  }, [active, refresh]);
   const runtime = (id: string) => statuses.find((item) => item.profileId === id);
   const saveProfile = async () => { if (!editor) return; try { await api.saveTunnel(editor); setEditor(null); await refresh(); } catch (error) { notify(String(error)); } };
   const start = async (profile: TunnelProfile) => { try { await api.startTunnel(profile.id, tab.sessionId); await refresh(); } catch (error) { notify(String(error)); } };

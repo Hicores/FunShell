@@ -35,6 +35,12 @@
 .data-table tbody tr:nth-child(even) { background: #f7f9fa; }
 .data-table tbody tr:hover { background: #eaf5fb; }
 .data-table tbody tr.selected { background: #d8ecf6; }
+.data-table.virtualized-table tbody tr { background: white; }
+.data-table.virtualized-table tbody tr.virtual-even { background: #f7f9fa; }
+.data-table.virtualized-table tbody tr:not(.virtual-table-spacer):hover { background: #eaf5fb; }
+.data-table.virtualized-table tbody tr.selected { background: #d8ecf6; }
+.data-table .virtual-table-spacer, .data-table .virtual-table-spacer:hover { background: transparent; }
+.data-table .virtual-table-spacer td { display: table-cell; height: 0; border: 0; padding: 0; }
 .data-table button { border: 0; background: transparent; color: #2479a8; }
 .data-table th.sortable-column { padding: 0; }
 .sort-header { display: flex; width: 100%; height: 28px; min-width: 0; align-items: center; gap: 4px; padding: 0 8px; color: #40535e !important; font: inherit; text-align: left; cursor: pointer; }

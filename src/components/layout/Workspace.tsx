@@ -44,9 +44,9 @@ export function Workspace() {
         {tabs.filter((tab) => tab.kind !== "terminal").map((tab) => (
           <div key={tab.id} className={`workspace-page ${activeTabId === tab.id ? "active" : ""}`}>
             {tab.kind === "system" && <SystemInfoView tab={tab} />}
-            {tab.kind === "processes" && <ProcessView tab={tab} />}
-            {tab.kind === "network" && <NetworkView tab={tab} />}
-            {tab.kind === "tunnels" && <TunnelView tab={tab} />}
+            {tab.kind === "processes" && <ProcessView tab={tab} active={activeTabId === tab.id} />}
+            {tab.kind === "network" && <NetworkView tab={tab} active={activeTabId === tab.id} />}
+            {tab.kind === "tunnels" && <TunnelView tab={tab} active={activeTabId === tab.id} />}
           </div>
         ))}
         <ToolsDrawer />

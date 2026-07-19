@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { ContextMenu } from "../../components/common/ContextMenu";
 import { IconButton } from "../../components/common/IconButton";
 import { Modal } from "../../components/common/Modal";
+import { useVirtualRows, VirtualTableSpacer } from "../../components/common/useVirtualRows";
 import { formatBytes, formatIdentity, formatMode } from "../../lib/format";
 import { api, isTauri } from "../../lib/ipc";
 import { useAppStore } from "../../stores/appStore";
@@ -124,6 +125,7 @@ export function FileManager({ tab }: { tab: WorkspaceTab }) {
   }, [path, refresh]);
   useEffect(() => { setPathInput(path); }, [path]);
   const visibleFiles = filesSessionId === tab.sessionId && filesPath === path ? files : [];
+  const virtualFiles = useVirtualRows(visibleFiles, 32);
 
   const navigateToPath = (targetPath: string) => {
     if (targetPath === path) { setPathInput(path); setSelected(null); return; }
@@ -353,12 +355,13 @@ export function FileManager({ tab }: { tab: WorkspaceTab }) {
           <IconButton label="下载" disabled={!selected} onClick={() => selected && void downloadFile(selected)}><Download size={16} /></IconButton>
           <IconButton label="删除" disabled={!selected} onClick={() => selected && void remove(selected)}><Trash2 size={16} /></IconButton>
         </div>
-        <div ref={dropTargetRef} className={`file-table-wrap ${dropActive ? "drop-active" : ""}`} {...dropHandlers} onContextMenu={(event) => { event.preventDefault(); setSelected(null); setContext({ x: event.clientX, y: event.clientY, file: null, targetPath: path }); }}>
-          <table className="data-table file-table">
+        <div ref={(node) => { dropTargetRef.current = node; virtualFiles.containerRef.current = node; }} className={`file-table-wrap ${dropActive ? "drop-active" : ""}`} {...dropHandlers} onContextMenu={(event) => { event.preventDefault(); setSelected(null); setContext({ x: event.clientX, y: event.clientY, file: null, targetPath: path }); }}>
+          <table className="data-table file-table virtualized-table">
             <thead><tr><th>文件名</th><th>大小</th><th>类型</th><th>修改时间</th><th>权限</th><th>用户/用户组</th></tr></thead>
             <tbody>
-              {visibleFiles.map((file) => (
-                <tr key={file.path} className={selected?.path === file.path ? "selected" : ""} onClick={() => setSelected(file)} onDoubleClick={() => void openEntry(file)} onContextMenu={(event) => { event.preventDefault(); event.stopPropagation(); setSelected(file); setContext({ x: event.clientX, y: event.clientY, file, targetPath: path }); }}>
+              <VirtualTableSpacer height={virtualFiles.beforeHeight} columns={6} />
+              {virtualFiles.rows.map(({ item: file, index }) => (
+                <tr key={file.path} className={`${selected?.path === file.path ? "selected " : ""}${index % 2 ? "virtual-even" : ""}`} onClick={() => setSelected(file)} onDoubleClick={() => void openEntry(file)} onContextMenu={(event) => { event.preventDefault(); event.stopPropagation(); setSelected(file); setContext({ x: event.clientX, y: event.clientY, file, targetPath: path }); }}>
                   <td>
                     <span className={`file-icon ${file.kind}`}>{file.kind === "directory" ? <Folder size={16} /> : file.kind === "symlink" ? <Link2 size={16} /> : <File size={16} />}</span>
                     <span className="file-entry-label">
@@ -370,6 +373,7 @@ export function FileManager({ tab }: { tab: WorkspaceTab }) {
                   <td>{file.modified ? new Date(file.modified * 1000).toLocaleString() : "-"}</td><td>{formatMode(file.permissions, file.kind)}</td><td>{formatIdentity(file.user, file.userId)}/{formatIdentity(file.group, file.groupId)}</td>
                 </tr>
               ))}
+              <VirtualTableSpacer height={virtualFiles.afterHeight} columns={6} />
             </tbody>
           </table>
           {dropActive && <div className="file-drop-overlay"><Upload size={22} /><strong>上传到 {path}</strong></div>}

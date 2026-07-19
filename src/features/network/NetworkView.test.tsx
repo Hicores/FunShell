@@ -1,11 +1,23 @@
 import { fireEvent, render, waitFor, within } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+import { api } from "../../lib/ipc";
 import { mockConnections } from "../../lib/mock";
 import { useAppStore } from "../../stores/appStore";
 import type { WorkspaceTab } from "../../types";
-import { NetworkView } from "./NetworkView";
+import { mergeBoundedRecord, NetworkView } from "./NetworkView";
 
 describe("NetworkView", () => {
+  it("does not poll while its workspace tab is hidden", () => {
+    const sockets = vi.spyOn(api, "sockets");
+    const tab: WorkspaceTab = { id: "network-hidden", sessionId: "network-hidden", connectionId: mockConnections[0].id, title: "网络", kind: "network", state: "connected" };
+    render(<NetworkView tab={tab} active={false} />);
+    expect(sockets).not.toHaveBeenCalled();
+  });
+
+  it("evicts the oldest IP metadata when the frontend cache reaches its limit", () => {
+    expect(mergeBoundedRecord({ first: 1, second: 2 }, [["third", 3]], 2)).toEqual({ second: 2, third: 3 });
+  });
+
   it("sorts listener names and connection traffic from their headers", async () => {
     const tab: WorkspaceTab = { id: "network-sort", sessionId: "network-sort", connectionId: mockConnections[0].id, title: "网络", kind: "network", state: "connected" };
     useAppStore.setState({ toast: null });

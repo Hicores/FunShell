@@ -14,6 +14,12 @@ const tab: WorkspaceTab = {
 };
 
 describe("ProcessView", () => {
+  it("does not poll while its workspace tab is hidden", () => {
+    const processes = vi.spyOn(api, "processes");
+    render(<ProcessView tab={tab} active={false} />);
+    expect(processes).not.toHaveBeenCalled();
+  });
+
   it("filters the process table by command metadata", async () => {
     render(<ProcessView tab={tab} />);
     await waitFor(() => expect(screen.getByText("java")).toBeInTheDocument());

@@ -7,7 +7,46 @@ import { api } from "../../lib/ipc";
 import { nextSortState, sortRows, type SortState, type SortValue } from "../../lib/sort";
 import { useAppStore } from "../../stores/appStore";
 import type { GeoIpInfo, SocketInfo, WorkspaceTab } from "../../types";
+import { useVirtualRows, VirtualTableSpacer } from "../../components/common/useVirtualRows";
 import { buildListeners, rateSocketSamples, socketKey, type ListenerInfo, type RatedSocket } from "./networkModel";
+
+const GEO_IP_CACHE_LIMIT = 256;
+const GEO_IP_CONCURRENCY = 6;
+
+interface GeoIpLookupResult {
+  ip: string;
+  info: GeoIpInfo | null;
+  error: string | null;
+}
+
+export function mergeBoundedRecord<T>(current: Record<string, T>, additions: Array<[string, T]>, limit = GEO_IP_CACHE_LIMIT) {
+  const entries = new Map(Object.entries(current));
+  additions.forEach(([key, value]) => {
+    entries.delete(key);
+    entries.set(key, value);
+  });
+  while (entries.size > limit) {
+    const oldest = entries.keys().next().value;
+    if (oldest == null) break;
+    entries.delete(oldest);
+  }
+  return Object.fromEntries(entries);
+}
+
+async function lookupGeoIps(ips: string[]) {
+  const results = new Array<GeoIpLookupResult>(ips.length);
+  let nextIndex = 0;
+  const worker = async () => {
+    while (nextIndex < ips.length) {
+      const index = nextIndex++;
+      const ip = ips[index];
+      try { results[index] = { ip, info: await api.geoIp(ip), error: null }; }
+      catch (error) { results[index] = { ip, info: null, error: String(error) }; }
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(GEO_IP_CONCURRENCY, ips.length) }, worker));
+  return results;
+}
 
 function endpoint(host: string, port: number | null) {
   const formattedHost = host.includes(":") && !host.startsWith("[") ? `[${host}]` : host;
@@ -41,7 +80,7 @@ function connectionSortValue(socket: RatedSocket, key: ConnectionSortKey, locati
   return socket[key];
 }
 
-export function NetworkView({ tab }: { tab: WorkspaceTab }) {
+export function NetworkView({ tab, active = true }: { tab: WorkspaceTab; active?: boolean }) {
   const notify = useAppStore((state) => state.notify);
   const [sockets, setSockets] = useState<RatedSocket[]>([]);
   const [query, setQuery] = useState("");
@@ -55,8 +94,11 @@ export function NetworkView({ tab }: { tab: WorkspaceTab }) {
   const [loading, setLoading] = useState(false);
   const previousRef = useRef<Map<string, SocketInfo>>(new Map());
   const sampledAtRef = useRef<number | null>(null);
+  const refreshingRef = useRef(false);
 
   const refresh = useCallback(async () => {
+    if (refreshingRef.current) return;
+    refreshingRef.current = true;
     setLoading(true);
     try {
       const next = await api.sockets(tab.sessionId);
@@ -68,17 +110,24 @@ export function NetworkView({ tab }: { tab: WorkspaceTab }) {
     } catch (error) {
       notify(String(error));
     } finally {
+      refreshingRef.current = false;
       setLoading(false);
     }
   }, [notify, tab.sessionId]);
 
   useEffect(() => {
+    if (!active) return;
     previousRef.current.clear();
     sampledAtRef.current = null;
-    void refresh();
-    const timer = window.setInterval(refresh, 2_000);
-    return () => window.clearInterval(timer);
-  }, [refresh]);
+    let disposed = false;
+    let timer = 0;
+    const poll = async () => {
+      await refresh();
+      if (!disposed) timer = window.setTimeout(() => void poll(), 2_000);
+    };
+    void poll();
+    return () => { disposed = true; window.clearTimeout(timer); };
+  }, [active, refresh]);
 
   const listeners = useMemo(() => buildListeners(sockets), [sockets]);
   const interfaceOptions = useMemo(() => [...new Set(listeners.flatMap((listener) => [listener.interfaceName, ...listener.connections.map((socket) => socket.interfaceName)]).filter((name): name is string => Boolean(name)))].sort(), [listeners]);
@@ -95,6 +144,7 @@ export function NetworkView({ tab }: { tab: WorkspaceTab }) {
     });
   }, [familyFilter, interfaceFilter, listeners, query]);
   const sortedListeners = useMemo(() => sortRows(filtered, (listener) => listenerSortValue(listener, listenerSort.key), listenerSort.direction), [filtered, listenerSort]);
+  const virtualListeners = useVirtualRows(sortedListeners, 27);
   const selected = listeners.find((listener) => listener.key === selectedKey) ?? null;
   const sortedConnections = useMemo(() => {
     const connections = selected?.connections ?? [];
@@ -105,29 +155,24 @@ export function NetworkView({ tab }: { tab: WorkspaceTab }) {
   const remoteIpKey = useMemo(() => selected
     ? [...new Set(selected.connections.map((socket) => socket.remoteAddress).filter(Boolean))].sort().join("|")
     : "", [selected]);
+  const virtualConnections = useVirtualRows(sortedConnections, 27);
 
   useEffect(() => {
-    if (!remoteIpKey) return;
+    if (!active || !remoteIpKey) return;
     let disposed = false;
     const ips = remoteIpKey.split("|");
-    void Promise.all(ips.map(async (ip) => {
-      try { return { ip, info: await api.geoIp(ip), error: null }; }
-      catch (error) { return { ip, info: null, error: String(error) }; }
-    })).then((results) => {
+    void lookupGeoIps(ips).then((results) => {
       if (disposed) return;
-      setLocations((current) => {
-        const next = { ...current };
-        results.forEach((result) => { if (result.info) next[result.ip] = result.info; });
-        return next;
-      });
-      setLocationErrors((current) => {
-        const next = { ...current };
-        results.forEach((result) => { if (result.error) next[result.ip] = result.error; });
-        return next;
-      });
+      setLocations((current) => mergeBoundedRecord(current, results.flatMap((result): Array<[string, GeoIpInfo]> => result.info ? [[result.ip, result.info]] : [])));
+      setLocationErrors((current) => mergeBoundedRecord(current, results.flatMap((result): Array<[string, string]> => result.error ? [[result.ip, result.error]] : [])));
     });
     return () => { disposed = true; };
-  }, [remoteIpKey]);
+  }, [active, remoteIpKey, tab.sessionId]);
+
+  useEffect(() => {
+    setLocations({});
+    setLocationErrors({});
+  }, [tab.sessionId]);
 
   const choose = (listener: ListenerInfo) => setSelectedKey(listener.key);
   const sortListeners = (key: ListenerSortKey, defaultDirection: "asc" | "desc") => setListenerSort((current) => nextSortState(current, key, defaultDirection));
@@ -144,8 +189,8 @@ export function NetworkView({ tab }: { tab: WorkspaceTab }) {
         <IconButton label="刷新" onClick={() => void refresh()}><RefreshCw size={16} className={loading ? "spin" : ""} /></IconButton>
       </header>
 
-      <div className="network-listener-table-wrap">
-        <table className="data-table listener-table">
+      <div ref={virtualListeners.containerRef} className="network-listener-table-wrap">
+        <table className="data-table listener-table virtualized-table">
           <thead><tr>
             <SortableHeader label="PID" sortKey="pid" activeKey={listenerSort.key} direction={listenerSort.direction} onSort={sortListeners} />
             <SortableHeader label="名称" sortKey="process" activeKey={listenerSort.key} direction={listenerSort.direction} onSort={sortListeners} />
@@ -159,19 +204,23 @@ export function NetworkView({ tab }: { tab: WorkspaceTab }) {
             <SortableHeader label="上传速率" sortKey="sentBps" activeKey={listenerSort.key} direction={listenerSort.direction} defaultDirection="desc" onSort={sortListeners} />
             <SortableHeader label="下载速率" sortKey="receivedBps" activeKey={listenerSort.key} direction={listenerSort.direction} defaultDirection="desc" onSort={sortListeners} />
           </tr></thead>
-          <tbody>{sortedListeners.map((listener) => (
-            <tr key={listener.key} className={selectedKey === listener.key ? "selected" : ""} onClick={() => choose(listener)}>
+          <tbody>
+            <VirtualTableSpacer height={virtualListeners.beforeHeight} columns={11} />
+            {virtualListeners.rows.map(({ item: listener, index }) => (
+            <tr key={listener.key} className={`${selectedKey === listener.key ? "selected " : ""}${index % 2 ? "virtual-even" : ""}`} onClick={() => choose(listener)}>
               <td>{listener.pid ?? "-"}</td><td>{listener.process ?? "未知程序"}</td><td>{listener.protocol.toUpperCase()}</td><td>{listener.addressFamily}</td><td>{interfaceText(listener.interfaceName)}</td><td>{listener.localAddress}</td><td>{listener.localPort}</td><td>{listener.ipCount}</td><td>{listener.connectionCount}</td><td>{rate(listener.sentBps)}</td><td>{rate(listener.receivedBps)}</td>
             </tr>
-          ))}</tbody>
+            ))}
+            <VirtualTableSpacer height={virtualListeners.afterHeight} columns={11} />
+          </tbody>
         </table>
         {!filtered.length && <div className="empty-state">当前没有匹配的监听端口</div>}
       </div>
 
       <section className="listener-connections">
         <header><strong>{selected ? endpoint(selected.localAddress, selected.localPort) : "连接明细"}</strong><span>{selected ? `${selected.process ?? "未知程序"} · ${selected.addressFamily} · ${interfaceText(selected.interfaceName)} · ${selected.connectionCount} 个连接` : "选择上方监听程序查看连接"}</span></header>
-        <div className="listener-connections-table-wrap">
-          <table className="data-table listener-connections-table">
+        <div ref={virtualConnections.containerRef} className="listener-connections-table-wrap">
+          <table className="data-table listener-connections-table virtualized-table">
             <thead><tr>
               <SortableHeader label="网卡" sortKey="interfaceName" activeKey={connectionSort?.key} direction={connectionSort?.direction} onSort={sortConnections} />
               <SortableHeader label="本地 IP" sortKey="localAddress" activeKey={connectionSort?.key} direction={connectionSort?.direction} onSort={sortConnections} />
@@ -184,9 +233,13 @@ export function NetworkView({ tab }: { tab: WorkspaceTab }) {
               <SortableHeader label="累计上传" sortKey="sentBytes" activeKey={connectionSort?.key} direction={connectionSort?.direction} defaultDirection="desc" onSort={sortConnections} />
               <SortableHeader label="累计下载" sortKey="receivedBytes" activeKey={connectionSort?.key} direction={connectionSort?.direction} defaultDirection="desc" onSort={sortConnections} />
             </tr></thead>
-            <tbody>{sortedConnections.map((socket) => (
-              <tr key={socket.key}><td>{socket.interfaceName ?? "-"}</td><td>{socket.localAddress}</td><td title={locationErrors[socket.remoteAddress]}>{locationText(locations[socket.remoteAddress], locationErrors[socket.remoteAddress])}</td><td>{socket.remoteAddress}</td><td>{socket.remotePort ?? "-"}</td><td>{socket.state}</td><td>{rate(socket.sentBps)}</td><td>{rate(socket.receivedBps)}</td><td>{socket.sentBytes == null ? "-" : formatBytes(socket.sentBytes)}</td><td>{socket.receivedBytes == null ? "-" : formatBytes(socket.receivedBytes)}</td></tr>
-            ))}</tbody>
+            <tbody>
+              <VirtualTableSpacer height={virtualConnections.beforeHeight} columns={10} />
+              {virtualConnections.rows.map(({ item: socket, index }) => (
+                <tr className={index % 2 ? "virtual-even" : ""} key={socket.key}><td>{socket.interfaceName ?? "-"}</td><td>{socket.localAddress}</td><td title={locationErrors[socket.remoteAddress]}>{locationText(locations[socket.remoteAddress], locationErrors[socket.remoteAddress])}</td><td>{socket.remoteAddress}</td><td>{socket.remotePort ?? "-"}</td><td>{socket.state}</td><td>{rate(socket.sentBps)}</td><td>{rate(socket.receivedBps)}</td><td>{socket.sentBytes == null ? "-" : formatBytes(socket.sentBytes)}</td><td>{socket.receivedBytes == null ? "-" : formatBytes(socket.receivedBytes)}</td></tr>
+              ))}
+              <VirtualTableSpacer height={virtualConnections.afterHeight} columns={10} />
+            </tbody>
           </table>
           {selected && !selected.connections.length && <div className="empty-state">该监听端口当前没有活动连接</div>}
           {!selected && <div className="empty-state">点击监听程序后在这里查看连接速率与 IP 信息</div>}

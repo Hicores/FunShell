@@ -25,6 +25,7 @@
 .file-table th:nth-child(5), .file-table td:nth-child(5) { text-align: center; }
 .file-table td:nth-child(5) { overflow: visible; color: #35596b; font: 12px "Cascadia Mono", Consolas, monospace; text-overflow: clip; }
 .file-table td:first-child { display: flex; align-items: center; gap: 6px; }
+.file-table.virtualized-table tbody tr:not(.virtual-table-spacer) td { height: 32px; }
 .file-icon { display: inline-grid; width: 18px; place-items: center; color: #667984; }
 .file-icon.symlink { color: #3a809f; }
 .file-entry-label { display: grid; min-width: 0; gap: 1px; padding: 3px 0; }
