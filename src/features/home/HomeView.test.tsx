@@ -38,7 +38,6 @@ describe("HomeView", () => {
     const folderId = mockFolders[0].id;
     const saveState = vi.spyOn(api, "saveQuickConnectionCollapsedFolders").mockResolvedValue({
       geoipEnabled: true,
-      geoipProviderUrl: "https://ipwho.is/{ip}",
       confirmCloseActiveSessions: true,
       terminalFontFamily: "Consolas, monospace",
       terminalFontSize: 13,

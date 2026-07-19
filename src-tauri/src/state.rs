@@ -25,7 +25,7 @@ impl AppState {
         let database = Database::open(&paths.database)?;
         let settings = SettingsService::load(paths.settings.clone())?;
         let vault = VaultService::new(database.clone())?;
-        let geoip = GeoIpService::new(database.clone(), settings.clone())?;
+        let geoip = GeoIpService::new(&paths.config, settings.clone())?;
         let sessions = SessionManager::new();
         let tunnels = TunnelManager::new();
         let transfers = TransferManager::new();

@@ -9,7 +9,6 @@ describe("appStore tab lifecycle", () => {
     const folderId = mockFolders[0].id;
     vi.spyOn(api, "getSettings").mockResolvedValue({
       geoipEnabled: true,
-      geoipProviderUrl: "https://ipwho.is/{ip}",
       confirmCloseActiveSessions: true,
       terminalFontFamily: "Consolas, monospace",
       terminalFontSize: 13,

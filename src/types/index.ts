@@ -278,7 +278,6 @@ export interface VaultStatus {
 
 export interface AppSettings {
   geoipEnabled: boolean;
-  geoipProviderUrl: string;
   confirmCloseActiveSessions: boolean;
   terminalFontFamily: string;
   terminalFontSize: number;

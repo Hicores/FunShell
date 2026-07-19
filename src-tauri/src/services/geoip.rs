@@ -1,110 +1,232 @@
-use std::{net::IpAddr, str::FromStr, time::Duration};
+mod xdb;
+
+use std::{
+    collections::HashMap,
+    fs::{self, File},
+    io::{self, Cursor, Write},
+    net::IpAddr,
+    path::{Path, PathBuf},
+    str::FromStr,
+};
 
 use chrono::Utc;
+use flate2::read::GzDecoder;
 use serde_json::Value;
 
 use crate::{
     domain::GeoIpInfo,
     error::{AppError, AppResult},
-    persistence::Database,
     settings::SettingsService,
 };
 
+use self::xdb::{IpVersion, XdbSearcher};
+
+const DATA_VERSION: &str = "ip2region-v3.17.0";
+const IPV4_DATABASE_SIZE: u64 = 11_114_380;
+const IPV6_DATABASE_SIZE: u64 = 37_258_897;
+const IPV4_DATABASE_GZIP: &[u8] = include_bytes!("../../assets/geoip/ip2region_v4.xdb.gz");
+const IPV6_DATABASE_GZIP: &[u8] = include_bytes!("../../assets/geoip/ip2region_v6.xdb.gz");
+const CHINESE_COUNTRY_NAMES: &str = include_str!("../../assets/geoip/countries_zh.json");
+
 pub struct GeoIpService {
-    database: Database,
     settings: SettingsService,
-    client: reqwest::Client,
+    ipv4: XdbSearcher,
+    ipv6: XdbSearcher,
+    countries: HashMap<String, String>,
 }
 
 impl GeoIpService {
-    pub fn new(database: Database, settings: SettingsService) -> AppResult<Self> {
-        let client = reqwest::Client::builder()
-            .timeout(Duration::from_secs(8))
-            .user_agent(concat!("FunShell/", env!("CARGO_PKG_VERSION")))
-            .build()
-            .map_err(|error| AppError::Message(format!("HTTP 客户端初始化失败: {error}")))?;
+    pub fn new(config_directory: &Path, settings: SettingsService) -> AppResult<Self> {
+        let (ipv4_path, ipv6_path) = install_databases(config_directory)?;
         Ok(Self {
-            database,
             settings,
-            client,
+            ipv4: XdbSearcher::open(&ipv4_path, IpVersion::V4).map_err(database_error)?,
+            ipv6: XdbSearcher::open(&ipv6_path, IpVersion::V6).map_err(database_error)?,
+            countries: load_chinese_country_names()?,
         })
     }
 
-    pub async fn lookup(&self, value: &str) -> AppResult<GeoIpInfo> {
+    pub fn lookup(&self, value: &str) -> AppResult<GeoIpInfo> {
         let ip = IpAddr::from_str(value.trim())
-            .map_err(|_| AppError::Validation("GeoIP 查询目标必须是 IP 地址".into()))?;
+            .map_err(|_| AppError::Validation("IP 位置查询目标必须是 IP 地址".into()))?;
         if is_local_address(ip) {
-            return Ok(GeoIpInfo {
-                ip: ip.to_string(),
-                private: true,
-                country: None,
-                region: None,
-                city: None,
-                isp: None,
-                latitude: None,
-                longitude: None,
-                cached_at: Utc::now().to_rfc3339(),
-            });
+            return Ok(empty_info(ip, true));
         }
-        let settings = self.settings.get();
-        if !settings.geoip_enabled {
-            return Err(AppError::Message("IP 地理信息查询已在设置中关闭".into()));
+        if !self.settings.get().geoip_enabled {
+            return Err(AppError::Message("本地 IP 地理信息已在设置中关闭".into()));
         }
-        let normalized = ip.to_string();
-        if let Some(cached) = self.database.cached_geoip(&normalized)? {
-            return Ok(cached);
+
+        let result = match ip {
+            IpAddr::V4(_) => self.ipv4.search(ip),
+            IpAddr::V6(_) => self.ipv6.search(ip),
         }
-        let url = settings.geoip_provider_url.replace("{ip}", &normalized);
-        let response = self
-            .client
-            .get(url)
-            .send()
-            .await
-            .and_then(reqwest::Response::error_for_status)
-            .map_err(|error| AppError::Message(format!("GeoIP 查询失败: {error}")))?;
-        let payload: Value = response
-            .json()
-            .await
-            .map_err(|error| AppError::Message(format!("GeoIP 响应格式错误: {error}")))?;
-        if payload.get("success").and_then(Value::as_bool) == Some(false) {
-            let reason = payload
-                .get("message")
-                .and_then(Value::as_str)
-                .unwrap_or("提供方返回失败");
-            return Err(AppError::Message(format!("GeoIP 查询失败: {reason}")));
-        }
-        let info = GeoIpInfo {
-            ip: normalized,
-            private: false,
-            country: text(&payload, "country"),
-            region: text(&payload, "region").or_else(|| text(&payload, "regionName")),
-            city: text(&payload, "city"),
-            isp: payload
-                .get("connection")
-                .and_then(|value| value.get("isp"))
-                .and_then(Value::as_str)
-                .map(str::to_owned)
-                .or_else(|| text(&payload, "isp"))
-                .or_else(|| text(&payload, "org")),
-            latitude: number(&payload, "latitude").or_else(|| number(&payload, "lat")),
-            longitude: number(&payload, "longitude").or_else(|| number(&payload, "lon")),
-            cached_at: Utc::now().to_rfc3339(),
+        .map_err(database_error)?;
+        let Some(record) = result.filter(|record| !record.is_empty()) else {
+            return Ok(empty_info(ip, false));
         };
-        self.database.cache_geoip(&info)?;
-        Ok(info)
+        Ok(parse_record(ip, &record, &self.countries))
     }
 }
 
-fn text(payload: &Value, key: &str) -> Option<String> {
-    payload
-        .get(key)
-        .and_then(Value::as_str)
-        .filter(|value| !value.is_empty())
-        .map(str::to_owned)
+fn install_databases(config_directory: &Path) -> AppResult<(PathBuf, PathBuf)> {
+    let directory = config_directory.join("geoip");
+    fs::create_dir_all(&directory).map_err(|error| {
+        AppError::Message(format!(
+            "本地 IP 数据库目录不可写 {}: {error}",
+            directory.display()
+        ))
+    })?;
+    let marker = directory.join("version");
+    let refresh_all = fs::read_to_string(&marker)
+        .map(|value| value.trim() != DATA_VERSION)
+        .unwrap_or(true);
+    let ipv4 = directory.join("ip2region_v4.xdb");
+    let ipv6 = directory.join("ip2region_v6.xdb");
+    ensure_database(&ipv4, IPV4_DATABASE_GZIP, IPV4_DATABASE_SIZE, refresh_all)?;
+    ensure_database(&ipv6, IPV6_DATABASE_GZIP, IPV6_DATABASE_SIZE, refresh_all)?;
+    fs::write(&marker, DATA_VERSION).map_err(|error| {
+        AppError::Message(format!(
+            "本地 IP 数据库版本文件不可写 {}: {error}",
+            marker.display()
+        ))
+    })?;
+    Ok((ipv4, ipv6))
 }
 
-fn number(payload: &Value, key: &str) -> Option<f64> {
-    payload.get(key).and_then(Value::as_f64)
+fn ensure_database(
+    target: &Path,
+    compressed: &[u8],
+    expected_size: u64,
+    force: bool,
+) -> AppResult<()> {
+    let current_size = fs::metadata(target).map(|metadata| metadata.len()).ok();
+    if !force && current_size == Some(expected_size) {
+        return Ok(());
+    }
+
+    let temporary = target.with_extension("xdb.tmp");
+    let result = (|| -> io::Result<()> {
+        let mut decoder = GzDecoder::new(Cursor::new(compressed));
+        let mut output = File::create(&temporary)?;
+        io::copy(&mut decoder, &mut output)?;
+        output.flush()?;
+        output.sync_all()?;
+        if output.metadata()?.len() != expected_size {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                "解压后的数据库大小不正确",
+            ));
+        }
+        drop(output);
+        if target.exists() {
+            fs::remove_file(target)?;
+        }
+        fs::rename(&temporary, target)
+    })();
+    if let Err(error) = result {
+        let _ = fs::remove_file(&temporary);
+        return Err(AppError::Message(format!(
+            "本地 IP 数据库安装失败 {}: {error}",
+            target.display()
+        )));
+    }
+    Ok(())
+}
+
+fn load_chinese_country_names() -> AppResult<HashMap<String, String>> {
+    let payload: Value = serde_json::from_str(CHINESE_COUNTRY_NAMES)?;
+    let entries = payload
+        .pointer("/main/zh-Hans/localeDisplayNames/territories")
+        .and_then(Value::as_object)
+        .ok_or_else(|| AppError::Message("内置中文国家名称数据格式错误".into()))?;
+    Ok(entries
+        .iter()
+        .filter(|(code, value)| {
+            code.len() == 2
+                && code.bytes().all(|character| character.is_ascii_uppercase())
+                && value.is_string()
+        })
+        .map(|(code, value)| {
+            (
+                code.clone(),
+                value.as_str().expect("filtered country name").to_owned(),
+            )
+        })
+        .collect())
+}
+
+fn parse_record(ip: IpAddr, record: &str, countries: &HashMap<String, String>) -> GeoIpInfo {
+    let mut fields = record.split('|');
+    let raw_country = normalized_field(fields.next());
+    let raw_region = normalized_field(fields.next());
+    let raw_city = normalized_field(fields.next());
+    let isp = normalized_field(fields.next()).map(str::to_owned);
+    let country_code = normalized_field(fields.next());
+
+    let country = country_code
+        .and_then(|code| countries.get(code).cloned())
+        .or_else(|| localized_special_country(raw_country))
+        .or_else(|| {
+            raw_country
+                .filter(|value| contains_han(value))
+                .map(str::to_owned)
+        });
+    let region = raw_region
+        .filter(|value| contains_han(value))
+        .map(str::to_owned);
+    let city = raw_city
+        .filter(|value| contains_han(value))
+        .map(str::to_owned);
+
+    GeoIpInfo {
+        ip: ip.to_string(),
+        private: false,
+        country,
+        region,
+        city,
+        isp,
+        latitude: None,
+        longitude: None,
+        cached_at: Utc::now().to_rfc3339(),
+    }
+}
+
+fn normalized_field(value: Option<&str>) -> Option<&str> {
+    value
+        .map(str::trim)
+        .filter(|value| !value.is_empty() && *value != "0")
+}
+
+fn localized_special_country(value: Option<&str>) -> Option<String> {
+    match value? {
+        "Reserved" => Some("保留地址".into()),
+        "Localhost" => Some("本地地址".into()),
+        _ => None,
+    }
+}
+
+fn contains_han(value: &str) -> bool {
+    value
+        .chars()
+        .any(|character| ('\u{3400}'..='\u{9fff}').contains(&character))
+}
+
+fn empty_info(ip: IpAddr, private: bool) -> GeoIpInfo {
+    GeoIpInfo {
+        ip: ip.to_string(),
+        private,
+        country: None,
+        region: None,
+        city: None,
+        isp: None,
+        latitude: None,
+        longitude: None,
+        cached_at: Utc::now().to_rfc3339(),
+    }
+}
+
+fn database_error(error: io::Error) -> AppError {
+    AppError::Message(format!("本地 IP 数据库查询失败: {error}"))
 }
 
 fn is_local_address(ip: IpAddr) -> bool {
@@ -140,7 +262,10 @@ fn is_local_address(ip: IpAddr) -> bool {
 mod tests {
     use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
 
-    use super::is_local_address;
+    use tempfile::tempdir;
+
+    use super::{GeoIpService, is_local_address, load_chinese_country_names, parse_record};
+    use crate::settings::SettingsService;
 
     #[test]
     fn keeps_private_and_documentation_addresses_local() {
@@ -148,5 +273,36 @@ mod tests {
         assert!(is_local_address(IpAddr::V4(Ipv4Addr::new(203, 0, 113, 8))));
         assert!(is_local_address(IpAddr::V6(Ipv6Addr::LOCALHOST)));
         assert!(!is_local_address(IpAddr::V4(Ipv4Addr::new(8, 8, 8, 8))));
+    }
+
+    #[test]
+    fn localizes_country_and_hides_untranslated_foreign_subdivisions() {
+        let countries = load_chinese_country_names().expect("country names");
+        let info = parse_record(
+            "8.8.8.8".parse().expect("ip"),
+            "United States|California|Mountain View|Google LLC|US",
+            &countries,
+        );
+        assert_eq!(info.country.as_deref(), Some("美国"));
+        assert_eq!(info.region, None);
+        assert_eq!(info.city, None);
+        assert_eq!(info.isp.as_deref(), Some("Google LLC"));
+    }
+
+    #[test]
+    fn installs_and_queries_embedded_ipv4_and_ipv6_databases() {
+        let directory = tempdir().expect("tempdir");
+        let settings =
+            SettingsService::load(directory.path().join("settings.json")).expect("settings");
+        let service = GeoIpService::new(directory.path(), settings).expect("geoip service");
+
+        let ipv4 = service.lookup("1.1.2.1").expect("IPv4 lookup");
+        assert_eq!(ipv4.country.as_deref(), Some("中国"));
+        assert_eq!(ipv4.region.as_deref(), Some("福建省"));
+        let ipv6 = service
+            .lookup("240e:3b7:3273:51d0:cd38:8ae1:e3c0:b708")
+            .expect("IPv6 lookup");
+        assert_eq!(ipv6.country.as_deref(), Some("中国"));
+        assert_eq!(ipv6.city.as_deref(), Some("深圳市"));
     }
 }

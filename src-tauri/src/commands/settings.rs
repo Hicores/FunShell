@@ -23,6 +23,6 @@ pub fn save_quick_connection_collapsed_folders(
 }
 
 #[tauri::command]
-pub async fn lookup_geo_ip(state: State<'_, AppState>, ip: String) -> AppResult<GeoIpInfo> {
-    state.geoip.lookup(&ip).await
+pub fn lookup_geo_ip(state: State<'_, AppState>, ip: String) -> AppResult<GeoIpInfo> {
+    state.geoip.lookup(&ip)
 }
