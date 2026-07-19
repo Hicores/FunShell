@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import type { TransferProgressEvent } from "../../types";
-import { unreadTransferCount, useTransferStore } from "./transferStore";
+import { MAX_RUNTIME_TRANSFERS, unreadTransferCount, useTransferStore } from "./transferStore";
 
 const transfer: TransferProgressEvent = {
   sessionId: "session-1",
@@ -46,5 +46,26 @@ describe("transferStore", () => {
     useTransferStore.getState().hydrate([transfer]);
 
     expect(unreadTransferCount(useTransferStore.getState())).toBe(0);
+  });
+
+  it("limits runtime history globally instead of per session", () => {
+    const history = Array.from({ length: MAX_RUNTIME_TRANSFERS }, (_, index) => ({
+      ...transfer,
+      sessionId: `session-${index}`,
+      taskId: `task-${index}`,
+      updatedAt: new Date(Date.UTC(2026, 0, 1, 0, 0, index)).toISOString(),
+    }));
+    useTransferStore.getState().hydrate(history);
+    useTransferStore.getState().record({
+      ...transfer,
+      sessionId: "session-new",
+      taskId: "task-new",
+      updatedAt: "2026-07-19T12:00:00Z",
+    });
+
+    const transfers = Object.values(useTransferStore.getState().bySession).flat();
+    expect(transfers).toHaveLength(MAX_RUNTIME_TRANSFERS);
+    expect(transfers.some((task) => task.taskId === "task-new")).toBe(true);
+    expect(transfers.some((task) => task.taskId === "task-0")).toBe(false);
   });
 });

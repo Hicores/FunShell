@@ -2,12 +2,19 @@ import { create } from "zustand";
 import type { TransferProgressEvent } from "../../types";
 
 const EMPTY_TRANSFERS: TransferProgressEvent[] = [];
+export const MAX_RUNTIME_TRANSFERS = 500;
 
 function groupTransfers(transfers: TransferProgressEvent[]) {
   return transfers.reduce<Record<string, TransferProgressEvent[]>>((grouped, task) => {
     (grouped[task.sessionId] ??= []).push(task);
     return grouped;
   }, {});
+}
+
+function recentTransfers(transfers: TransferProgressEvent[]) {
+  return [...transfers]
+    .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt))
+    .slice(0, MAX_RUNTIME_TRANSFERS);
 }
 
 interface TransferStore {
@@ -24,16 +31,16 @@ export const useTransferStore = create<TransferStore>((set) => ({
   bySession: {},
   viewing: false,
   hydrate: (transfers) => set((state) => ({
-    bySession: groupTransfers(transfers.map((task) => (
+    bySession: groupTransfers(recentTransfers(transfers.map((task) => (
       state.viewing && !task.viewed ? { ...task, viewed: true } : task
-    ))),
+    )))),
   })),
   record: (task) => set((state) => {
-    const current = state.bySession[task.sessionId] ?? EMPTY_TRANSFERS;
+    const current = Object.values(state.bySession).flat();
     const existing = current.find((item) => item.taskId === task.taskId);
     const nextTask = { ...task, viewed: state.viewing || existing?.viewed || task.viewed };
-    const next = [nextTask, ...current.filter((item) => item.taskId !== task.taskId)].slice(0, 500);
-    return { bySession: { ...state.bySession, [task.sessionId]: next } };
+    const next = recentTransfers([nextTask, ...current.filter((item) => item.taskId !== task.taskId)]);
+    return { bySession: groupTransfers(next) };
   }),
   markViewed: () => set((state) => ({
     bySession: Object.fromEntries(Object.entries(state.bySession).map(([sessionId, transfers]) => [
@@ -43,10 +50,7 @@ export const useTransferStore = create<TransferStore>((set) => ({
   })),
   setViewing: (viewing) => set({ viewing }),
   clearCompleted: () => set((state) => ({
-    bySession: Object.fromEntries(Object.entries(state.bySession).map(([sessionId, transfers]) => [
-      sessionId,
-      transfers.filter((task) => task.state === "running"),
-    ])),
+    bySession: groupTransfers(Object.values(state.bySession).flat().filter((task) => task.state === "running")),
   })),
 }));
 

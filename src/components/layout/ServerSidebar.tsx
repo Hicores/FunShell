@@ -26,6 +26,18 @@ export function ServerSidebar() {
   const latency = sessionTab ? latencies[sessionTab.sessionId] : undefined;
 
   useEffect(() => {
+    const liveSessionIds = new Set(tabs.filter((tab) => tab.kind === "terminal").map((tab) => tab.sessionId));
+    setNetworkHistory((current) => {
+      if (!Object.keys(current).some((key) => !liveSessionIds.has(key.split(":", 1)[0]))) return current;
+      return Object.fromEntries(Object.entries(current).filter(([key]) => liveSessionIds.has(key.split(":", 1)[0])));
+    });
+    setLatencies((current) => {
+      if (!Object.keys(current).some((sessionId) => !liveSessionIds.has(sessionId))) return current;
+      return Object.fromEntries(Object.entries(current).filter(([sessionId]) => liveSessionIds.has(sessionId)));
+    });
+  }, [tabs]);
+
+  useEffect(() => {
     if (!sessionTab || !sessionConnected) return;
     let disposed = false;
     let refreshing = false;
