@@ -101,8 +101,8 @@ pub struct SocketListenerSummary {
     pub local_port: u16,
     pub connection_count: u64,
     pub ip_count: u64,
-    pub received_bytes: Option<u64>,
-    pub sent_bytes: Option<u64>,
+    pub received_bps: Option<u64>,
+    pub sent_bps: Option<u64>,
 }
 
 #[derive(Debug, Clone, Serialize, Default)]

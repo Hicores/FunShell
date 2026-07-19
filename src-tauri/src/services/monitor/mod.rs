@@ -42,12 +42,23 @@ echo __SOCKETS__
 ss -H -lnutp 2>/dev/null
 echo __TCPINFO__
 echo __SUMMARIES__
+sample_dir="${TMPDIR:-/tmp}/funshell-sockets-$$"
+(umask 077 && mkdir "$sample_dir") || exit 0
+trap 'rm -rf "$sample_dir"' EXIT HUP INT TERM
+ss -H -4tin state connected 2>/dev/null >"$sample_dir/tcp4.a"
+ss -H -6tin state connected 2>/dev/null >"$sample_dir/tcp6.a"
+sleep 1
+ss -H -4tin state connected 2>/dev/null >"$sample_dir/tcp4.b"
+ss -H -6tin state connected 2>/dev/null >"$sample_dir/tcp6.b"
+ss -H -4un state connected 2>/dev/null >"$sample_dir/udp4.b"
+ss -H -6un state connected 2>/dev/null >"$sample_dir/udp6.b"
 aggregate_sockets() {
     protocol="$1"
     family="$2"
-    options="$3"
-    with_metrics="$4"
-    ss -H "$options" state connected 2>/dev/null | awk -v protocol="$protocol" -v family="$family" -v with_metrics="$with_metrics" '
+    before_file="$3"
+    after_file="$4"
+    with_metrics="$5"
+    awk -v protocol="$protocol" -v family="$family" -v with_metrics="$with_metrics" '
 function endpoint_host(value, result) {
     result = value
     if (substr(result, 1, 1) == "[") {
@@ -67,34 +78,62 @@ function metric_value(line, label, position, value) {
     if (value == "") return -1
     return value + 0
 }
+FILENAME == ARGV[1] { snapshot = 1 }
+FILENAME == ARGV[2] { snapshot = 2 }
 $2 ~ /^[0-9]+$/ && $3 ~ /^[0-9]+$/ && NF >= 5 {
-    current = protocol SUBSEP family SUBSEP $4
-    connection_count[current]++
-    remote = endpoint_host($5)
-    unique = current SUBSEP remote
-    if (remote != "" && remote != "*" && !seen[unique]++) ip_count[current]++
+    current_connection = $4 SUBSEP $5
+    current_local = $4
+    if (snapshot == 1) {
+        before_seen[current_connection] = 1
+    } else {
+        after_seen[current_connection] = 1
+        after_local[current_connection] = current_local
+        connection_count[current_local]++
+        remote = endpoint_host($5)
+        unique = current_local SUBSEP remote
+        if (remote != "" && remote != "*" && !seen[unique]++) ip_count[current_local]++
+    }
     next
 }
 {
-    if (with_metrics != "1" || current == "") next
+    if (with_metrics != "1" || current_connection == "") next
     sent = metric_value($0, "bytes_sent:")
     received = metric_value($0, "bytes_received:")
-    if (sent >= 0) { sent_bytes[current] += sent; sent_known[current] = 1 }
-    if (received >= 0) { received_bytes[current] += received; received_known[current] = 1 }
+    if (snapshot == 1) {
+        if (sent >= 0) { before_sent[current_connection] = sent; before_sent_known[current_connection] = 1 }
+        if (received >= 0) { before_received[current_connection] = received; before_received_known[current_connection] = 1 }
+    } else {
+        if (sent >= 0) { after_sent[current_connection] = sent; after_sent_known[current_connection] = 1 }
+        if (received >= 0) { after_received[current_connection] = received; after_received_known[current_connection] = 1 }
+    }
 }
 END {
-    for (key in connection_count) {
-        split(key, parts, SUBSEP)
-        sent = sent_known[key] ? sprintf("%.0f", sent_bytes[key]) : "-"
-        received = received_known[key] ? sprintf("%.0f", received_bytes[key]) : "-"
-        printf "%s\t%s\t%s\t%d\t%d\t%s\t%s\n", parts[1], parts[2], parts[3], connection_count[key], ip_count[key], sent, received
+    if (with_metrics == "1") {
+        for (connection in after_seen) {
+            local = after_local[connection]
+            if (after_sent_known[connection] && (!before_seen[connection] || before_sent_known[connection])) {
+                previous = before_sent_known[connection] ? before_sent[connection] : 0
+                delta = after_sent[connection] - previous
+                if (delta >= 0) { sent_bps[local] += delta; sent_known[local] = 1 }
+            }
+            if (after_received_known[connection] && (!before_seen[connection] || before_received_known[connection])) {
+                previous = before_received_known[connection] ? before_received[connection] : 0
+                delta = after_received[connection] - previous
+                if (delta >= 0) { received_bps[local] += delta; received_known[local] = 1 }
+            }
+        }
     }
-}'
+    for (local in connection_count) {
+        sent = sent_known[local] ? sprintf("%.0f", sent_bps[local]) : "-"
+        received = received_known[local] ? sprintf("%.0f", received_bps[local]) : "-"
+        printf "%s\t%s\t%s\t%d\t%d\t%s\t%s\n", protocol, family, local, connection_count[local], ip_count[local], sent, received
+    }
+}' "$before_file" "$after_file"
 }
-aggregate_sockets tcp IPv4 -4tinp 1
-aggregate_sockets tcp IPv6 -6tinp 1
-aggregate_sockets udp IPv4 -4unap 0
-aggregate_sockets udp IPv6 -6unap 0
+aggregate_sockets tcp IPv4 "$sample_dir/tcp4.a" "$sample_dir/tcp4.b" 1
+aggregate_sockets tcp IPv6 "$sample_dir/tcp6.a" "$sample_dir/tcp6.b" 1
+aggregate_sockets udp IPv4 /dev/null "$sample_dir/udp4.b" 0
+aggregate_sockets udp IPv6 /dev/null "$sample_dir/udp6.b" 0
 "#;
 
 pub fn socket_connection_script(
@@ -129,8 +168,9 @@ mod tests {
 
     #[test]
     fn filters_socket_details_on_the_remote_host() {
-        assert!(SOCKET_LISTENER_SCRIPT.contains("ss -H \"$options\" state connected"));
-        assert!(SOCKET_LISTENER_SCRIPT.contains("| awk"));
+        assert!(SOCKET_LISTENER_SCRIPT.contains("sleep 1"));
+        assert!(SOCKET_LISTENER_SCRIPT.contains("after_sent[connection] - previous"));
+        assert!(SOCKET_LISTENER_SCRIPT.contains("awk -v protocol="));
         let script = socket_connection_script("tcp", "IPv4", 22).expect("script");
         assert!(script.contains("ss -H -4tnap state connected '( sport = :22 )'"));
         assert!(script.contains("ss -H -4tinp state connected '( sport = :22 )'"));

@@ -8,7 +8,7 @@ import { nextSortState, sortRows, type SortState, type SortValue } from "../../l
 import { useAppStore } from "../../stores/appStore";
 import type { GeoIpInfo, SocketInfo, SocketListenerSummary, WorkspaceTab } from "../../types";
 import { useVirtualRows, VirtualTableSpacer } from "../../components/common/useVirtualRows";
-import { buildListeners, listenerSummaryKey, rateListenerSummarySamples, rateSocketSamples, socketKey, type ListenerInfo, type RatedSocket, type RatedSocketListenerSummary } from "./networkModel";
+import { buildListeners, rateSocketSamples, socketKey, type ListenerInfo, type RatedSocket } from "./networkModel";
 
 const GEO_IP_CACHE_LIMIT = 256;
 const GEO_IP_CONCURRENCY = 6;
@@ -88,7 +88,7 @@ function connectionSortValue(socket: RatedSocket, key: ConnectionSortKey, locati
 export function NetworkView({ tab, active = true }: { tab: WorkspaceTab; active?: boolean }) {
   const notify = useAppStore((state) => state.notify);
   const [listenerSockets, setListenerSockets] = useState<RatedSocket[]>([]);
-  const [listenerSummaries, setListenerSummaries] = useState<RatedSocketListenerSummary[]>([]);
+  const [listenerSummaries, setListenerSummaries] = useState<SocketListenerSummary[]>([]);
   const [connectionSockets, setConnectionSockets] = useState<RatedSocket[]>([]);
   const [query, setQuery] = useState("");
   const [familyFilter, setFamilyFilter] = useState("all");
@@ -101,8 +101,6 @@ export function NetworkView({ tab, active = true }: { tab: WorkspaceTab; active?
   const [locationErrors, setLocationErrors] = useState<Record<string, string>>({});
   const [listenerLoading, setListenerLoading] = useState(false);
   const [detailLoading, setDetailLoading] = useState(false);
-  const listenerSummaryPreviousRef = useRef<Map<string, SocketListenerSummary>>(new Map());
-  const listenerSummarySampledAtRef = useRef<number | null>(null);
   const detailPreviousRef = useRef<Map<string, SocketInfo>>(new Map());
   const detailSampledAtRef = useRef<number | null>(null);
   const listenerRefreshingRef = useRef(false);
@@ -125,12 +123,8 @@ export function NetworkView({ tab, active = true }: { tab: WorkspaceTab; active?
     try {
       const next = await api.socketListeners(tab.sessionId);
       if (mountedRef.current && activeRef.current) {
-        const now = Date.now();
-        const elapsed = listenerSummarySampledAtRef.current == null ? 2_000 : Math.max(250, now - listenerSummarySampledAtRef.current);
-        setListenerSockets(rateSocketSamples(next.listeners, new Map(), elapsed));
-        setListenerSummaries(rateListenerSummarySamples(next.summaries, listenerSummaryPreviousRef.current, elapsed));
-        listenerSummaryPreviousRef.current = new Map(next.summaries.map((summary) => [listenerSummaryKey(summary), summary]));
-        listenerSummarySampledAtRef.current = now;
+        setListenerSockets(rateSocketSamples(next.listeners, new Map(), 1_000));
+        setListenerSummaries(next.summaries);
       }
     } catch (error) {
       notify(String(error));
@@ -146,7 +140,7 @@ export function NetworkView({ tab, active = true }: { tab: WorkspaceTab; active?
     let timer = 0;
     const poll = async () => {
       await refreshListeners();
-      if (!disposed) timer = window.setTimeout(() => void poll(), 2_000);
+      if (!disposed) timer = window.setTimeout(() => void poll(), 1_000);
     };
     void poll();
     return () => { disposed = true; window.clearTimeout(timer); };
@@ -254,8 +248,6 @@ export function NetworkView({ tab, active = true }: { tab: WorkspaceTab; active?
     setDetailsLoadedKey(null);
     detailPreviousRef.current.clear();
     detailSampledAtRef.current = null;
-    listenerSummaryPreviousRef.current.clear();
-    listenerSummarySampledAtRef.current = null;
     setLocations({});
     setLocationErrors({});
   }, [tab.sessionId]);

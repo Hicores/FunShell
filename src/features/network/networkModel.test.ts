@@ -1,10 +1,10 @@
 import { describe, expect, it } from "vitest";
 import type { SocketInfo, SocketListenerSummary } from "../../types";
-import { buildListeners, listenerSummaryKey, rateListenerSummarySamples, rateSocketSamples, socketKey } from "./networkModel";
+import { buildListeners, rateSocketSamples, socketKey } from "./networkModel";
 
 const listener: SocketInfo = { protocol: "tcp", addressFamily: "IPv4", interfaceName: null, state: "LISTEN", localAddress: "0.0.0.0", localPort: 80, remoteAddress: "0.0.0.0", remotePort: null, pid: 10, process: "nginx", receivedBytes: null, sentBytes: null };
 const connection: SocketInfo = { protocol: "tcp", addressFamily: "IPv4", interfaceName: "eth0", state: "ESTAB", localAddress: "10.0.0.2", localPort: 80, remoteAddress: "8.8.8.8", remotePort: 45120, pid: 11, process: "nginx", receivedBytes: 5_000, sentBytes: 9_000 };
-const summary: SocketListenerSummary = { protocol: "tcp", addressFamily: "IPv4", localAddress: "10.0.0.2", localPort: 80, connectionCount: 4_200, ipCount: 3_180, receivedBytes: 50_000, sentBytes: 90_000 };
+const summary: SocketListenerSummary = { protocol: "tcp", addressFamily: "IPv4", localAddress: "10.0.0.2", localPort: 80, connectionCount: 4_200, ipCount: 3_180, receivedBps: 2_000, sentBps: 4_000 };
 
 describe("network listener model", () => {
   it("calculates per-second rates from cumulative TCP counters", () => {
@@ -22,10 +22,8 @@ describe("network listener model", () => {
     expect(rows[0].connections[0].remoteAddress).toBe("8.8.8.8");
   });
 
-  it("calculates listener rates from compact remote summaries", () => {
-    const previous = new Map([[listenerSummaryKey(summary), { ...summary, receivedBytes: 46_000, sentBytes: 82_000 }]]);
-    const summaries = rateListenerSummarySamples([summary], previous, 2_000);
-    const rows = buildListeners(rateSocketSamples([listener], new Map(), 2_000), summaries);
+  it("uses listener rates calculated by the compact remote summary", () => {
+    const rows = buildListeners(rateSocketSamples([listener], new Map(), 2_000), [summary]);
     expect(rows[0]).toMatchObject({ connectionCount: 4_200, ipCount: 3_180, sentBps: 4_000, receivedBps: 2_000 });
   });
 

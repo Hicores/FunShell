@@ -55,7 +55,6 @@ let mockSettings: AppSettings = {
 };
 let mockSessionSequence = 0;
 let mockSocketTick = 0;
-let mockListenerTick = 0;
 let mockSnapshotTick = 0;
 const mockSessionConnections = new Map<string, string>();
 const mockNetworkTotals = new Map(mockSnapshot.interfaces.map((item) => [item.name, { receivedBytes: item.receivedBytes, transmittedBytes: item.transmittedBytes }]));
@@ -156,7 +155,6 @@ function mockCall(command: string, args?: Record<string, unknown>): unknown {
       return { pid: process.pid, name: process.name, executable: `/usr/bin/${process.name}`, workingDirectory: "/opt/apps", command: process.command, environment: { HOME: "/root", LANG: "en_US.UTF-8", PATH: "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin" } } satisfies ProcessDetails;
     }
     case "list_socket_listeners": {
-      mockListenerTick += 1;
       const listeners = mockSockets.filter((socket) => socket.state === "LISTEN" || (socket.protocol === "udp" && socket.state === "UNCONN"));
       const groups = new Map<string, { summary: SocketListenerSummary; ips: Set<string> }>();
       mockSockets
@@ -164,13 +162,13 @@ function mockCall(command: string, args?: Record<string, unknown>): unknown {
         .forEach((socket, index) => {
           const key = [socket.protocol, socket.addressFamily, socket.localAddress, socket.localPort].join("|");
           const group = groups.get(key) ?? {
-            summary: { protocol: socket.protocol, addressFamily: socket.addressFamily, localAddress: socket.localAddress, localPort: socket.localPort!, connectionCount: 0, ipCount: 0, receivedBytes: null, sentBytes: null },
+            summary: { protocol: socket.protocol, addressFamily: socket.addressFamily, localAddress: socket.localAddress, localPort: socket.localPort!, connectionCount: 0, ipCount: 0, receivedBps: null, sentBps: null },
             ips: new Set<string>(),
           };
           group.summary.connectionCount += 1;
           group.ips.add(socket.remoteAddress);
-          if (socket.sentBytes != null) group.summary.sentBytes = (group.summary.sentBytes ?? 0) + socket.sentBytes + mockListenerTick * (index + 1) * 2_400;
-          if (socket.receivedBytes != null) group.summary.receivedBytes = (group.summary.receivedBytes ?? 0) + socket.receivedBytes + mockListenerTick * (index + 1) * 1_700;
+          if (socket.sentBytes != null) group.summary.sentBps = (group.summary.sentBps ?? 0) + (index + 1) * 2_400;
+          if (socket.receivedBytes != null) group.summary.receivedBps = (group.summary.receivedBps ?? 0) + (index + 1) * 1_700;
           groups.set(key, group);
         });
       const summaries = [...groups.values()].map(({ summary, ips }) => ({ ...summary, ipCount: ips.size }));

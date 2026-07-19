@@ -385,8 +385,8 @@ fn parse_socket_summary_line(line: &str) -> Option<SocketListenerSummary> {
         local_port: local_port?,
         connection_count: fields[3].parse().ok()?,
         ip_count: fields[4].parse().ok()?,
-        sent_bytes: fields[5].parse().ok(),
-        received_bytes: fields[6].parse().ok(),
+        sent_bps: fields[5].parse().ok(),
+        received_bps: fields[6].parse().ok(),
     })
 }
 
@@ -509,7 +509,7 @@ mod tests {
         assert_eq!(snapshot.summaries.len(), 1);
         assert_eq!(snapshot.summaries[0].connection_count, 4_200);
         assert_eq!(snapshot.summaries[0].ip_count, 3_180);
-        assert_eq!(snapshot.summaries[0].sent_bytes, Some(987_654_321));
-        assert_eq!(snapshot.summaries[0].received_bytes, Some(123_456_789));
+        assert_eq!(snapshot.summaries[0].sent_bps, Some(987_654_321));
+        assert_eq!(snapshot.summaries[0].received_bps, Some(123_456_789));
     }
 }

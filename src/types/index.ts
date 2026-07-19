@@ -188,8 +188,8 @@ export interface SocketListenerSummary {
   localPort: number;
   connectionCount: number;
   ipCount: number;
-  receivedBytes: number | null;
-  sentBytes: number | null;
+  receivedBps: number | null;
+  sentBps: number | null;
 }
 
 export interface SocketListenerSnapshot {
