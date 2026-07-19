@@ -675,15 +675,17 @@ where
     Ok(())
 }
 
-fn download_ranges(total: u64) -> Vec<(u64, usize)> {
-    let mut ranges = Vec::new();
+fn download_ranges(total: u64) -> impl Iterator<Item = (u64, usize)> {
     let mut offset = 0_u64;
-    while offset < total {
+    std::iter::from_fn(move || {
+        if offset >= total {
+            return None;
+        }
         let length = (total - offset).min(DOWNLOAD_CHUNK_SIZE) as usize;
-        ranges.push((offset, length));
+        let range = (offset, length);
         offset += length as u64;
-    }
-    ranges
+        Some(range)
+    })
 }
 
 async fn download_pipelined(
@@ -691,12 +693,10 @@ async fn download_pipelined(
     reader: &PipelinedSftpReader,
     writer: &mut File,
 ) -> AppResult<()> {
-    let requests = download_ranges(context.total)
-        .into_iter()
-        .map(|(offset, length)| {
-            let reader = reader.clone();
-            async move { reader.read_range(offset, length).await }
-        });
+    let requests = download_ranges(context.total).map(|(offset, length)| {
+        let reader = reader.clone();
+        async move { reader.read_range(offset, length).await }
+    });
     let mut chunks = stream::iter(requests).buffered(DOWNLOAD_PIPELINE_DEPTH);
     let mut transferred = 0_u64;
     let mut last_progress = Instant::now();
@@ -794,7 +794,7 @@ mod tests {
     fn splits_download_into_ordered_ranges() {
         let total = DOWNLOAD_CHUNK_SIZE * 2 + 17;
         assert_eq!(
-            download_ranges(total),
+            download_ranges(total).collect::<Vec<_>>(),
             vec![
                 (0, DOWNLOAD_CHUNK_SIZE as usize),
                 (DOWNLOAD_CHUNK_SIZE, DOWNLOAD_CHUNK_SIZE as usize),

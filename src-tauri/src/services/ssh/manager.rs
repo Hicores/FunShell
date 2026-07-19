@@ -27,6 +27,8 @@ use crate::{
     },
 };
 
+const MAX_EXEC_OUTPUT_BYTES: usize = 32 * 1024 * 1024;
+
 enum TerminalCommand {
     Data(Vec<u8>),
     Resize { columns: u32, rows: u32 },
@@ -240,8 +242,22 @@ impl SessionManager {
         let mut exit_status = None;
         while let Some(message) = channel.wait().await {
             match message {
-                ChannelMsg::Data { data } => stdout.extend_from_slice(&data),
-                ChannelMsg::ExtendedData { data, .. } => stderr.extend_from_slice(&data),
+                ChannelMsg::Data { data } => {
+                    if let Err(error) =
+                        append_exec_output(&mut stdout, stderr.len(), &data, MAX_EXEC_OUTPUT_BYTES)
+                    {
+                        let _ = channel.close().await;
+                        return Err(error);
+                    }
+                }
+                ChannelMsg::ExtendedData { data, .. } => {
+                    if let Err(error) =
+                        append_exec_output(&mut stderr, stdout.len(), &data, MAX_EXEC_OUTPUT_BYTES)
+                    {
+                        let _ = channel.close().await;
+                        return Err(error);
+                    }
+                }
                 ChannelMsg::ExitStatus {
                     exit_status: status,
                 } => exit_status = Some(status),
@@ -250,8 +266,8 @@ impl SessionManager {
             }
         }
         Ok(ExecResult {
-            stdout: String::from_utf8_lossy(&stdout).into_owned(),
-            stderr: String::from_utf8_lossy(&stderr).into_owned(),
+            stdout: decode_exec_output(stdout),
+            stderr: decode_exec_output(stderr),
             exit_status,
         })
     }
@@ -331,5 +347,45 @@ impl SessionManager {
             .get(session_id)
             .map(|entry| entry.value().clone())
             .ok_or_else(|| AppError::Message("SSH 会话不存在或已关闭".into()))
+    }
+}
+
+fn append_exec_output(
+    target: &mut Vec<u8>,
+    other_len: usize,
+    data: &[u8],
+    limit: usize,
+) -> AppResult<()> {
+    if target
+        .len()
+        .saturating_add(other_len)
+        .saturating_add(data.len())
+        > limit
+    {
+        return Err(AppError::Message(format!(
+            "SSH 命令输出超过 {} MiB 限制",
+            limit / 1024 / 1024
+        )));
+    }
+    target.extend_from_slice(data);
+    Ok(())
+}
+
+fn decode_exec_output(output: Vec<u8>) -> String {
+    String::from_utf8(output)
+        .unwrap_or_else(|error| String::from_utf8_lossy(error.as_bytes()).into_owned())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::append_exec_output;
+
+    #[test]
+    fn bounds_combined_exec_output_without_growing_the_buffer() {
+        let mut stdout = b"1234".to_vec();
+        assert!(append_exec_output(&mut stdout, 2, b"567", 8).is_err());
+        assert_eq!(stdout, b"1234");
+        assert!(append_exec_output(&mut stdout, 2, b"56", 8).is_ok());
+        assert_eq!(stdout, b"123456");
     }
 }
