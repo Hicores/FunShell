@@ -74,8 +74,8 @@ describe("FileManager", () => {
     expect(within(dialog).getByRole("textbox", { name: "用户组" })).toHaveValue("root");
     await waitFor(() => expect(within(dialog).getByRole("combobox", { name: "服务器用户" })).toBeEnabled());
     expect(listIdentities).toHaveBeenCalledOnce();
-    expect(within(dialog).getByRole("option", { name: "deploy" })).toBeInTheDocument();
-    expect(within(dialog).getByRole("option", { name: "release" })).toBeInTheDocument();
+    expect(within(dialog).getByRole("option", { name: "deploy (1000)" })).toBeInTheDocument();
+    expect(within(dialog).getByRole("option", { name: "release (1000)" })).toBeInTheDocument();
     expect(within(dialog).getByRole("checkbox", { name: "所有者 读取" })).toBeChecked();
     expect(within(dialog).getByRole("checkbox", { name: "组 写入" })).not.toBeChecked();
     expect(within(dialog).getByRole("checkbox", { name: "设置用户 ID (setuid)" })).not.toBeChecked();

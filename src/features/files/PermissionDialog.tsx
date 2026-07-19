@@ -76,7 +76,7 @@ export function PermissionDialog({ file, saving, identities, identitiesLoading, 
         onChange={(event) => (kind === "user" ? setOwner(event.target.value) : setGroup(event.target.value))}
       >
         <option value="">{identitiesLoading ? "加载中..." : `选择${kind === "user" ? "用户" : "用户组"}`}</option>
-        {options.map((identity) => <option key={`${identity.name}:${identity.id}`} value={identity.name}>{identity.name}</option>)}
+        {options.map((identity) => <option key={`${identity.name}:${identity.id}`} value={identity.name}>{identity.name} ({identity.id})</option>)}
       </select>
     );
   };
