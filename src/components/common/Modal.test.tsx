@@ -17,4 +17,11 @@ describe("Modal", () => {
     fireEvent.click(screen.getByRole("button", { name: "关闭" }));
     expect(close).toHaveBeenCalledTimes(2);
   });
+
+  it("can hide the close control for a blocking prompt", () => {
+    render(<Modal open title="解锁" closable={false} onClose={vi.fn()}><span>主密码</span></Modal>);
+
+    expect(screen.getByRole("dialog", { name: "解锁" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "关闭" })).not.toBeInTheDocument();
+  });
 });

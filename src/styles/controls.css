@@ -123,6 +123,9 @@ legend { padding: 0 6px; color: #2b566d; font-weight: 600; }
 .vault-status { display: flex; align-items: center; gap: 14px; border: 1px solid #cbd4d9; padding: 14px; background: #f3f7f9; }
 .vault-status div { display: grid; gap: 5px; }
 .vault-status span { color: #687b86; }
+.vault-password-form { padding: 5px 3px 2px; }
+.form-error { margin: 0; color: #b33f3f; line-height: 1.5; }
+.vault-actions { display: flex; flex-wrap: wrap; gap: 8px; }
 .route-row { display: grid; grid-template-columns: 25px 1fr 150px 90px; align-items: center; height: 40px; border: 1px solid #d4dce1; padding: 0 10px; background: white; text-align: left; }
 .route-row + .route-row { border-top: 0; }
 .route-row span, .route-row em { color: #6f808a; font-style: normal; }

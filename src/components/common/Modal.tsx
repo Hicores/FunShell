@@ -6,12 +6,13 @@ interface ModalProps {
   open: boolean;
   title: string;
   width?: number;
+  closable?: boolean;
   children: ReactNode;
   footer?: ReactNode;
   onClose: () => void;
 }
 
-export function Modal({ open, title, width = 760, children, footer, onClose }: ModalProps) {
+export function Modal({ open, title, width = 760, closable = true, children, footer, onClose }: ModalProps) {
   if (!open) return null;
   return (
     <div className="modal-backdrop">
@@ -24,7 +25,7 @@ export function Modal({ open, title, width = 760, children, footer, onClose }: M
       >
         <header className="modal-titlebar">
           <strong>{title}</strong>
-          <IconButton label="关闭" onClick={onClose}><X size={17} /></IconButton>
+          {closable && <IconButton label="关闭" onClick={onClose}><X size={17} /></IconButton>}
         </header>
         <div className="modal-content">{children}</div>
         {footer && <footer className="modal-footer">{footer}</footer>}

@@ -7,6 +7,7 @@ import { ConnectionManager } from "../features/connections/ConnectionManager";
 import { ConnectionEditor } from "../features/connections/ConnectionEditor";
 import { KeyManager } from "../features/connections/KeyManager";
 import { SettingsDialog } from "../features/settings/SettingsDialog";
+import { VaultUnlockGate } from "../features/security/VaultUnlockGate";
 import { useAppStore } from "../stores/appStore";
 import { api, onEvent } from "../lib/ipc";
 import type { SessionStatusEvent, TransferProgressEvent } from "../types";
@@ -112,6 +113,7 @@ export function App() {
       <ConnectionEditor />
       <KeyManager />
       <SettingsDialog />
+      <VaultUnlockGate />
       {busy && <div className="busy-indicator"><LoaderCircle className="spin" size={16} />处理中</div>}
       {toast && <div className="toast" role="status">{toast}</div>}
     </main>
