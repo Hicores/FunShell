@@ -8,6 +8,7 @@ use tokio::{
     net::TcpStream,
     sync::{Mutex, mpsc},
 };
+use tokio_util::sync::CancellationToken;
 use uuid::Uuid;
 
 use crate::{
@@ -37,16 +38,17 @@ pub struct ManagedSession {
     handle: Arc<Mutex<Handle<ClientHandler>>>,
     terminal: mpsc::Sender<TerminalCommand>,
     remote_routes: Arc<DashMap<(String, u32), (String, u16)>>,
+    lifecycle: CancellationToken,
 }
 
 pub struct SessionManager {
-    sessions: DashMap<String, Arc<ManagedSession>>,
+    sessions: Arc<DashMap<String, Arc<ManagedSession>>>,
 }
 
 impl SessionManager {
     pub fn new() -> Self {
         Self {
-            sessions: DashMap::new(),
+            sessions: Arc::new(DashMap::new()),
         }
     }
 
@@ -86,10 +88,19 @@ impl SessionManager {
             channel.data(format!("{command}\n").as_bytes()).await?;
         }
 
+        let lifecycle = CancellationToken::new();
         let remote_routes = Arc::new(DashMap::<(String, u32), (String, u16)>::new());
         let forwarded_routes = remote_routes.clone();
+        let forwarded_lifecycle = lifecycle.clone();
         tokio::spawn(async move {
-            while let Some(forwarded) = forwarded_receiver.recv().await {
+            loop {
+                let forwarded = tokio::select! {
+                    _ = forwarded_lifecycle.cancelled() => break,
+                    forwarded = forwarded_receiver.recv() => match forwarded {
+                        Some(forwarded) => forwarded,
+                        None => break,
+                    },
+                };
                 let target = forwarded_routes
                     .get(&(
                         forwarded.connected_address.clone(),
@@ -100,21 +111,40 @@ impl SessionManager {
                     })
                     .map(|entry| entry.value().clone());
                 if let Some((host, port)) = target {
+                    let connection_lifecycle = forwarded_lifecycle.clone();
                     tokio::spawn(async move {
                         if let Ok(mut local) = TcpStream::connect((host.as_str(), port)).await {
                             let mut remote = forwarded.channel.into_stream();
-                            let _ = tokio::io::copy_bidirectional(&mut local, &mut remote).await;
+                            tokio::select! {
+                                _ = connection_lifecycle.cancelled() => {}
+                                _ = tokio::io::copy_bidirectional(&mut local, &mut remote) => {}
+                            }
                         }
                     });
                 }
             }
         });
         let (sender, mut receiver) = mpsc::channel::<TerminalCommand>(256);
+        let managed = Arc::new(ManagedSession {
+            profile: profile.clone(),
+            handle: Arc::new(Mutex::new(handle)),
+            terminal: sender,
+            remote_routes,
+            lifecycle: lifecycle.clone(),
+        });
+        self.sessions.insert(session_id.clone(), managed.clone());
         let event_session_id = session_id.clone();
         let event_app = app.clone();
+        let terminal_lifecycle = lifecycle.clone();
+        let terminal_session = managed;
+        let sessions = self.sessions.clone();
         tokio::spawn(async move {
             loop {
                 tokio::select! {
+                    _ = terminal_lifecycle.cancelled() => {
+                        let _ = channel.close().await;
+                        break;
+                    },
                     command = receiver.recv() => match command {
                         Some(TerminalCommand::Data(data)) => {
                             if channel.data(&data[..]).await.is_err() { break; }
@@ -139,6 +169,13 @@ impl SessionManager {
                     }
                 }
             }
+            terminal_lifecycle.cancel();
+            let remove = sessions
+                .get(&event_session_id)
+                .is_some_and(|current| Arc::ptr_eq(current.value(), &terminal_session));
+            if remove {
+                sessions.remove(&event_session_id);
+            }
             let _ = event_app.emit(
                 "session-status",
                 SessionStatusEvent {
@@ -149,15 +186,6 @@ impl SessionManager {
             );
         });
 
-        self.sessions.insert(
-            session_id.clone(),
-            Arc::new(ManagedSession {
-                profile: profile.clone(),
-                handle: Arc::new(Mutex::new(handle)),
-                terminal: sender,
-                remote_routes,
-            }),
-        );
         Ok(SessionDescriptor {
             id: session_id,
             connection_id: profile.id,
@@ -170,6 +198,7 @@ impl SessionManager {
         let Some((_, session)) = self.sessions.remove(session_id) else {
             return Ok(());
         };
+        session.lifecycle.cancel();
         let _ = session.terminal.send(TerminalCommand::Close).await;
         session
             .handle
@@ -291,6 +320,10 @@ impl SessionManager {
 
     pub(crate) fn handle(&self, session_id: &str) -> AppResult<Arc<Mutex<Handle<ClientHandler>>>> {
         Ok(self.get(session_id)?.handle.clone())
+    }
+
+    pub(crate) fn lifecycle(&self, session_id: &str) -> AppResult<CancellationToken> {
+        Ok(self.get(session_id)?.lifecycle.clone())
     }
 
     fn get(&self, session_id: &str) -> AppResult<Arc<ManagedSession>> {

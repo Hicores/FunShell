@@ -33,13 +33,13 @@ struct ActiveTunnel {
 }
 
 pub struct TunnelManager {
-    active: DashMap<String, Arc<ActiveTunnel>>,
+    active: Arc<DashMap<String, Arc<ActiveTunnel>>>,
 }
 
 impl TunnelManager {
     pub fn new() -> Self {
         Self {
-            active: DashMap::new(),
+            active: Arc::new(DashMap::new()),
         }
     }
 
@@ -52,7 +52,7 @@ impl TunnelManager {
         if let Some(existing) = self.active.get(&profile.id) {
             return Ok(runtime(&existing));
         }
-        let cancel = CancellationToken::new();
+        let cancel = sessions.lifecycle(&session_id)?.child_token();
         let stats = Arc::new(TunnelStats {
             connections: AtomicU64::new(0),
             uploaded: AtomicU64::new(0),
@@ -115,7 +115,8 @@ impl TunnelManager {
             stats,
         });
         let result = runtime(&active);
-        self.active.insert(profile.id, active);
+        self.active.insert(profile.id.clone(), active.clone());
+        track_lifecycle(self.active.clone(), profile.id, active);
         Ok(result)
     }
 
@@ -136,12 +137,50 @@ impl TunnelManager {
         Ok(())
     }
 
+    pub async fn stop_by_session(
+        &self,
+        session_id: &str,
+        sessions: &SessionManager,
+    ) -> AppResult<()> {
+        let profile_ids = self
+            .active
+            .iter()
+            .filter(|entry| entry.session_id == session_id)
+            .map(|entry| entry.key().clone())
+            .collect::<Vec<_>>();
+        let mut first_error = None;
+        for profile_id in profile_ids {
+            if let Err(error) = self.stop(&profile_id, sessions).await
+                && first_error.is_none()
+            {
+                first_error = Some(error);
+            }
+        }
+        first_error.map_or(Ok(()), Err)
+    }
+
     pub fn statuses(&self) -> Vec<TunnelRuntime> {
         self.active
             .iter()
             .map(|entry| runtime(entry.value()))
             .collect()
     }
+}
+
+fn track_lifecycle(
+    active_tunnels: Arc<DashMap<String, Arc<ActiveTunnel>>>,
+    profile_id: String,
+    active: Arc<ActiveTunnel>,
+) {
+    tokio::spawn(async move {
+        active.cancel.cancelled().await;
+        let remove = active_tunnels
+            .get(&profile_id)
+            .is_some_and(|current| Arc::ptr_eq(current.value(), &active));
+        if remove {
+            active_tunnels.remove(&profile_id);
+        }
+    });
 }
 
 fn runtime(active: &ActiveTunnel) -> TunnelRuntime {
@@ -176,25 +215,31 @@ fn spawn_listener(
             let stats = stats.clone();
             let target = target.clone();
             let kind = kind.clone();
+            let connection_cancel = cancel.clone();
             tokio::spawn(async move {
-                let result = match kind {
-                    TunnelKind::Local => {
-                        let (host, port) = target.expect("local tunnel target");
-                        forward_stream(
-                            stream,
-                            handle,
-                            &host,
-                            port,
-                            &peer.ip().to_string(),
-                            peer.port(),
-                            &stats,
-                        )
-                        .await
-                    }
-                    TunnelKind::Dynamic => dynamic_stream(stream, handle, &stats).await,
-                    TunnelKind::Remote => Ok(()),
+                let result = tokio::select! {
+                    _ = connection_cancel.cancelled() => None,
+                    result = async {
+                        match kind {
+                            TunnelKind::Local => {
+                                let (host, port) = target.expect("local tunnel target");
+                                forward_stream(
+                                    stream,
+                                    handle,
+                                    &host,
+                                    port,
+                                    &peer.ip().to_string(),
+                                    peer.port(),
+                                    &stats,
+                                )
+                                .await
+                            }
+                            TunnelKind::Dynamic => dynamic_stream(stream, handle, &stats).await,
+                            TunnelKind::Remote => Ok(()),
+                        }
+                    } => Some(result),
                 };
-                if result.is_ok() {
+                if result.is_some_and(|result| result.is_ok()) {
                     stats.connections.fetch_add(1, Ordering::Relaxed);
                 }
             });
@@ -279,4 +324,48 @@ async fn forward_stream(
     stats.uploaded.fetch_add(uploaded, Ordering::Relaxed);
     stats.downloaded.fetch_add(downloaded, Ordering::Relaxed);
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use std::sync::{Arc, atomic::AtomicU64};
+
+    use tokio_util::sync::CancellationToken;
+
+    use super::{ActiveTunnel, TunnelManager, TunnelStats, track_lifecycle};
+    use crate::domain::{TunnelKind, TunnelProfile};
+
+    #[tokio::test]
+    async fn removes_a_tunnel_when_its_session_lifecycle_is_canceled() {
+        let manager = TunnelManager::new();
+        let cancel = CancellationToken::new();
+        let active = Arc::new(ActiveTunnel {
+            profile: TunnelProfile {
+                id: "tunnel-1".into(),
+                connection_id: "connection-1".into(),
+                name: "local".into(),
+                kind: TunnelKind::Local,
+                bind_host: "127.0.0.1".into(),
+                bind_port: 0,
+                target_host: Some("127.0.0.1".into()),
+                target_port: Some(80),
+                auto_start: false,
+            },
+            session_id: "session-1".into(),
+            bound_port: 10080,
+            cancel: cancel.clone(),
+            stats: Arc::new(TunnelStats {
+                connections: AtomicU64::new(0),
+                uploaded: AtomicU64::new(0),
+                downloaded: AtomicU64::new(0),
+            }),
+        });
+        manager.active.insert("tunnel-1".into(), active.clone());
+        track_lifecycle(manager.active.clone(), "tunnel-1".into(), active);
+
+        cancel.cancel();
+        tokio::task::yield_now().await;
+
+        assert!(manager.statuses().is_empty());
+    }
 }

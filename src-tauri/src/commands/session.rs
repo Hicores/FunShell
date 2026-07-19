@@ -41,7 +41,13 @@ pub async fn connect_session(
 
 #[tauri::command]
 pub async fn disconnect_session(state: State<'_, AppState>, session_id: String) -> AppResult<()> {
-    state.sessions.disconnect(&session_id).await
+    let tunnel_result = state
+        .tunnels
+        .stop_by_session(&session_id, &state.sessions)
+        .await;
+    let session_result = state.sessions.disconnect(&session_id).await;
+    tunnel_result?;
+    session_result
 }
 
 #[tauri::command]
