@@ -39,7 +39,7 @@ interface AppStore {
   initialize: () => Promise<void>;
   refreshConnections: () => Promise<void>;
   connect: (connection: ConnectionProfile) => Promise<void>;
-  reconnect: (sessionId: string) => Promise<void>;
+  reconnect: (sessionId: string) => Promise<boolean>;
   closeTab: (id: string) => Promise<void>;
   setActiveTab: (id: string) => void;
   openWorkspace: (kind: Exclude<WorkspaceKind, "terminal">) => void;
@@ -189,12 +189,17 @@ export const useAppStore = create<AppStore>((set, get) => ({
     const related = state.tabs.filter((tab) => tab.sessionId === sessionId);
     const terminal = related.find((tab) => tab.kind === "terminal");
     const connection = state.connections.find((item) => item.id === terminal?.connectionId);
-    if (!terminal || !connection) return;
+    if (!terminal || !connection) return false;
     emitTerminalStatus(terminal.id, "reconnecting", "正在重连...");
     set((current) => ({ tabs: current.tabs.map((tab) => tab.sessionId === sessionId ? { ...tab, state: "connecting" } : tab), toast: null }));
     try {
       await api.disconnectSession(sessionId).catch(() => undefined);
       const session = await api.connectSession(connection.id);
+      if (!get().tabs.some((tab) => tab.id === terminal.id)) {
+        await api.disconnectSession(session.id).catch(() => undefined);
+        set((current) => ({ sessions: current.sessions.filter((item) => item.id !== sessionId) }));
+        return false;
+      }
       set((current) => {
         const snapshots = { ...current.snapshots };
         delete snapshots[sessionId];
@@ -207,12 +212,14 @@ export const useAppStore = create<AppStore>((set, get) => ({
         };
       });
       emitTerminalStatus(terminal.id, "reconnected", "已重新连接");
+      return true;
     } catch (error) {
       set((current) => ({
         tabs: current.tabs.map((tab) => tab.sessionId === sessionId ? { ...tab, state: "error" } : tab),
         toast: `重新连接失败: ${String(error)}`,
       }));
       emitTerminalStatus(terminal.id, "error", `重连失败: ${String(error)}`);
+      return false;
     }
   },
 

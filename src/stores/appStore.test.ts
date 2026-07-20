@@ -52,8 +52,9 @@ describe("appStore tab lifecycle", () => {
     const reconnectEvents: CustomEvent[] = [];
     const onReconnectStatus = (event: Event) => reconnectEvents.push(event as CustomEvent);
     window.addEventListener("funshell-terminal-status", onReconnectStatus);
-    await useAppStore.getState().reconnect(terminal!.sessionId);
+    const reconnected = await useAppStore.getState().reconnect(terminal!.sessionId);
     window.removeEventListener("funshell-terminal-status", onReconnectStatus);
+    expect(reconnected).toBe(true);
     const reconnectedTerminal = useAppStore.getState().tabs.find((tab) => tab.kind === "terminal");
     expect(reconnectedTerminal?.sessionId).not.toBe(terminal!.sessionId);
     expect(reconnectedTerminal?.id).toBe(terminal!.id);
@@ -71,5 +72,17 @@ describe("appStore tab lifecycle", () => {
     expect(disconnect).toHaveBeenCalledWith(reconnectedTerminal!.sessionId);
     expect(useAppStore.getState().tabs).toHaveLength(0);
     expect(useAppStore.getState().activeTabId).toBeNull();
+  });
+
+  it("reports a failed reconnect attempt to its caller", async () => {
+    const connection = mockConnections[0];
+    const terminal = { id: "retry-tab", sessionId: "retry-session", connectionId: connection.id, title: connection.name, kind: "terminal" as const, state: "disconnected" as const };
+    useAppStore.setState({ connections: mockConnections, sessions: [], tabs: [terminal], activeTabId: terminal.id, snapshots: {}, toast: null });
+    vi.spyOn(api, "connectSession").mockRejectedValue(new Error("offline"));
+
+    const reconnected = await useAppStore.getState().reconnect(terminal.sessionId);
+
+    expect(reconnected).toBe(false);
+    expect(useAppStore.getState().tabs[0].state).toBe("error");
   });
 });

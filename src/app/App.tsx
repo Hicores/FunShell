@@ -13,6 +13,7 @@ import { api, onEvent } from "../lib/ipc";
 import type { SessionStatusEvent, TransferProgressEvent } from "../types";
 import { useDesktopGuards } from "./useDesktopGuards";
 import { useTransferStore } from "../features/files/transferStore";
+import { autoReconnectProgress, nextAutoReconnectAttempt } from "./reconnectPolicy";
 import "../styles/layout.css";
 import "../styles/controls.css";
 import "../styles/views.css";
@@ -48,7 +49,44 @@ export function App() {
 
   useEffect(() => {
     let dispose: (() => void) | undefined;
-    const timers = new Set<number>();
+    const timers = new Map<string, number>();
+    const attempts = new Map<string, number>();
+    const stopRetries = (tabId: string) => {
+      const timer = timers.get(tabId);
+      if (timer !== undefined) window.clearTimeout(timer);
+      timers.delete(tabId);
+      attempts.delete(tabId);
+    };
+    const scheduleReconnect = (tabId: string) => {
+      const state = useAppStore.getState();
+      const terminal = state.tabs.find((tab) => tab.id === tabId && tab.kind === "terminal");
+      const connection = state.connections.find((item) => item.id === terminal?.connectionId);
+      if (!terminal || !connection?.autoReconnect || terminal.state === "connected" || terminal.state === "connecting") {
+        stopRetries(tabId);
+        return;
+      }
+      const attempt = nextAutoReconnectAttempt(attempts.get(tabId) ?? 0, connection.maxReconnectAttempts);
+      if (attempt == null) {
+        stopRetries(tabId);
+        const message = `自动重连已停止，已达到最大重连次数 ${connection.maxReconnectAttempts}`;
+        notify(message);
+        window.dispatchEvent(new CustomEvent("funshell-terminal-status", { detail: { tabId, state: "error", message } }));
+        return;
+      }
+      attempts.set(tabId, attempt);
+      notify(`连接已中断，正在自动重连（${autoReconnectProgress(attempt, connection.maxReconnectAttempts)}）`);
+      const timer = window.setTimeout(async () => {
+        timers.delete(tabId);
+        const current = useAppStore.getState().tabs.find((tab) => tab.id === tabId && tab.kind === "terminal");
+        if (!current || current.state === "connected" || current.state === "connecting") {
+          stopRetries(tabId);
+          return;
+        }
+        if (await reconnect(current.sessionId)) stopRetries(tabId);
+        else scheduleReconnect(tabId);
+      }, 1200);
+      timers.set(tabId, timer);
+    };
     void onEvent<SessionStatusEvent>("session-status", (event) => {
       const payload = event.payload;
       const state = useAppStore.getState();
@@ -60,21 +98,15 @@ export function App() {
       if (terminal && payload.state === "disconnected") {
         window.dispatchEvent(new CustomEvent("funshell-terminal-status", { detail: { tabId: terminal.id, state: "disconnected", message: "连接断开" } }));
       }
+      if (terminal && payload.state === "connected") stopRetries(terminal.id);
       if (payload.state !== "disconnected" || previous !== "connected") return;
       const connection = state.connections.find((item) => item.id === terminal?.connectionId);
       if (!terminal || !connection?.autoReconnect) return;
-      notify("连接已中断，正在自动重连");
-      const timer = window.setTimeout(() => {
-        timers.delete(timer);
-        if (useAppStore.getState().tabs.some((tab) => tab.sessionId === payload.sessionId)) {
-          void reconnect(payload.sessionId);
-        }
-      }, 1200);
-      timers.add(timer);
+      scheduleReconnect(terminal.id);
     }).then((unlisten) => { dispose = unlisten; });
     return () => {
       dispose?.();
-      timers.forEach(window.clearTimeout);
+      timers.forEach((timer) => window.clearTimeout(timer));
     };
   }, [notify, reconnect]);
 
