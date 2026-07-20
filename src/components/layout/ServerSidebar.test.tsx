@@ -1,11 +1,30 @@
-import { fireEvent, render, screen } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { describe, expect, it, vi } from "vitest";
+import { api } from "../../lib/ipc";
 import { mockConnections, mockSnapshot } from "../../lib/mock";
 import { useAppStore } from "../../stores/appStore";
 import type { WorkspaceTab } from "../../types";
 import { ServerSidebar } from "./ServerSidebar";
 
 describe("ServerSidebar", () => {
+  it("keeps sampling connected terminal sessions that are behind the active tab", async () => {
+    const foreground: WorkspaceTab = { id: "session-foreground", sessionId: "session-foreground", connectionId: mockConnections[0].id, title: "Gateway", kind: "terminal", state: "connected" };
+    const background: WorkspaceTab = { id: "session-background", sessionId: "session-background", connectionId: mockConnections[1].id, title: "Database", kind: "terminal", state: "connected" };
+    const snapshot = vi.spyOn(api, "snapshot");
+    useAppStore.setState({
+      connections: mockConnections,
+      tabs: [foreground, background],
+      activeTabId: foreground.id,
+      snapshots: { [foreground.sessionId]: mockSnapshot, [background.sessionId]: mockSnapshot },
+    });
+    render(<ServerSidebar />);
+
+    await waitFor(() => {
+      expect(snapshot).toHaveBeenCalledWith(foreground.sessionId);
+      expect(snapshot).toHaveBeenCalledWith(background.sessionId);
+    });
+  });
+
   it("opens network listeners from the speed panel", () => {
     const terminal: WorkspaceTab = { id: "session-sidebar", sessionId: "session-sidebar", connectionId: mockConnections[0].id, title: "Gateway", kind: "terminal", state: "connected" };
     useAppStore.setState({

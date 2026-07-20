@@ -24,6 +24,10 @@ export function ServerSidebar() {
   const selectedNetwork = snapshot?.interfaces.find((item) => item.name === networkName) ?? snapshot?.interfaces[0];
   const networkHistoryKey = sessionTab && selectedNetwork ? `${sessionTab.sessionId}:${selectedNetwork.name}` : "";
   const latency = sessionTab ? latencies[sessionTab.sessionId] : undefined;
+  const connectedSessionIds = [...new Set(tabs
+    .filter((tab) => tab.kind === "terminal" && tab.state === "connected")
+    .map((tab) => tab.sessionId))];
+  const connectedSessionKey = connectedSessionIds.join("|");
 
   useEffect(() => {
     const liveSessionIds = new Set(tabs.filter((tab) => tab.kind === "terminal").map((tab) => tab.sessionId));
@@ -38,47 +42,63 @@ export function ServerSidebar() {
   }, [tabs]);
 
   useEffect(() => {
-    if (!sessionTab || !sessionConnected) return;
+    if (connectedSessionIds.length === 0) return;
     let disposed = false;
-    let refreshing = false;
-    const refresh = async () => {
-      if (refreshing) return;
-      refreshing = true;
-      const [snapshotResult, latencyResult] = await Promise.allSettled([
-        api.snapshot(sessionTab.sessionId),
-        api.sessionLatency(sessionTab.sessionId),
-      ]);
-      refreshing = false;
-      if (disposed) return;
-      if (snapshotResult.status === "fulfilled") setSnapshot(sessionTab.sessionId, snapshotResult.value);
-      if (latencyResult.status === "fulfilled") {
-        setLatencies((current) => ({ ...current, [sessionTab.sessionId]: latencyResult.value }));
-      } else {
-        setLatencies((current) => {
+    const timers = new Map<string, number>();
+    const refresh = async (sessionId: string) => {
+      try {
+        const nextSnapshot = await api.snapshot(sessionId);
+        if (disposed) return;
+        setSnapshot(sessionId, nextSnapshot);
+        const sampledAt = Date.now();
+        setNetworkHistory((current) => {
           const next = { ...current };
-          delete next[sessionTab.sessionId];
+          nextSnapshot.interfaces.forEach((network) => {
+            const key = `${sessionId}:${network.name}`;
+            const sample: NetworkRateSample = { sampledAt, receiveBps: network.receiveBps, transmitBps: network.transmitBps };
+            next[key] = appendNetworkRateSample(current[key] ?? [], sample);
+          });
           return next;
         });
+      } catch {
+        // A transient monitor failure must not stop future samples for a live session.
+      } finally {
+        if (!disposed) timers.set(sessionId, window.setTimeout(() => void refresh(sessionId), 2200));
+      }
+    };
+    connectedSessionIds.forEach((sessionId) => void refresh(sessionId));
+    return () => {
+      disposed = true;
+      timers.forEach((timer) => window.clearTimeout(timer));
+    };
+  }, [connectedSessionKey, setSnapshot]);
+
+  useEffect(() => {
+    if (!sessionTab || !sessionConnected) return;
+    let disposed = false;
+    let timer: number | undefined;
+    const refresh = async () => {
+      try {
+        const nextLatency = await api.sessionLatency(sessionTab.sessionId);
+        if (!disposed) setLatencies((current) => ({ ...current, [sessionTab.sessionId]: nextLatency }));
+      } catch {
+        if (!disposed) {
+          setLatencies((current) => {
+            const next = { ...current };
+            delete next[sessionTab.sessionId];
+            return next;
+          });
+        }
+      } finally {
+        if (!disposed) timer = window.setTimeout(() => void refresh(), 2200);
       }
     };
     void refresh();
-    const timer = window.setInterval(refresh, 2200);
-    return () => { disposed = true; window.clearInterval(timer); };
-  }, [sessionConnected, sessionTab?.sessionId, setSnapshot]);
-
-  useEffect(() => {
-    if (!sessionTab || !snapshot) return;
-    const sampledAt = Date.now();
-    setNetworkHistory((current) => {
-      const next = { ...current };
-      snapshot.interfaces.forEach((network) => {
-        const key = `${sessionTab.sessionId}:${network.name}`;
-        const sample: NetworkRateSample = { sampledAt, receiveBps: network.receiveBps, transmitBps: network.transmitBps };
-        next[key] = appendNetworkRateSample(current[key] ?? [], sample);
-      });
-      return next;
-    });
-  }, [sessionTab?.sessionId, snapshot]);
+    return () => {
+      disposed = true;
+      if (timer !== undefined) window.clearTimeout(timer);
+    };
+  }, [sessionConnected, sessionTab?.sessionId]);
 
   const memoryPercent = snapshot?.memoryTotal ? snapshot.memoryUsed / snapshot.memoryTotal * 100 : 0;
   const swapPercent = snapshot?.swapTotal ? snapshot.swapUsed / snapshot.swapTotal * 100 : 0;
