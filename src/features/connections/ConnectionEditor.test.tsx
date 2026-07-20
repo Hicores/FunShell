@@ -5,6 +5,31 @@ import { useAppStore } from "../../stores/appStore";
 import { ConnectionEditor } from "./ConnectionEditor";
 
 describe("ConnectionEditor", () => {
+  it("defaults new profiles to manual reconnect and enables a retry limit on demand", () => {
+    useAppStore.setState({
+      connectionEditorOpen: true,
+      editingConnection: null,
+      newConnectionFolderId: null,
+      folders: mockFolders,
+      keys: [],
+      routes: [],
+    });
+
+    render(<ConnectionEditor />);
+    fireEvent.click(screen.getByRole("button", { name: "终端" }));
+
+    const autoReconnect = screen.getByRole("checkbox", { name: "断线自动重连" });
+    const maximum = screen.getByLabelText("最大重连次数（0 为无限）");
+    expect(autoReconnect).not.toBeChecked();
+    expect(maximum).toBeDisabled();
+    expect(maximum).toHaveValue(0);
+
+    fireEvent.click(autoReconnect);
+    expect(maximum).toBeEnabled();
+    fireEvent.change(maximum, { target: { value: "5" } });
+    expect(maximum).toHaveValue(5);
+  });
+
   it("loads an existing profile and switches authentication controls", () => {
     useAppStore.setState({
       connectionEditorOpen: true,

@@ -27,6 +27,7 @@ export interface ConnectionProfile {
   connectTimeoutSeconds: number;
   compression: boolean;
   autoReconnect: boolean;
+  maxReconnectAttempts: number;
   sortOrder: number;
   deleted: boolean;
   createdAt: string;
@@ -49,6 +50,7 @@ export interface SaveConnectionInput {
   connectTimeoutSeconds?: number;
   compression: boolean;
   autoReconnect: boolean;
+  maxReconnectAttempts: number;
   sortOrder?: number;
 }
 

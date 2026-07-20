@@ -17,7 +17,8 @@ impl Database {
             let mut statement = connection.prepare(
                 "SELECT id, folder_id, name, host, port, username, auth_method, secret_id, key_id,
                         route_id, startup_command, keepalive_seconds, connect_timeout_seconds,
-                        compression, auto_reconnect, sort_order, deleted, created_at, updated_at
+                        compression, auto_reconnect, max_reconnect_attempts, sort_order, deleted,
+                        created_at, updated_at
                  FROM connections WHERE (?1 = 1 OR deleted = 0)
                  ORDER BY sort_order, name COLLATE NOCASE",
             )?;
@@ -45,10 +46,11 @@ impl Database {
                     connect_timeout_seconds: row.get::<_, i64>(12)? as u32,
                     compression: row.get::<_, i64>(13)? != 0,
                     auto_reconnect: row.get::<_, i64>(14)? != 0,
-                    sort_order: row.get(15)?,
-                    deleted: row.get::<_, i64>(16)? != 0,
-                    created_at: row.get(17)?,
-                    updated_at: row.get(18)?,
+                    max_reconnect_attempts: row.get::<_, i64>(15)?.max(0) as u32,
+                    sort_order: row.get(16)?,
+                    deleted: row.get::<_, i64>(17)? != 0,
+                    created_at: row.get(18)?,
+                    updated_at: row.get(19)?,
                 })
             })?;
             rows.collect::<Result<Vec<_>, _>>().map_err(AppError::from)
@@ -85,8 +87,9 @@ impl Database {
                 r#"INSERT INTO connections (
                     id, folder_id, name, host, port, username, auth_method, secret_id, key_id,
                     route_id, startup_command, keepalive_seconds, connect_timeout_seconds,
-                    compression, auto_reconnect, sort_order, deleted, created_at, updated_at
-                ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, 0, ?17, ?18)
+                    compression, auto_reconnect, max_reconnect_attempts, sort_order, deleted,
+                    created_at, updated_at
+                ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, 0, ?18, ?19)
                 ON CONFLICT(id) DO UPDATE SET
                     folder_id=excluded.folder_id, name=excluded.name, host=excluded.host,
                     port=excluded.port, username=excluded.username, auth_method=excluded.auth_method,
@@ -96,6 +99,7 @@ impl Database {
                     keepalive_seconds=excluded.keepalive_seconds,
                     connect_timeout_seconds=excluded.connect_timeout_seconds,
                     compression=excluded.compression, auto_reconnect=excluded.auto_reconnect,
+                    max_reconnect_attempts=excluded.max_reconnect_attempts,
                     sort_order=excluded.sort_order, deleted=0, updated_at=excluded.updated_at"#,
                 params![
                     id,
@@ -113,6 +117,7 @@ impl Database {
                     input.connect_timeout_seconds.unwrap_or(10),
                     input.compression as i64,
                     input.auto_reconnect as i64,
+                    input.max_reconnect_attempts,
                     input.sort_order.unwrap_or(0),
                     created_at,
                     now,

@@ -5,7 +5,7 @@ import { api } from "../../lib/ipc";
 import { useAppStore } from "../../stores/appStore";
 import type { AuthMethod, SaveConnectionInput } from "../../types";
 
-const createBlank = (folderId: string | null = null): SaveConnectionInput => ({ name: "", host: "", port: 22, username: "root", authMethod: "password", password: "", keyId: null, routeId: null, folderId, startupCommand: null, keepaliveSeconds: 30, connectTimeoutSeconds: 10, compression: false, autoReconnect: true });
+const createBlank = (folderId: string | null = null): SaveConnectionInput => ({ name: "", host: "", port: 22, username: "root", authMethod: "password", password: "", keyId: null, routeId: null, folderId, startupCommand: null, keepaliveSeconds: 30, connectTimeoutSeconds: 10, compression: false, autoReconnect: false, maxReconnectAttempts: 0 });
 
 export function ConnectionEditor() {
   const open = useAppStore((state) => state.connectionEditorOpen);
@@ -29,6 +29,7 @@ export function ConnectionEditor() {
       username: editing.username, authMethod: editing.authMethod, password: "", keyId: editing.keyId,
       routeId: editing.routeId, startupCommand: editing.startupCommand, keepaliveSeconds: editing.keepaliveSeconds,
       connectTimeoutSeconds: editing.connectTimeoutSeconds, compression: editing.compression, autoReconnect: editing.autoReconnect,
+      maxReconnectAttempts: editing.maxReconnectAttempts,
     } : createBlank(newConnectionFolderId));
   }, [editing, newConnectionFolderId, open]);
 
@@ -71,7 +72,19 @@ export function ConnectionEditor() {
               </fieldset>
             </>
           )}
-          {section === "terminal" && <fieldset><legend>终端与会话</legend><div className="form-grid"><label className="wide">连接后执行<textarea value={form.startupCommand ?? ""} onChange={(event) => update("startupCommand", event.target.value || null)} /></label><label>KeepAlive（秒）<input type="number" min={5} value={form.keepaliveSeconds} onChange={(event) => update("keepaliveSeconds", Number(event.target.value))} /></label><label>连接超时（秒）<input type="number" min={1} value={form.connectTimeoutSeconds} onChange={(event) => update("connectTimeoutSeconds", Number(event.target.value))} /></label><label className="checkbox-line"><input type="checkbox" checked={form.autoReconnect} onChange={(event) => update("autoReconnect", event.target.checked)} />断线自动重连</label><label className="checkbox-line"><input type="checkbox" checked={form.compression} onChange={(event) => update("compression", event.target.checked)} />启用 SSH 压缩</label></div></fieldset>}
+          {section === "terminal" && (
+            <fieldset>
+              <legend>终端与会话</legend>
+              <div className="form-grid">
+                <label className="wide">连接后执行<textarea value={form.startupCommand ?? ""} onChange={(event) => update("startupCommand", event.target.value || null)} /></label>
+                <label>KeepAlive（秒）<input type="number" min={5} value={form.keepaliveSeconds} onChange={(event) => update("keepaliveSeconds", Number(event.target.value))} /></label>
+                <label>连接超时（秒）<input type="number" min={1} value={form.connectTimeoutSeconds} onChange={(event) => update("connectTimeoutSeconds", Number(event.target.value))} /></label>
+                <label className="checkbox-line"><input type="checkbox" checked={form.autoReconnect} onChange={(event) => update("autoReconnect", event.target.checked)} />断线自动重连</label>
+                <label>最大重连次数（0 为无限）<input type="number" min={0} disabled={!form.autoReconnect} value={form.maxReconnectAttempts} onChange={(event) => update("maxReconnectAttempts", Math.max(0, Math.trunc(Number(event.target.value) || 0)))} /></label>
+                <label className="checkbox-line"><input type="checkbox" checked={form.compression} onChange={(event) => update("compression", event.target.checked)} />启用 SSH 压缩</label>
+              </div>
+            </fieldset>
+          )}
           {section === "route" && <fieldset><legend>连接路线</legend><div className="form-grid"><label className="wide">路由配置<select value={form.routeId ?? ""} onChange={(event) => update("routeId", event.target.value || null)}><option value="">直连</option>{routes.map((route) => <option key={route.id} value={route.id}>{route.name}{route.autoSelect ? "（自动择优）" : ""}</option>)}</select></label><p className="field-note wide">自动择优会对直连、HTTP/SOCKS5 代理和 SSH 跳板执行三次连接探测，选择中位延迟最低的路线。</p></div></fieldset>}
         </section>
       </div>

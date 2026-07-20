@@ -70,7 +70,8 @@ impl Database {
                     keepalive_seconds INTEGER NOT NULL DEFAULT 30,
                     connect_timeout_seconds INTEGER NOT NULL DEFAULT 10,
                     compression INTEGER NOT NULL DEFAULT 0,
-                    auto_reconnect INTEGER NOT NULL DEFAULT 1,
+                    auto_reconnect INTEGER NOT NULL DEFAULT 0,
+                    max_reconnect_attempts INTEGER NOT NULL DEFAULT 0,
                     sort_order INTEGER NOT NULL DEFAULT 0,
                     deleted INTEGER NOT NULL DEFAULT 0,
                     created_at TEXT NOT NULL,
@@ -181,6 +182,18 @@ impl Database {
                     ON transfer_history(updated_at DESC);
                 "#,
             )?;
+            let has_reconnect_limit = connection.query_row(
+                "SELECT EXISTS(SELECT 1 FROM pragma_table_info('connections') WHERE name='max_reconnect_attempts')",
+                [],
+                |row| row.get::<_, bool>(0),
+            )?;
+            if !has_reconnect_limit {
+                connection.execute(
+                    "ALTER TABLE connections ADD COLUMN max_reconnect_attempts INTEGER NOT NULL DEFAULT 0",
+                    [],
+                )?;
+            }
+            connection.execute("UPDATE schema_version SET version=2 WHERE version < 2", [])?;
             connection.execute(
                 "UPDATE transfer_history SET state='canceled', updated_at=?1 WHERE state='running'",
                 [chrono::Utc::now().to_rfc3339()],
@@ -219,6 +232,7 @@ mod tests {
             connect_timeout_seconds: Some(10),
             compression: false,
             auto_reconnect: true,
+            max_reconnect_attempts: 4,
             sort_order: None,
         };
 
@@ -248,6 +262,42 @@ mod tests {
             .expect("moved connection");
         assert_eq!(moved.folder_id.as_deref(), Some(folder.id.as_str()));
         assert_eq!(moved.secret_id.as_deref(), Some("secret-1"));
+        assert!(moved.auto_reconnect);
+        assert_eq!(moved.max_reconnect_attempts, 4);
+    }
+
+    #[test]
+    fn adds_reconnect_limit_to_an_existing_connections_table() {
+        let directory = tempdir().expect("tempdir");
+        let path = directory.path().join("legacy.db");
+        let connection = rusqlite::Connection::open(&path).expect("legacy database");
+        connection
+            .execute_batch(
+                "CREATE TABLE schema_version (version INTEGER NOT NULL);\
+                 INSERT INTO schema_version(version) VALUES (1);\
+                 CREATE TABLE connections (id TEXT PRIMARY KEY);",
+            )
+            .expect("legacy schema");
+        drop(connection);
+
+        let database = Database::open(&path).expect("migrated database");
+        database
+            .with_connection(|connection| {
+                let column_exists = connection.query_row(
+                    "SELECT EXISTS(SELECT 1 FROM pragma_table_info('connections') WHERE name='max_reconnect_attempts')",
+                    [],
+                    |row| row.get::<_, bool>(0),
+                )?;
+                let version = connection.query_row(
+                    "SELECT version FROM schema_version LIMIT 1",
+                    [],
+                    |row| row.get::<_, i64>(0),
+                )?;
+                assert!(column_exists);
+                assert_eq!(version, 2);
+                Ok(())
+            })
+            .expect("inspect migrated schema");
     }
 
     #[test]

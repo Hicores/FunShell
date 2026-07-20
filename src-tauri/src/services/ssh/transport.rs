@@ -396,6 +396,7 @@ mod tests {
             connect_timeout_seconds: 10,
             compression,
             auto_reconnect: true,
+            max_reconnect_attempts: 0,
             sort_order: 0,
             deleted: false,
             created_at: String::new(),
