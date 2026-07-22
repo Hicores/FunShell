@@ -6,12 +6,12 @@ import { api, isTauri } from "../../lib/ipc";
 import { useAppStore } from "../../stores/appStore";
 import type { TransferProgressEvent } from "../../types";
 import { TransferPanel } from "./TransferPanel";
-import { unreadTransferCount, useTransferStore } from "./transferStore";
+import { runningTransferCount, useTransferStore } from "./transferStore";
 
 export function TransferCenter() {
   const notify = useAppStore((state) => state.notify);
   const bySession = useTransferStore((state) => state.bySession);
-  const unreadCount = useTransferStore(unreadTransferCount);
+  const runningCount = useTransferStore(runningTransferCount);
   const clearCompleted = useTransferStore((state) => state.clearCompleted);
   const markViewed = useTransferStore((state) => state.markViewed);
   const setViewing = useTransferStore((state) => state.setViewing);
@@ -43,8 +43,10 @@ export function TransferCenter() {
     setOpen(nextOpen);
     setViewing(nextOpen);
     if (!nextOpen) return;
-    markViewed();
-    void api.markTransferHistoryViewed().catch((error) => notify(String(error)));
+    if (runningCount === 0) {
+      markViewed();
+      void api.markTransferHistoryViewed().catch((error) => notify(String(error)));
+    }
   };
 
   const close = () => {
@@ -78,7 +80,7 @@ export function TransferCenter() {
 
   return (
     <div ref={centerRef} className="transfer-center">
-      <IconButton label="传输记录" className="transfer-toggle" active={open} onClick={toggle}><ListChecks size={18} />{unreadCount > 0 && <span>{unreadCount > 99 ? "99+" : unreadCount}</span>}</IconButton>
+      <IconButton label="传输记录" className="transfer-toggle" active={open} onClick={toggle}><ListChecks size={18} />{runningCount > 0 && <span>{runningCount > 99 ? "99+" : runningCount}</span>}</IconButton>
       {open && <TransferPanel transfers={transfers} onCancel={(taskId) => void api.cancelTransfer(taskId)} onRetry={(task) => void retry(task)} onReveal={(task) => void reveal(task)} onClear={() => void clear()} onClose={close} />}
     </div>
   );

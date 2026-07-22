@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import type { TransferProgressEvent } from "../../types";
-import { MAX_RUNTIME_TRANSFERS, unreadTransferCount, useTransferStore } from "./transferStore";
+import { MAX_RUNTIME_TRANSFERS, runningTransferCount, unreadTransferCount, useTransferStore } from "./transferStore";
 
 const transfer: TransferProgressEvent = {
   sessionId: "session-1",
@@ -39,6 +39,20 @@ describe("transferStore", () => {
     useTransferStore.getState().record(transfer);
 
     expect(unreadTransferCount(useTransferStore.getState())).toBe(0);
+  });
+
+  it("counts only transfers that are still running", () => {
+    useTransferStore.getState().hydrate([
+      { ...transfer, taskId: "running-1", state: "running" },
+      { ...transfer, taskId: "running-2", state: "running" },
+      { ...transfer, taskId: "done", state: "completed" },
+    ]);
+    expect(runningTransferCount(useTransferStore.getState())).toBe(2);
+
+    useTransferStore.getState().record({ ...transfer, taskId: "running-1", state: "completed" });
+    expect(runningTransferCount(useTransferStore.getState())).toBe(1);
+    useTransferStore.getState().record({ ...transfer, taskId: "running-2", state: "canceled" });
+    expect(runningTransferCount(useTransferStore.getState())).toBe(0);
   });
 
   it("keeps late startup history viewed when the panel is already open", () => {

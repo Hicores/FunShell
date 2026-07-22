@@ -64,3 +64,10 @@ export function unreadTransferCount(state: TransferStore) {
     0,
   );
 }
+
+export function runningTransferCount(state: TransferStore) {
+  return Object.values(state.bySession).reduce(
+    (count, transfers) => count + transfers.filter((task) => task.state === "running").length,
+    0,
+  );
+}

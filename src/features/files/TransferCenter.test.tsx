@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it } from "vitest";
 import type { TransferProgressEvent } from "../../types";
 import { TransferCenter } from "./TransferCenter";
@@ -20,15 +20,28 @@ const task: TransferProgressEvent = {
 describe("TransferCenter", () => {
   beforeEach(() => useTransferStore.setState({ bySession: { "session-global": [task] }, viewing: false }));
 
-  it("opens transfer history and clears its unread badge", () => {
+  it("does not show a badge for completed history", () => {
     render(<TransferCenter />);
     const toggle = screen.getByRole("button", { name: "传输记录" });
-    expect(toggle).toHaveTextContent("1");
+    expect(toggle).not.toHaveTextContent("1");
     fireEvent.click(toggle);
     expect(screen.getByRole("region", { name: "传输进度与历史" })).toBeInTheDocument();
     expect(screen.getByText("FunShell.exe")).toBeInTheDocument();
-    expect(toggle).not.toHaveTextContent("1");
     expect(useTransferStore.getState().bySession["session-global"][0].viewed).toBe(true);
+  });
+
+  it("keeps the running count after opening until every task finishes", () => {
+    const running: TransferProgressEvent = { ...task, state: "running", transferred: 40, total: 100, viewed: false };
+    useTransferStore.setState({ bySession: { "session-global": [running] }, viewing: false });
+    render(<TransferCenter />);
+    const toggle = screen.getByRole("button", { name: "传输记录" });
+    expect(toggle).toHaveTextContent("1");
+
+    fireEvent.click(toggle);
+    expect(toggle).toHaveTextContent("1");
+
+    act(() => useTransferStore.getState().record({ ...running, state: "completed", transferred: 100, viewed: false }));
+    expect(toggle).not.toHaveTextContent("1");
   });
 
   it("closes when focus leaves the transfer center but stays open for internal clicks", () => {
