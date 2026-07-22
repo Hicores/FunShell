@@ -2,8 +2,9 @@ import { ArrowDownToLine, ArrowUpToLine, Ban, RotateCcw, Trash2, X } from "lucid
 import { useState } from "react";
 import { ContextMenu } from "../../components/common/ContextMenu";
 import { IconButton } from "../../components/common/IconButton";
-import { formatBytes } from "../../lib/format";
+import { formatBytes, formatRate } from "../../lib/format";
 import type { TransferProgressEvent } from "../../types";
+import { currentTransferSpeed, type TransferRateSample } from "./transferStore";
 
 interface TransferPanelProps {
   transfers: TransferProgressEvent[];
@@ -12,6 +13,8 @@ interface TransferPanelProps {
   onReveal: (task: TransferProgressEvent) => void;
   onClear: () => void;
   onClose: () => void;
+  rates?: Record<string, TransferRateSample>;
+  now?: number;
 }
 
 function taskName(task: TransferProgressEvent) {
@@ -26,7 +29,7 @@ function statusText(task: TransferProgressEvent) {
   return task.total > 0 ? `${Math.min(100, Math.round(task.transferred / task.total * 100))}%` : "进行中";
 }
 
-export function TransferPanel({ transfers, onCancel, onRetry, onReveal, onClear, onClose }: TransferPanelProps) {
+export function TransferPanel({ transfers, onCancel, onRetry, onReveal, onClear, onClose, rates = {}, now = Date.now() }: TransferPanelProps) {
   const [context, setContext] = useState<{ x: number; y: number; task: TransferProgressEvent } | null>(null);
   const running = transfers.filter((task) => task.state === "running").length;
   const hasHistory = transfers.some((task) => task.state !== "running");
@@ -51,7 +54,7 @@ export function TransferPanel({ transfers, onCancel, onRetry, onReveal, onClear,
           >
             <span className="transfer-direction">{task.direction === "upload" ? <ArrowUpToLine size={14} /> : <ArrowDownToLine size={14} />}{task.direction === "upload" ? "上传" : "下载"}</span>
             <div className="transfer-file"><strong>{taskName(task)}</strong><span title={`${task.source} -> ${task.destination}`}>{task.source} → {task.destination}</span></div>
-            <div className="transfer-progress"><progress max={Math.max(task.total, 1)} value={task.transferred} /><span>{formatBytes(task.transferred)} / {formatBytes(task.total)}</span></div>
+            <div className="transfer-progress"><progress max={Math.max(task.total, 1)} value={task.transferred} /><span>{formatBytes(task.transferred)} / {formatBytes(task.total)}</span>{task.state === "running" && <span>速度 {formatRate(currentTransferSpeed(rates[task.taskId], now))}</span>}</div>
             <em>{statusText(task)}</em>
             {task.state === "running" ? <IconButton label="取消传输" onClick={() => onCancel(task.taskId)}><Ban size={14} /></IconButton> : task.state === "error" || task.state === "canceled" ? <IconButton label="重试传输" onClick={() => onRetry(task)}><RotateCcw size={14} /></IconButton> : <span />}
           </div>

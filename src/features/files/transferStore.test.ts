@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import type { TransferProgressEvent } from "../../types";
-import { MAX_RUNTIME_TRANSFERS, runningTransferCount, unreadTransferCount, useTransferStore } from "./transferStore";
+import { currentTransferSpeed, MAX_RUNTIME_TRANSFERS, runningTransferCount, unreadTransferCount, useTransferStore } from "./transferStore";
 
 const transfer: TransferProgressEvent = {
   sessionId: "session-1",
@@ -16,7 +16,7 @@ const transfer: TransferProgressEvent = {
 };
 
 describe("transferStore", () => {
-  beforeEach(() => useTransferStore.setState({ bySession: {}, viewing: false }));
+  beforeEach(() => useTransferStore.setState({ bySession: {}, rates: {}, viewing: false }));
 
   it("hydrates persisted history and marks it viewed", () => {
     useTransferStore.getState().hydrate([transfer]);
@@ -53,6 +53,15 @@ describe("transferStore", () => {
     expect(runningTransferCount(useTransferStore.getState())).toBe(1);
     useTransferStore.getState().record({ ...transfer, taskId: "running-2", state: "canceled" });
     expect(runningTransferCount(useTransferStore.getState())).toBe(0);
+  });
+
+  it("calculates progress speed from local event arrival times and expires stale samples", () => {
+    useTransferStore.getState().record({ ...transfer, state: "running", transferred: 0 });
+    useTransferStore.getState().record({ ...transfer, state: "running", transferred: 2_048 });
+    const sample = useTransferStore.getState().rates[transfer.taskId];
+    expect(sample.speedBps).toBeGreaterThanOrEqual(0);
+    expect(currentTransferSpeed({ speedBps: 2_048, sampledAt: 10_000, transferred: 2_048 }, 11_000)).toBe(2_048);
+    expect(currentTransferSpeed({ speedBps: 2_048, sampledAt: 10_000, transferred: 2_048 }, 11_501)).toBe(0);
   });
 
   it("keeps late startup history viewed when the panel is already open", () => {

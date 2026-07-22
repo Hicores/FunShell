@@ -11,13 +11,22 @@ import { runningTransferCount, useTransferStore } from "./transferStore";
 export function TransferCenter() {
   const notify = useAppStore((state) => state.notify);
   const bySession = useTransferStore((state) => state.bySession);
+  const rates = useTransferStore((state) => state.rates);
   const runningCount = useTransferStore(runningTransferCount);
   const clearCompleted = useTransferStore((state) => state.clearCompleted);
   const markViewed = useTransferStore((state) => state.markViewed);
   const setViewing = useTransferStore((state) => state.setViewing);
   const [open, setOpen] = useState(false);
+  const [clock, setClock] = useState(() => Date.now());
   const centerRef = useRef<HTMLDivElement>(null);
   const transfers = useMemo(() => Object.values(bySession).flat().sort((left, right) => right.updatedAt.localeCompare(left.updatedAt)), [bySession]);
+
+  useEffect(() => {
+    if (!open || runningCount === 0) return;
+    setClock(Date.now());
+    const timer = window.setInterval(() => setClock(Date.now()), 1000);
+    return () => window.clearInterval(timer);
+  }, [open, runningCount]);
 
   const retry = async (task: TransferProgressEvent) => {
     try {
@@ -81,7 +90,7 @@ export function TransferCenter() {
   return (
     <div ref={centerRef} className="transfer-center">
       <IconButton label="传输记录" className="transfer-toggle" active={open} onClick={toggle}><ListChecks size={18} />{runningCount > 0 && <span>{runningCount > 99 ? "99+" : runningCount}</span>}</IconButton>
-      {open && <TransferPanel transfers={transfers} onCancel={(taskId) => void api.cancelTransfer(taskId)} onRetry={(task) => void retry(task)} onReveal={(task) => void reveal(task)} onClear={() => void clear()} onClose={close} />}
+      {open && <TransferPanel transfers={transfers} rates={rates} now={clock} onCancel={(taskId) => void api.cancelTransfer(taskId)} onRetry={(task) => void retry(task)} onReveal={(task) => void reveal(task)} onClear={() => void clear()} onClose={close} />}
     </div>
   );
 }
