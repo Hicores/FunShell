@@ -143,9 +143,12 @@
 .quick-group-title strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .quick-group-title span { min-width: 22px; color: #84949d; font-size: 11px; text-align: right; }
 .quick-group-title .folder-chevron { color: #758791; }
-.quick-group > button:not(.quick-group-title), .quick-connect-list > button { display: grid; width: 100%; grid-template-columns: 24px minmax(160px, 1fr) minmax(130px, 1fr) 100px 20px; align-items: center; min-height: 35px; border: 0; padding: 0 8px 0 25px; background: white; text-align: left; }
-.quick-group > button:not(.quick-group-title):hover, .quick-connect-list > button:hover { background: #eaf5fb; }
-.quick-group > button:not(.quick-group-title) span { color: #5e707b; }
+.quick-connection-row { display: flex; width: 100%; min-height: 35px; align-items: stretch; background: white; }
+.quick-connection-main { display: grid; flex: 1; grid-template-columns: 24px minmax(160px, 1fr) minmax(130px, 1fr) 100px 20px; align-items: center; min-width: 0; border: 0; padding: 0 3px 0 25px; background: transparent; text-align: left; }
+.quick-connection-eye { display: grid; width: 28px; flex: 0 0 28px; place-items: center; border: 0; background: transparent; color: #71818b; }
+.quick-connection-row:hover, .quick-connection-row:focus-within { background: #eaf5fb; }
+.quick-connection-main span { overflow: hidden; color: #5e707b; text-overflow: ellipsis; white-space: nowrap; }
+.quick-connection-eye:hover { color: #176b98; }
 
 .terminal-workspace { position: absolute; inset: 0; min-height: 0; background: #183446; }
 .terminal-region { position: absolute; inset: 0 0 auto; top: 0; transition: bottom 120ms ease; }

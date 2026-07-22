@@ -72,4 +72,20 @@ describe("ServerSidebar", () => {
     expect(rows[2].querySelector(".progress-label")).toHaveTextContent("14%581.7 MB/4.1 GB");
     expect(container.querySelectorAll(".resource-row em")).toHaveLength(0);
   });
+
+  it("masks the sidebar address until the eye button is clicked", () => {
+    const terminal: WorkspaceTab = { id: "session-ip-sidebar", sessionId: "session-ip-sidebar", connectionId: mockConnections[0].id, title: "Gateway", kind: "terminal", state: "connected" };
+    useAppStore.setState({
+      connections: mockConnections,
+      tabs: [terminal],
+      activeTabId: terminal.id,
+      snapshots: { [terminal.sessionId]: mockSnapshot },
+    });
+    render(<ServerSidebar />);
+
+    expect(screen.getByText("139.***.229")).toBeInTheDocument();
+    const reveal = screen.getByRole("button", { name: "显示完整 IP" });
+    fireEvent.click(reveal);
+    expect(screen.getByText(mockConnections[0].host)).toBeInTheDocument();
+  });
 });

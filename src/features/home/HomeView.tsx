@@ -1,5 +1,6 @@
-import { ChevronDown, ChevronRight, Folder, Search, Server } from "lucide-react";
+import { ChevronDown, ChevronRight, Eye, EyeOff, Folder, Search, Server } from "lucide-react";
 import { useMemo, useState } from "react";
+import { displayIpAddress } from "../../lib/address";
 import { useAppStore } from "../../stores/appStore";
 
 export function HomeView() {
@@ -10,9 +11,23 @@ export function HomeView() {
   const collapsedFolderIds = useAppStore((state) => state.quickConnectionCollapsedFolderIds);
   const setFolderCollapsed = useAppStore((state) => state.setQuickConnectionFolderCollapsed);
   const [query, setQuery] = useState("");
+  const [revealedHosts, setRevealedHosts] = useState<Record<string, boolean>>({});
   const filtered = useMemo(() => connections.filter((item) => `${item.name} ${item.host} ${item.username}`.toLowerCase().includes(query.toLowerCase())), [connections, query]);
   const searchActive = Boolean(query.trim());
   const collapsedFolders = useMemo(() => new Set(collapsedFolderIds), [collapsedFolderIds]);
+  const renderConnection = (connection: typeof connections[number]) => {
+    const revealed = revealedHosts[connection.id] === true;
+    return (
+      <div key={connection.id} className="quick-connection-row">
+        <button className="quick-connection-main" type="button" onClick={() => void connect(connection)}>
+          <Server size={15} /><strong>{connection.name}</strong><span>{displayIpAddress(connection.host, revealed)}</span><span>{connection.username}</span><ChevronRight size={14} />
+        </button>
+        <button className="quick-connection-eye" type="button" title={revealed ? "隐藏完整 IP" : "显示完整 IP"} aria-label={`${revealed ? "隐藏" : "显示"} ${connection.name} 的完整 IP`} aria-pressed={revealed} onClick={() => setRevealedHosts((current) => ({ ...current, [connection.id]: !revealed }))}>
+          {revealed ? <EyeOff size={14} /> : <Eye size={14} />}
+        </button>
+      </div>
+    );
+  };
 
   return (
     <section className="home-view">
@@ -33,19 +48,11 @@ export function HomeView() {
                   {expanded ? <ChevronDown className="folder-chevron" size={14} /> : <ChevronRight className="folder-chevron" size={14} />}
                   <Folder size={15} /><strong>{folder.name}</strong><span>{children.length}</span>
                 </button>
-                {expanded && children.map((connection) => (
-                  <button key={connection.id} type="button" onClick={() => void connect(connection)}>
-                    <Server size={15} /><strong>{connection.name}</strong><span>{connection.host}</span><span>{connection.username}</span><ChevronRight size={14} />
-                  </button>
-                ))}
+                {expanded && children.map(renderConnection)}
               </div>
             );
           })}
-          {filtered.filter((connection) => !connection.folderId).map((connection) => (
-            <button key={connection.id} type="button" onClick={() => void connect(connection)}>
-              <Server size={15} /><strong>{connection.name}</strong><span>{connection.host}</span><span>{connection.username}</span><ChevronRight size={14} />
-            </button>
-          ))}
+          {filtered.filter((connection) => !connection.folderId).map(renderConnection)}
           {!filtered.length && <div className="empty-state">没有匹配的连接</div>}
         </div>
       </div>

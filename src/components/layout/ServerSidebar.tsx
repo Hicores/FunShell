@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
-import { ChevronDown, Copy, Network, ServerCog } from "lucide-react";
+import { ChevronDown, Copy, Eye, EyeOff, Network, ServerCog } from "lucide-react";
 import { api } from "../../lib/ipc";
 import { formatBytes, formatDuration, formatRate } from "../../lib/format";
+import { displayIpAddress } from "../../lib/address";
 import { useAppStore } from "../../stores/appStore";
 import { ProgressBar } from "../common/ProgressBar";
 import { appendNetworkRateSample, NetworkRateChart, type NetworkRateSample } from "./NetworkRateChart";
@@ -21,9 +22,11 @@ export function ServerSidebar() {
   const [networkName, setNetworkName] = useState("eth0");
   const [networkHistory, setNetworkHistory] = useState<Record<string, NetworkRateSample[]>>({});
   const [latencies, setLatencies] = useState<Record<string, number>>({});
+  const [revealedHosts, setRevealedHosts] = useState<Record<string, boolean>>({});
   const selectedNetwork = snapshot?.interfaces.find((item) => item.name === networkName) ?? snapshot?.interfaces[0];
   const networkHistoryKey = sessionTab && selectedNetwork ? `${sessionTab.sessionId}:${selectedNetwork.name}` : "";
   const latency = sessionTab ? latencies[sessionTab.sessionId] : undefined;
+  const hostRevealed = connection ? revealedHosts[connection.id] === true : false;
   const connectedSessionIds = [...new Set(tabs
     .filter((tab) => tab.kind === "terminal" && tab.state === "connected")
     .map((tab) => tab.sessionId))];
@@ -107,7 +110,8 @@ export function ServerSidebar() {
     <aside className="server-sidebar">
       <div className="sidebar-block identity-block">
         <div className="ip-row">
-          <span>IP</span><strong>{connection?.host ?? "-"}</strong>
+          <span>IP</span><strong>{connection ? displayIpAddress(connection.host, hostRevealed) : "-"}</strong>
+          <button type="button" title={hostRevealed ? "隐藏完整 IP" : "显示完整 IP"} aria-label={hostRevealed ? "隐藏完整 IP" : "显示完整 IP"} disabled={!connection} aria-pressed={hostRevealed} onClick={() => connection && setRevealedHosts((current) => ({ ...current, [connection.id]: !hostRevealed }))}>{hostRevealed ? <EyeOff size={13} /> : <Eye size={13} />}</button>
           <button type="button" title="复制 IP" disabled={!connection} onClick={() => connection && void navigator.clipboard.writeText(connection.host)}><Copy size={13} /></button>
         </div>
         <button className="system-info-button" type="button" disabled={!sessionConnected} onClick={() => openWorkspace("system")}>

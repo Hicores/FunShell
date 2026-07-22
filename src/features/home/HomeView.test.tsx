@@ -75,4 +75,15 @@ describe("HomeView", () => {
     expect(connect).toHaveBeenCalledOnce();
     expect(connect).toHaveBeenCalledWith(mockConnections[0]);
   });
+
+  it("masks quick-connect addresses until the eye button is clicked", () => {
+    useAppStore.setState({ connections: mockConnections, folders: mockFolders, quickConnectionCollapsedFolderIds: [] });
+    render(<HomeView />);
+
+    expect(screen.getByText("139.***.229")).toBeInTheDocument();
+    const reveal = screen.getByRole("button", { name: `显示 ${mockConnections[0].name} 的完整 IP` });
+    fireEvent.click(reveal);
+    expect(screen.getByText(mockConnections[0].host)).toBeInTheDocument();
+    expect(reveal).toHaveAttribute("aria-pressed", "true");
+  });
 });
