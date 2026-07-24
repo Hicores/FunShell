@@ -123,7 +123,7 @@ pub async fn list_remote_identities(
          printf '%s\\n' '{GROUPS_MARKER}'; \
          if command -v getent >/dev/null 2>&1; then getent group 2>/dev/null || cat /etc/group 2>/dev/null; else cat /etc/group 2>/dev/null; fi"
     );
-    let result = state.sessions.execute(&session_id, &command).await?;
+    let result = state.sessions.execute_file(&session_id, &command).await?;
     let identities = parse_remote_identities(&result.stdout);
     if identities.users.is_empty() || identities.groups.is_empty() {
         let detail = result.stderr.trim();
@@ -318,7 +318,7 @@ async fn resolve_numeric_name(
         );
         let name = state
             .sessions
-            .execute(session_id, &command)
+            .execute_file(session_id, &command)
             .await
             .ok()
             .filter(|result| result.exit_status == Some(0))
@@ -439,7 +439,7 @@ pub async fn delete_remote_path(
         let quoted = shell_quote(&path);
         let result = state
             .sessions
-            .execute(&session_id, &format!("rm -rf -- {quoted}"))
+            .execute_file(&session_id, &format!("rm -rf -- {quoted}"))
             .await?;
         if result.exit_status != Some(0) {
             return Err(AppError::Message(format!(
@@ -489,7 +489,7 @@ pub async fn chown_remote_path(
         ));
     }
     let command = chown_command(owner, group, &path);
-    let result = state.sessions.execute(&session_id, &command).await?;
+    let result = state.sessions.execute_file(&session_id, &command).await?;
     if result.exit_status != Some(0) {
         return Err(AppError::Message(format!(
             "修改所有者失败: {}",

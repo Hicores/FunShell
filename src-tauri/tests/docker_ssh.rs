@@ -36,6 +36,18 @@ async fn connect(port: u16) -> Handle<AcceptFixtureKey> {
         .expect("connect fixture")
 }
 
+async fn connect_with_password(port: u16) -> Handle<AcceptFixtureKey> {
+    let mut handle = connect(port).await;
+    assert!(
+        handle
+            .authenticate_password("root", "FunShellTest!234")
+            .await
+            .expect("password auth")
+            .success()
+    );
+    handle
+}
+
 async fn execute(handle: &Handle<AcceptFixtureKey>, command: &str, pty: bool) -> String {
     let mut channel = handle.channel_open_session().await.expect("open session");
     if pty {
@@ -73,16 +85,11 @@ fn fixture_key() -> PathBuf {
 #[ignore = "requires tests/fixtures/docker-compose.yml"]
 async fn validates_linux_ssh_fixtures() {
     for port in [2222_u16, 2223, 2224] {
-        let mut password = connect(port).await;
-        assert!(
-            password
-                .authenticate_password("root", "FunShellTest!234")
-                .await
-                .expect("password auth")
-                .success()
-        );
+        let terminal = connect_with_password(port).await;
+        let monitor = connect_with_password(port).await;
+        let files = connect_with_password(port).await;
         let ansi = execute(
-            &password,
+            &terminal,
             "printf '\\033[31mFUNSHELL_ANSI\\033[0m\\n'; stty size",
             true,
         )
@@ -97,14 +104,14 @@ async fn validates_linux_ssh_fixtures() {
             "unexpected PTY size on port {port}: {ansi:?}"
         );
         let metrics = execute(
-            &password,
+            &monitor,
             "test -r /proc/meminfo && command -v ps && command -v ss && echo FUNSHELL_METRICS",
             false,
         )
         .await;
         assert!(metrics.contains("FUNSHELL_METRICS"));
 
-        let channel = password.channel_open_session().await.expect("SFTP channel");
+        let channel = files.channel_open_session().await.expect("SFTP channel");
         channel
             .request_subsystem(true, "sftp")
             .await
@@ -114,7 +121,7 @@ async fn validates_linux_ssh_fixtures() {
             .expect("SFTP session");
         assert!(sftp.read_dir("/root").await.expect("list root").count() > 0);
 
-        let forwarded = password
+        let forwarded = terminal
             .channel_open_direct_tcpip("127.0.0.1", 22, "127.0.0.1", 0)
             .await
             .expect("direct TCP forwarding");
@@ -125,10 +132,18 @@ async fn validates_linux_ssh_fixtures() {
             .expect("forwarded banner timeout")
             .expect("read forwarded banner");
         assert!(banner.starts_with("SSH-"), "unexpected banner: {banner:?}");
-        password
+        terminal
             .disconnect(russh::Disconnect::ByApplication, "fixture complete", "en")
             .await
-            .expect("disconnect password session");
+            .expect("disconnect terminal session");
+        monitor
+            .disconnect(russh::Disconnect::ByApplication, "fixture complete", "en")
+            .await
+            .expect("disconnect monitor session");
+        files
+            .disconnect(russh::Disconnect::ByApplication, "fixture complete", "en")
+            .await
+            .expect("disconnect file session");
 
         let mut key = connect(port).await;
         let private_key = load_secret_key(fixture_key(), None).expect("load fixture key");

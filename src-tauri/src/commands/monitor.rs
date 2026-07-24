@@ -22,7 +22,10 @@ pub async fn collect_server_snapshot(
     state: State<'_, AppState>,
     session_id: String,
 ) -> AppResult<ServerSnapshot> {
-    let result = state.sessions.execute(&session_id, SNAPSHOT_SCRIPT).await?;
+    let result = state
+        .sessions
+        .execute_monitor(&session_id, SNAPSHOT_SCRIPT)
+        .await?;
     ensure_success(&result.stderr, result.exit_status)?;
     Ok(parse_snapshot(&result.stdout))
 }
@@ -36,7 +39,7 @@ pub async fn measure_session_latency(
     let started = Instant::now();
     let result = state
         .sessions
-        .execute(&session_id, &format!("printf '%s' '{PAYLOAD}'"))
+        .execute_monitor(&session_id, &format!("printf '%s' '{PAYLOAD}'"))
         .await?;
     ensure_success(&result.stderr, result.exit_status)?;
     if result.stdout != PAYLOAD {
@@ -51,7 +54,10 @@ pub async fn get_system_info(
     session_id: String,
 ) -> AppResult<SystemInfo> {
     let snapshot = collect_server_snapshot(state.clone(), session_id.clone()).await?;
-    let result = state.sessions.execute(&session_id, SYSTEM_SCRIPT).await?;
+    let result = state
+        .sessions
+        .execute_monitor(&session_id, SYSTEM_SCRIPT)
+        .await?;
     ensure_success(&result.stderr, result.exit_status)?;
     Ok(parse_system_info(&result.stdout, snapshot))
 }
@@ -61,7 +67,10 @@ pub async fn list_processes(
     state: State<'_, AppState>,
     session_id: String,
 ) -> AppResult<Vec<ProcessInfo>> {
-    let result = state.sessions.execute(&session_id, PROCESS_SCRIPT).await?;
+    let result = state
+        .sessions
+        .execute_monitor(&session_id, PROCESS_SCRIPT)
+        .await?;
     ensure_success(&result.stderr, result.exit_status)?;
     Ok(parse_processes(&result.stdout))
 }
@@ -78,7 +87,7 @@ pub async fn get_process_details(
     let script = format!(
         "LC_ALL=C\necho __NAME__; cat /proc/{pid}/comm 2>/dev/null\necho __EXE__; readlink /proc/{pid}/exe 2>/dev/null\necho __CWD__; readlink /proc/{pid}/cwd 2>/dev/null\necho __CMD__; tr '\\0' ' ' </proc/{pid}/cmdline 2>/dev/null; echo\necho __ENV__; tr '\\0' '\\n' </proc/{pid}/environ 2>/dev/null\n"
     );
-    let result = state.sessions.execute(&session_id, &script).await?;
+    let result = state.sessions.execute_monitor(&session_id, &script).await?;
     Ok(parse_process_details(&result.stdout, pid))
 }
 
@@ -99,7 +108,7 @@ pub async fn terminate_process(
     };
     let result = state
         .sessions
-        .execute(&session_id, &format!("kill -{signal} -- {pid}"))
+        .execute_monitor(&session_id, &format!("kill -{signal} -- {pid}"))
         .await?;
     ensure_success(&result.stderr, result.exit_status)
 }
@@ -111,7 +120,7 @@ pub async fn list_socket_listeners(
 ) -> AppResult<SocketListenerSnapshot> {
     let result = state
         .sessions
-        .execute(&session_id, SOCKET_LISTENER_SCRIPT)
+        .execute_monitor(&session_id, SOCKET_LISTENER_SCRIPT)
         .await?;
     Ok(parse_socket_listener_snapshot(&result.stdout))
 }
@@ -126,7 +135,7 @@ pub async fn list_socket_connections(
 ) -> AppResult<Vec<SocketInfo>> {
     let script = socket_connection_script(&protocol, &address_family, local_port)
         .ok_or_else(|| AppError::Validation("网络连接筛选参数无效".into()))?;
-    let result = state.sessions.execute(&session_id, &script).await?;
+    let result = state.sessions.execute_monitor(&session_id, &script).await?;
     Ok(parse_sockets(&result.stdout))
 }
 
@@ -145,7 +154,7 @@ pub async fn trace_route(
         let script = format!(
             "LC_ALL=C\nif command -v tracepath >/dev/null 2>&1; then tracepath -n {target}; elif command -v traceroute >/dev/null 2>&1; then traceroute -n {target}; else echo 'TRACE_TOOL_MISSING'; exit 127; fi"
         );
-        let result = state.sessions.execute(session_id, &script).await?;
+        let result = state.sessions.execute_monitor(session_id, &script).await?;
         if result.exit_status == Some(127) {
             return Err(AppError::Message(
                 "服务器未安装 tracepath 或 traceroute".into(),
