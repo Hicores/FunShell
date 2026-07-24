@@ -1,5 +1,5 @@
 import { act, fireEvent, render, screen } from "@testing-library/react";
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { TransferProgressEvent } from "../../types";
 import { TransferCenter } from "./TransferCenter";
 import { useTransferStore } from "./transferStore";
@@ -18,7 +18,7 @@ const task: TransferProgressEvent = {
 };
 
 describe("TransferCenter", () => {
-  beforeEach(() => useTransferStore.setState({ bySession: { "session-global": [task] }, viewing: false }));
+  beforeEach(() => useTransferStore.setState({ bySession: { "session-global": [task] }, rates: {}, viewing: false }));
 
   it("does not show a badge for completed history", () => {
     render(<TransferCenter />);
@@ -42,6 +42,36 @@ describe("TransferCenter", () => {
 
     act(() => useTransferStore.getState().record({ ...running, state: "completed", transferred: 100, viewed: false }));
     expect(toggle).not.toHaveTextContent("1");
+  });
+
+  it("updates the displayed speed only on one-second boundaries", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(10_000);
+    const running: TransferProgressEvent = { ...task, state: "running", transferred: 40, total: 100, viewed: false };
+    useTransferStore.setState({
+      bySession: { "session-global": [running] },
+      rates: { [running.taskId]: { speedBps: 1_024, sampledAt: Date.now(), transferred: 40 } },
+      viewing: false,
+    });
+    const view = render(<TransferCenter />);
+    try {
+      fireEvent.click(screen.getByRole("button", { name: "传输记录" }));
+      expect(screen.getByText("速度 1.0 KB/s")).toBeInTheDocument();
+
+      act(() => vi.advanceTimersByTime(200));
+      act(() => useTransferStore.setState((state) => ({
+        rates: { ...state.rates, [running.taskId]: { speedBps: 2_048, sampledAt: Date.now(), transferred: 80 } },
+      })));
+      expect(screen.getByText("速度 1.0 KB/s")).toBeInTheDocument();
+
+      act(() => vi.advanceTimersByTime(799));
+      expect(screen.getByText("速度 1.0 KB/s")).toBeInTheDocument();
+      act(() => vi.advanceTimersByTime(1));
+      expect(screen.getByText("速度 2.0 KB/s")).toBeInTheDocument();
+    } finally {
+      view.unmount();
+      vi.useRealTimers();
+    }
   });
 
   it("closes when focus leaves the transfer center but stays open for internal clicks", () => {
