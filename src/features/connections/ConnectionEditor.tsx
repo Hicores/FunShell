@@ -5,7 +5,7 @@ import { api } from "../../lib/ipc";
 import { useAppStore } from "../../stores/appStore";
 import type { AuthMethod, SaveConnectionInput } from "../../types";
 
-const createBlank = (folderId: string | null = null): SaveConnectionInput => ({ name: "", host: "", port: 22, username: "root", authMethod: "password", password: "", keyId: null, routeId: null, folderId, startupCommand: null, keepaliveSeconds: 30, connectTimeoutSeconds: 10, compression: false, autoReconnect: false, maxReconnectAttempts: 0 });
+const createBlank = (folderId: string | null = null): SaveConnectionInput => ({ name: "", host: "", port: 22, username: "root", authMethod: "password", password: "", keyId: null, routeId: null, folderId, startupCommand: null, keepaliveSeconds: 30, connectTimeoutSeconds: 10, compression: false, autoReconnect: false, maxReconnectAttempts: 0, multiConnectionMode: false });
 
 export function ConnectionEditor() {
   const open = useAppStore((state) => state.connectionEditorOpen);
@@ -29,7 +29,7 @@ export function ConnectionEditor() {
       username: editing.username, authMethod: editing.authMethod, password: "", keyId: editing.keyId,
       routeId: editing.routeId, startupCommand: editing.startupCommand, keepaliveSeconds: editing.keepaliveSeconds,
       connectTimeoutSeconds: editing.connectTimeoutSeconds, compression: editing.compression, autoReconnect: editing.autoReconnect,
-      maxReconnectAttempts: editing.maxReconnectAttempts,
+      maxReconnectAttempts: editing.maxReconnectAttempts, multiConnectionMode: editing.multiConnectionMode,
     } : createBlank(newConnectionFolderId));
   }, [editing, newConnectionFolderId, open]);
 
@@ -82,6 +82,7 @@ export function ConnectionEditor() {
                 <label className="checkbox-line"><input type="checkbox" checked={form.autoReconnect} onChange={(event) => update("autoReconnect", event.target.checked)} />断线自动重连</label>
                 <label>最大重连次数（0 为无限）<input type="number" min={0} disabled={!form.autoReconnect} value={form.maxReconnectAttempts} onChange={(event) => update("maxReconnectAttempts", Math.max(0, Math.trunc(Number(event.target.value) || 0)))} /></label>
                 <label className="checkbox-line"><input type="checkbox" checked={form.compression} onChange={(event) => update("compression", event.target.checked)} />启用 SSH 压缩</label>
+                <label className="checkbox-line wide"><input type="checkbox" checked={form.multiConnectionMode} onChange={(event) => update("multiConnectionMode", event.target.checked)} />多连接模式（终端 / 监控 / 文件）</label>
               </div>
             </fieldset>
           )}

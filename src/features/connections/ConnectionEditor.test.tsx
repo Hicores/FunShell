@@ -19,15 +19,19 @@ describe("ConnectionEditor", () => {
     fireEvent.click(screen.getByRole("button", { name: "终端" }));
 
     const autoReconnect = screen.getByRole("checkbox", { name: "断线自动重连" });
+    const multiConnection = screen.getByRole("checkbox", { name: "多连接模式（终端 / 监控 / 文件）" });
     const maximum = screen.getByLabelText("最大重连次数（0 为无限）");
     expect(autoReconnect).not.toBeChecked();
     expect(maximum).toBeDisabled();
     expect(maximum).toHaveValue(0);
+    expect(multiConnection).not.toBeChecked();
 
     fireEvent.click(autoReconnect);
     expect(maximum).toBeEnabled();
     fireEvent.change(maximum, { target: { value: "5" } });
     expect(maximum).toHaveValue(5);
+    fireEvent.click(multiConnection);
+    expect(multiConnection).toBeChecked();
   });
 
   it("loads an existing profile and switches authentication controls", () => {

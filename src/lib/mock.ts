@@ -38,6 +38,7 @@ export const mockConnections: ConnectionProfile[] = [
   compression: false,
   autoReconnect: true,
   maxReconnectAttempts: 0,
+  multiConnectionMode: false,
   sortOrder: index,
   deleted: false,
   createdAt: now,

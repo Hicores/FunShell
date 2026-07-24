@@ -57,6 +57,7 @@ pub struct ConnectionProfile {
     pub compression: bool,
     pub auto_reconnect: bool,
     pub max_reconnect_attempts: u32,
+    pub multi_connection_mode: bool,
     pub sort_order: i64,
     pub deleted: bool,
     pub created_at: String,
@@ -82,6 +83,7 @@ pub struct SaveConnectionInput {
     pub compression: bool,
     pub auto_reconnect: bool,
     pub max_reconnect_attempts: u32,
+    pub multi_connection_mode: bool,
     pub sort_order: Option<i64>,
 }
 

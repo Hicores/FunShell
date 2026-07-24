@@ -28,6 +28,7 @@ export interface ConnectionProfile {
   compression: boolean;
   autoReconnect: boolean;
   maxReconnectAttempts: number;
+  multiConnectionMode: boolean;
   sortOrder: number;
   deleted: boolean;
   createdAt: string;
@@ -51,6 +52,7 @@ export interface SaveConnectionInput {
   compression: boolean;
   autoReconnect: boolean;
   maxReconnectAttempts: number;
+  multiConnectionMode: boolean;
   sortOrder?: number;
 }
 

@@ -72,6 +72,7 @@ impl Database {
                     compression INTEGER NOT NULL DEFAULT 0,
                     auto_reconnect INTEGER NOT NULL DEFAULT 0,
                     max_reconnect_attempts INTEGER NOT NULL DEFAULT 0,
+                    multi_connection_mode INTEGER NOT NULL DEFAULT 0,
                     sort_order INTEGER NOT NULL DEFAULT 0,
                     deleted INTEGER NOT NULL DEFAULT 0,
                     created_at TEXT NOT NULL,
@@ -193,7 +194,18 @@ impl Database {
                     [],
                 )?;
             }
-            connection.execute("UPDATE schema_version SET version=2 WHERE version < 2", [])?;
+            let has_multi_connection_mode = connection.query_row(
+                "SELECT EXISTS(SELECT 1 FROM pragma_table_info('connections') WHERE name='multi_connection_mode')",
+                [],
+                |row| row.get::<_, bool>(0),
+            )?;
+            if !has_multi_connection_mode {
+                connection.execute(
+                    "ALTER TABLE connections ADD COLUMN multi_connection_mode INTEGER NOT NULL DEFAULT 0",
+                    [],
+                )?;
+            }
+            connection.execute("UPDATE schema_version SET version=3 WHERE version < 3", [])?;
             connection.execute(
                 "UPDATE transfer_history SET state='canceled', updated_at=?1 WHERE state='running'",
                 [chrono::Utc::now().to_rfc3339()],
@@ -233,6 +245,7 @@ mod tests {
             compression: false,
             auto_reconnect: true,
             max_reconnect_attempts: 4,
+            multi_connection_mode: true,
             sort_order: None,
         };
 
@@ -264,6 +277,7 @@ mod tests {
         assert_eq!(moved.secret_id.as_deref(), Some("secret-1"));
         assert!(moved.auto_reconnect);
         assert_eq!(moved.max_reconnect_attempts, 4);
+        assert!(moved.multi_connection_mode);
     }
 
     #[test]
@@ -283,8 +297,13 @@ mod tests {
         let database = Database::open(&path).expect("migrated database");
         database
             .with_connection(|connection| {
-                let column_exists = connection.query_row(
+                let reconnect_column_exists = connection.query_row(
                     "SELECT EXISTS(SELECT 1 FROM pragma_table_info('connections') WHERE name='max_reconnect_attempts')",
+                    [],
+                    |row| row.get::<_, bool>(0),
+                )?;
+                let multi_connection_column_exists = connection.query_row(
+                    "SELECT EXISTS(SELECT 1 FROM pragma_table_info('connections') WHERE name='multi_connection_mode')",
                     [],
                     |row| row.get::<_, bool>(0),
                 )?;
@@ -293,8 +312,9 @@ mod tests {
                     [],
                     |row| row.get::<_, i64>(0),
                 )?;
-                assert!(column_exists);
-                assert_eq!(version, 2);
+                assert!(reconnect_column_exists);
+                assert!(multi_connection_column_exists);
+                assert_eq!(version, 3);
                 Ok(())
             })
             .expect("inspect migrated schema");
