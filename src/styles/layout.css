@@ -172,6 +172,8 @@
 .bottom-tabs > span { flex: 1; }
 .bottom-tabs > button:last-child { min-width: 34px; }
 .bottom-content { height: calc(100% - 34px); min-height: 0; }
+.bottom-content[hidden], .bottom-view[hidden] { display: none; }
+.bottom-view { height: 100%; min-height: 0; }
 .is-resizing { cursor: ns-resize !important; user-select: none; }
 
 .tools-drawer { position: absolute; top: 8px; right: 8px; width: 470px; min-height: 370px; border: 1px solid #aebbc4; padding: 9px; background: #f9fafb; box-shadow: 0 8px 26px #18384a40; z-index: 15; }

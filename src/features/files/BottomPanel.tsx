@@ -36,8 +36,10 @@ export function BottomPanel({ tab, height, collapsed, onToggle, onResize }: Bott
         <span />
         <button type="button" title={collapsed ? "展开" : "收起"} onClick={onToggle}>{collapsed ? <ChevronUp size={16} /> : <ChevronDown size={16} />}</button>
       </header>
-      {!collapsed && <div className="bottom-content">{view === "files" ? <FileManager tab={tab} /> : <CommandPanel tab={tab} />}</div>}
+      <div className="bottom-content" hidden={collapsed}>
+        <div className="bottom-view" hidden={view !== "files"}><FileManager tab={tab} /></div>
+        <div className="bottom-view" hidden={view !== "commands"}><CommandPanel tab={tab} /></div>
+      </div>
     </section>
   );
 }
-
