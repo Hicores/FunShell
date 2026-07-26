@@ -4,6 +4,16 @@ FunShell 是使用 Rust、Tauri 2、React 19 和 TypeScript 构建的便携式 S
 
 主要功能包括连接与目录管理、密码/私钥认证、TOFU 主机指纹、ANSI 交互终端、命令历史与预设、SFTP 文件管理、Linux 资源监控、进程与网络分析、路由追踪、代理/跳板择优和本地/远端/SOCKS5 隧道。
 
+## 界面预览
+
+### 终端与文件管理
+
+![FunShell 终端、服务器监控与文件管理界面](assets/screenshots/terminal-files.png)
+
+### 快速连接
+
+![FunShell 快速连接界面](assets/screenshots/quick-connect.png)
+
 ## 开发
 
 ```powershell
