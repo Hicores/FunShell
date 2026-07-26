@@ -35,6 +35,13 @@ export function terminalContextAction(selection: string, clipboard: string): Ter
   return clipboard ? "paste" : null;
 }
 
+export function scheduleTerminalFocus(
+  getTarget: () => { focus: () => void } | null,
+  schedule: (callback: () => void) => void = (callback) => { window.requestAnimationFrame(() => callback()); },
+) {
+  schedule(() => getTarget()?.focus());
+}
+
 export function TerminalView({ tab, active }: TerminalViewProps) {
   const notify = useAppStore((state) => state.notify);
   const hostRef = useRef<HTMLDivElement>(null);
@@ -280,11 +287,14 @@ export function TerminalView({ tab, active }: TerminalViewProps) {
       terminalRef.current?.clearSelection();
     } catch (error) {
       notify(`复制文本失败: ${String(error)}`);
+    } finally {
+      scheduleTerminalFocus(() => terminalRef.current);
     }
   };
 
   const pasteClipboard = () => {
     if (context?.text) terminalRef.current?.paste(context.text);
+    scheduleTerminalFocus(() => terminalRef.current);
   };
 
   const saveTerminalSettings = async () => {

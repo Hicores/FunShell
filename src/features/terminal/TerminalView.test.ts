@@ -1,5 +1,5 @@
-import { describe, expect, it } from "vitest";
-import { terminalContextAction } from "./TerminalView";
+import { describe, expect, it, vi } from "vitest";
+import { scheduleTerminalFocus, terminalContextAction } from "./TerminalView";
 
 describe("terminalContextAction", () => {
   it("offers copy when the terminal has a selection", () => {
@@ -9,5 +9,17 @@ describe("terminalContextAction", () => {
   it("offers paste only when the selection is empty and clipboard has text", () => {
     expect(terminalContextAction("", "clipboard text")).toBe("paste");
     expect(terminalContextAction("", "")).toBeNull();
+  });
+});
+
+describe("scheduleTerminalFocus", () => {
+  it("restores focus after the context menu click has finished", () => {
+    const focus = vi.fn();
+    const callbacks: Array<() => void> = [];
+
+    scheduleTerminalFocus(() => ({ focus }), (callback) => callbacks.push(callback));
+    expect(focus).not.toHaveBeenCalled();
+    callbacks[0]();
+    expect(focus).toHaveBeenCalledOnce();
   });
 });
