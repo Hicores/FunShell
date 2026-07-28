@@ -35,6 +35,25 @@ describe("NetworkView", () => {
     await waitFor(() => expect(connections).toHaveBeenCalledWith("network-demand", "tcp", "IPv4", 80));
   });
 
+  it("shows matching IPv4 and IPv6 listeners as one row and loads both families", async () => {
+    const connections = vi.spyOn(api, "socketConnections");
+    const tab: WorkspaceTab = { id: "network-dual", sessionId: "network-dual", connectionId: mockConnections[0].id, title: "网络", kind: "network", state: "connected" };
+    const { container } = render(<NetworkView tab={tab} />);
+    const listenerTable = container.querySelector<HTMLTableElement>(".listener-table")!;
+
+    await waitFor(() => expect(within(listenerTable).getAllByRole("row").length).toBeGreaterThan(2));
+    const sshdRows = within(listenerTable).getAllByRole("row").filter((row) => row.textContent?.includes("sshd"));
+    expect(sshdRows).toHaveLength(1);
+    expect(sshdRows[0]).toHaveTextContent("IPv4/IPv6");
+    expect(sshdRows[0]).toHaveTextContent("全部地址");
+    fireEvent.click(sshdRows[0]);
+
+    await waitFor(() => {
+      expect(connections).toHaveBeenCalledWith("network-dual", "tcp", "IPv4", 22);
+      expect(connections).toHaveBeenCalledWith("network-dual", "tcp", "IPv6", 22);
+    });
+  });
+
   it("evicts the oldest IP metadata when the frontend cache reaches its limit", () => {
     expect(mergeBoundedRecord({ first: 1, second: 2 }, [["third", 3]], 2)).toEqual({ second: 2, third: 3 });
   });

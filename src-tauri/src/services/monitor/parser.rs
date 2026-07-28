@@ -1,4 +1,7 @@
-use std::collections::{BTreeMap, HashMap};
+use std::{
+    collections::{BTreeMap, HashMap},
+    net::Ipv6Addr,
+};
 
 use crate::domain::{
     FilesystemInfo, NetworkInterface, ProcessDetails, ProcessInfo, ServerSnapshot, SocketInfo,
@@ -162,7 +165,12 @@ pub fn parse_sockets(output: &str) -> Vec<SocketInfo> {
                 if fields.len() >= 5 {
                     let (local_address, local_port) = split_endpoint(fields[3]);
                     let (remote_address, remote_port) = split_endpoint(fields[4]);
-                    last_key = Some((local_address, local_port, remote_address, remote_port));
+                    last_key = Some((
+                        normalize_ipv4_mapped_address(local_address),
+                        local_port,
+                        normalize_ipv4_mapped_address(remote_address),
+                        remote_port,
+                    ));
                 }
                 continue;
             }
@@ -357,8 +365,10 @@ fn parse_socket_line(
     }
     let (local_address, local_port) = split_endpoint(fields[4]);
     let (remote_address, remote_port) = split_endpoint(fields[5]);
-    let local_address = normalize_wildcard_address(local_address, address_family);
-    let remote_address = normalize_wildcard_address(remote_address, address_family);
+    let local_address =
+        normalize_ipv4_mapped_address(normalize_wildcard_address(local_address, address_family));
+    let remote_address =
+        normalize_ipv4_mapped_address(normalize_wildcard_address(remote_address, address_family));
     let process_field = fields.get(6..).unwrap_or_default().join(" ");
     let pid = extract_number_after(&process_field, "pid=");
     let process = process_field
@@ -392,6 +402,7 @@ fn parse_socket_summary_line(line: &str) -> Option<SocketListenerSummary> {
         return None;
     }
     let (local_address, local_port) = split_endpoint(fields[2]);
+    let local_address = normalize_ipv4_mapped_address(local_address);
     Some(SocketListenerSummary {
         protocol: fields[0].to_owned(),
         address_family: fields[1].to_owned(),
@@ -438,6 +449,15 @@ fn normalize_wildcard_address(address: String, address_family: Option<&str>) -> 
         Some("IPv6") => "::".into(),
         _ => address,
     }
+}
+
+fn normalize_ipv4_mapped_address(address: String) -> String {
+    if let Ok(ipv6) = address.parse::<Ipv6Addr>()
+        && let Some(ipv4) = ipv6.to_ipv4_mapped()
+    {
+        return ipv4.to_string();
+    }
+    address
 }
 
 fn socket_interface(
@@ -537,6 +557,19 @@ mod tests {
         assert_eq!(sockets[1].local_address, "::");
         assert_eq!(sockets[1].remote_address, "::");
         assert_eq!(sockets[1].address_family, "IPv6");
+    }
+
+    #[test]
+    fn presents_ipv4_mapped_ipv6_connections_as_ipv4_addresses() {
+        let output = "__ADDRESSES__\n2: eth0 inet 10.6.0.5/24 scope global eth0\n__SOCKETS6__\ntcp ESTAB 0 0 [::ffff:10.6.0.5]:24000 [::ffff:10.6.4.17]:47178 users:((\"vfile\",pid=10,fd=4))\n__TCPINFO__\nESTAB 0 0 [::ffff:10.6.0.5]:24000 [::ffff:10.6.4.17]:47178\n cubic bytes_sent:246 bytes_received:47104\n";
+        let sockets = parse_sockets(output);
+        assert_eq!(sockets.len(), 1);
+        assert_eq!(sockets[0].address_family, "IPv6");
+        assert_eq!(sockets[0].local_address, "10.6.0.5");
+        assert_eq!(sockets[0].remote_address, "10.6.4.17");
+        assert_eq!(sockets[0].interface_name.as_deref(), Some("eth0"));
+        assert_eq!(sockets[0].sent_bytes, Some(246));
+        assert_eq!(sockets[0].received_bytes, Some(47_104));
     }
 
     #[test]

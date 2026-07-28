@@ -151,12 +151,12 @@ export function NetworkView({ tab, active = true }: { tab: WorkspaceTab; active?
   const filtered = useMemo(() => {
     const value = query.toLowerCase();
     return listeners.filter((listener) => {
-      const matchesFamily = familyFilter === "all" || listener.addressFamily === familyFilter;
+      const matchesFamily = familyFilter === "all" || listener.addressFamilies.includes(familyFilter);
       const matchesInterface = interfaceFilter === "all"
         || (interfaceFilter === "wildcard"
           ? listener.interfaceName == null
           : listener.interfaceName === interfaceFilter || listener.connections.some((socket) => socket.interfaceName === interfaceFilter));
-      const matchesQuery = `${listener.pid} ${listener.process} ${listener.protocol} ${listener.addressFamily} ${interfaceText(listener.interfaceName)} ${listener.localAddress} ${listener.localPort}`.toLowerCase().includes(value);
+      const matchesQuery = `${listener.pids.join(" ")} ${listener.process} ${listener.protocol} ${listener.addressFamily} ${interfaceText(listener.interfaceName)} ${listener.localAddresses.join(" ")} ${listener.localPort}`.toLowerCase().includes(value);
       return matchesFamily && matchesInterface && matchesQuery;
     });
   }, [familyFilter, interfaceFilter, listeners, query]);
@@ -172,7 +172,7 @@ export function NetworkView({ tab, active = true }: { tab: WorkspaceTab; active?
     detailRefreshingRef.current = true;
     setDetailLoading(true);
     try {
-      const next = await api.socketConnections(tab.sessionId, target.protocol, target.addressFamily, target.localPort);
+      const next = (await Promise.all(target.addressFamilies.map((addressFamily) => api.socketConnections(tab.sessionId, target.protocol, addressFamily, target.localPort)))).flat();
       if (!mountedRef.current || !activeRef.current || selectedRef.current?.key !== targetKey) return;
       const now = Date.now();
       const elapsed = detailSampledAtRef.current == null ? 2_000 : Math.max(250, now - detailSampledAtRef.current);
@@ -293,7 +293,7 @@ export function NetworkView({ tab, active = true }: { tab: WorkspaceTab; active?
             <VirtualTableSpacer height={virtualListeners.beforeHeight} columns={11} />
             {virtualListeners.rows.map(({ item: listener, index }) => (
             <tr key={listener.key} className={`${selectedKey === listener.key ? "selected " : ""}${index % 2 ? "virtual-even" : ""}`} onClick={() => choose(listener)}>
-              <td>{listener.pid ?? "-"}</td><td>{listener.process ?? "未知程序"}</td><td>{listener.protocol.toUpperCase()}</td><td>{listener.addressFamily}</td><td>{interfaceText(listener.interfaceName)}</td><td>{listener.localAddress}</td><td>{listener.localPort}</td><td>{listener.ipCount}</td><td>{listener.connectionCount}</td><td>{rate(listener.sentBps)}</td><td>{rate(listener.receivedBps)}</td>
+              <td title={listener.pids.join(", ")}>{listener.pids.length > 1 ? `${listener.pids[0]} +${listener.pids.length - 1}` : listener.pid ?? "-"}</td><td>{listener.process ?? "未知程序"}</td><td>{listener.protocol.toUpperCase()}</td><td>{listener.addressFamily}</td><td>{interfaceText(listener.interfaceName)}</td><td>{listener.localAddress}</td><td>{listener.localPort}</td><td>{listener.ipCount}</td><td>{listener.connectionCount}</td><td>{rate(listener.sentBps)}</td><td>{rate(listener.receivedBps)}</td>
             </tr>
             ))}
             <VirtualTableSpacer height={virtualListeners.afterHeight} columns={11} />
