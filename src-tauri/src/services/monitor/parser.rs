@@ -357,6 +357,8 @@ fn parse_socket_line(
     }
     let (local_address, local_port) = split_endpoint(fields[4]);
     let (remote_address, remote_port) = split_endpoint(fields[5]);
+    let local_address = normalize_wildcard_address(local_address, address_family);
+    let remote_address = normalize_wildcard_address(remote_address, address_family);
     let process_field = fields.get(6..).unwrap_or_default().join(" ");
     let pid = extract_number_after(&process_field, "pid=");
     let process = process_field
@@ -424,6 +426,17 @@ fn socket_address_family(local_address: &str, remote_address: &str) -> &'static 
         "IPv4"
     } else {
         "未知"
+    }
+}
+
+fn normalize_wildcard_address(address: String, address_family: Option<&str>) -> String {
+    if address != "*" {
+        return address;
+    }
+    match address_family {
+        Some("IPv4") => "0.0.0.0".into(),
+        Some("IPv6") => "::".into(),
+        _ => address,
     }
 }
 
@@ -518,9 +531,11 @@ mod tests {
         let output = "__ADDRESSES__\n__SOCKETS4__\ntcp LISTEN 0 4096 *:8080 *:* users:((\"server\",pid=10,fd=3))\n__SOCKETS6__\ntcp LISTEN 0 4096 *:8080 *:* users:((\"server\",pid=10,fd=4))\n__TCPINFO__\n";
         let sockets = parse_sockets(output);
         assert_eq!(sockets.len(), 2);
-        assert_eq!(sockets[0].local_address, "*");
+        assert_eq!(sockets[0].local_address, "0.0.0.0");
+        assert_eq!(sockets[0].remote_address, "0.0.0.0");
         assert_eq!(sockets[0].address_family, "IPv4");
-        assert_eq!(sockets[1].local_address, "*");
+        assert_eq!(sockets[1].local_address, "::");
+        assert_eq!(sockets[1].remote_address, "::");
         assert_eq!(sockets[1].address_family, "IPv6");
     }
 
