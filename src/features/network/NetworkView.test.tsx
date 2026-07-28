@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import { api } from "../../lib/ipc";
 import { mockConnections } from "../../lib/mock";
 import { useAppStore } from "../../stores/appStore";
-import type { GeoIpInfo, WorkspaceTab } from "../../types";
+import type { GeoIpInfo, SocketInfo, WorkspaceTab } from "../../types";
 import { lookupGeoIps, mergeBoundedRecord, NetworkView } from "./NetworkView";
 
 describe("NetworkView", () => {
@@ -33,6 +33,26 @@ describe("NetworkView", () => {
     expect(cells[10]).not.toHaveTextContent("-");
     fireEvent.click(nginxRow);
     await waitFor(() => expect(connections).toHaveBeenCalledWith("network-demand", "tcp", "IPv4", 80));
+  });
+
+  it("shows TCP listeners by default and filters UDP or all protocols", async () => {
+    const tcp: SocketInfo = { protocol: "tcp", addressFamily: "IPv4", interfaceName: null, state: "LISTEN", localAddress: "0.0.0.0", localPort: 80, remoteAddress: "0.0.0.0", remotePort: null, pid: 10, process: "nginx", receivedBytes: null, sentBytes: null };
+    const udp: SocketInfo = { protocol: "udp", addressFamily: "IPv4", interfaceName: null, state: "UNCONN", localAddress: "0.0.0.0", localPort: 53, remoteAddress: "0.0.0.0", remotePort: null, pid: 20, process: "dnsmasq", receivedBytes: null, sentBytes: null };
+    vi.spyOn(api, "socketListeners").mockResolvedValue({ listeners: [tcp, udp], summaries: [] });
+    const tab: WorkspaceTab = { id: "network-protocol", sessionId: "network-protocol", connectionId: mockConnections[0].id, title: "网络", kind: "network", state: "connected" };
+    const { container } = render(<NetworkView tab={tab} />);
+    const listenerTable = container.querySelector<HTMLTableElement>(".listener-table")!;
+    const protocolFilter = within(container).getByRole("combobox", { name: "筛选协议" });
+
+    await waitFor(() => expect(within(listenerTable).getByText("nginx")).toBeInTheDocument());
+    expect(protocolFilter).toHaveValue("tcp");
+    expect(within(listenerTable).queryByText("dnsmasq")).not.toBeInTheDocument();
+    fireEvent.change(protocolFilter, { target: { value: "udp" } });
+    expect(within(listenerTable).getByText("dnsmasq")).toBeInTheDocument();
+    expect(within(listenerTable).queryByText("nginx")).not.toBeInTheDocument();
+    fireEvent.change(protocolFilter, { target: { value: "all" } });
+    expect(within(listenerTable).getByText("dnsmasq")).toBeInTheDocument();
+    expect(within(listenerTable).getByText("nginx")).toBeInTheDocument();
   });
 
   it("shows matching IPv4 and IPv6 listeners as one row and loads both families", async () => {

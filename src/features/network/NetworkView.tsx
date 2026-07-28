@@ -91,6 +91,7 @@ export function NetworkView({ tab, active = true }: { tab: WorkspaceTab; active?
   const [listenerSummaries, setListenerSummaries] = useState<SocketListenerSummary[]>([]);
   const [connectionSockets, setConnectionSockets] = useState<RatedSocket[]>([]);
   const [query, setQuery] = useState("");
+  const [protocolFilter, setProtocolFilter] = useState("tcp");
   const [familyFilter, setFamilyFilter] = useState("all");
   const [interfaceFilter, setInterfaceFilter] = useState("all");
   const [listenerSort, setListenerSort] = useState<SortState<ListenerSortKey>>({ key: "connectionCount", direction: "desc" });
@@ -151,15 +152,16 @@ export function NetworkView({ tab, active = true }: { tab: WorkspaceTab; active?
   const filtered = useMemo(() => {
     const value = query.toLowerCase();
     return listeners.filter((listener) => {
+      const matchesProtocol = protocolFilter === "all" || listener.protocol.toLowerCase() === protocolFilter;
       const matchesFamily = familyFilter === "all" || listener.addressFamilies.includes(familyFilter);
       const matchesInterface = interfaceFilter === "all"
         || (interfaceFilter === "wildcard"
           ? listener.interfaceName == null
           : listener.interfaceName === interfaceFilter || listener.connections.some((socket) => socket.interfaceName === interfaceFilter));
       const matchesQuery = `${listener.pids.join(" ")} ${listener.process} ${listener.protocol} ${listener.addressFamily} ${interfaceText(listener.interfaceName)} ${listener.localAddresses.join(" ")} ${listener.localPort}`.toLowerCase().includes(value);
-      return matchesFamily && matchesInterface && matchesQuery;
+      return matchesProtocol && matchesFamily && matchesInterface && matchesQuery;
     });
-  }, [familyFilter, interfaceFilter, listeners, query]);
+  }, [familyFilter, interfaceFilter, listeners, protocolFilter, query]);
   const sortedListeners = useMemo(() => sortRows(filtered, (listener) => listenerSortValue(listener, listenerSort.key), listenerSort.direction), [filtered, listenerSort]);
   const virtualListeners = useVirtualRows(sortedListeners, 27);
   const selected = listeners.find((listener) => listener.key === selectedKey) ?? null;
@@ -212,6 +214,10 @@ export function NetworkView({ tab, active = true }: { tab: WorkspaceTab; active?
   useEffect(() => {
     if (selectedKey && !selected) setSelectedKey(null);
   }, [selected, selectedKey]);
+
+  useEffect(() => {
+    if (selectedKey && !filtered.some((listener) => listener.key === selectedKey)) setSelectedKey(null);
+  }, [filtered, selectedKey]);
 
   const sortedConnections = useMemo(() => {
     const connections = selected?.connections ?? [];
@@ -267,7 +273,8 @@ export function NetworkView({ tab, active = true }: { tab: WorkspaceTab; active?
     <section className="detail-view network-view">
       <header className="view-toolbar">
         <strong>网络监听</strong>
-        <span>{listeners.length} 个监听端口</span>
+        <span>{filtered.length} 个监听端口</span>
+        <select className="network-filter" aria-label="筛选协议" value={protocolFilter} onChange={(event) => setProtocolFilter(event.target.value)}><option value="tcp">TCP</option><option value="udp">UDP</option><option value="all">全部协议</option></select>
         <select className="network-filter" aria-label="筛选 IP 版本" value={familyFilter} onChange={(event) => setFamilyFilter(event.target.value)}><option value="all">全部 IP</option><option value="IPv4">IPv4</option><option value="IPv6">IPv6</option></select>
         <select className="network-filter interface-filter" aria-label="筛选网卡" value={interfaceFilter} onChange={(event) => setInterfaceFilter(event.target.value)}><option value="all">全部网卡范围</option><option value="wildcard">监听全部网卡</option>{interfaceOptions.map((name) => <option key={name} value={name}>{name}</option>)}</select>
         <label><Search size={15} /><input placeholder="搜索程序、PID、IP、网卡或端口" value={query} onChange={(event) => setQuery(event.target.value)} /></label>
