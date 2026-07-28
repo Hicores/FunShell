@@ -322,7 +322,11 @@ export function FileManager({ tab }: { tab: WorkspaceTab }) {
     if (!permissionFile) return;
     setSavingPermissions(true);
     try {
-      await api.chownRemotePath(tab.sessionId, permissionFile.path, owner, group);
+      const currentOwner = permissionFile.user ?? (permissionFile.userId != null ? String(permissionFile.userId) : "");
+      const currentGroup = permissionFile.group ?? (permissionFile.groupId != null ? String(permissionFile.groupId) : "");
+      if (owner !== currentOwner || group !== currentGroup) {
+        await api.chownRemotePath(tab.sessionId, permissionFile.path, owner, group);
+      }
       await api.chmodRemotePath(tab.sessionId, permissionFile.path, mode);
       setPermissionFile(null);
       await refresh();

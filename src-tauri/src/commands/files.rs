@@ -493,7 +493,7 @@ pub async fn chown_remote_path(
     if result.exit_status != Some(0) {
         return Err(AppError::Message(format!(
             "修改所有者失败: {}",
-            result.stderr.trim()
+            remote_command_failure_detail(&result.stdout, &result.stderr, result.exit_status)
         )));
     }
     Ok(())
@@ -769,11 +769,23 @@ fn chown_command(owner: &str, group: &str, path: &str) -> String {
     )
 }
 
+fn remote_command_failure_detail(stdout: &str, stderr: &str, exit_status: Option<u32>) -> String {
+    if !stderr.trim().is_empty() {
+        stderr.trim().to_owned()
+    } else if !stdout.trim().is_empty() {
+        stdout.trim().to_owned()
+    } else if let Some(status) = exit_status {
+        format!("远端命令退出码 {status}，服务器未返回错误详情")
+    } else {
+        "服务器未返回退出状态或错误详情".into()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::{
         DOWNLOAD_CHUNK_SIZE, chown_command, download_ranges, parse_owner_map,
-        parse_remote_identities, shell_quote,
+        parse_remote_identities, remote_command_failure_detail, shell_quote,
     };
 
     #[test]
@@ -787,6 +799,22 @@ mod tests {
         assert_eq!(
             chown_command("deploy", "release", "/srv/my app"),
             "chown -- 'deploy:release' '/srv/my app'"
+        );
+    }
+
+    #[test]
+    fn describes_remote_command_failures_without_stderr() {
+        assert_eq!(
+            remote_command_failure_detail("chown: permission denied\n", "", Some(1)),
+            "chown: permission denied"
+        );
+        assert_eq!(
+            remote_command_failure_detail("", "", Some(1)),
+            "远端命令退出码 1，服务器未返回错误详情"
+        );
+        assert_eq!(
+            remote_command_failure_detail("", "", None),
+            "服务器未返回退出状态或错误详情"
         );
     }
 

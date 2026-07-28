@@ -93,6 +93,26 @@ describe("FileManager", () => {
     expect(chmod).toHaveBeenCalledWith(tab.sessionId, "/root/deploy.sh", 0o1775);
   });
 
+  it("does not change ownership when only permission bits were edited", async () => {
+    vi.spyOn(api, "remoteIdentities").mockResolvedValue({
+      users: [{ name: "root", id: 0 }],
+      groups: [{ name: "root", id: 0 }],
+    });
+    const chown = vi.spyOn(api, "chownRemotePath").mockResolvedValue(undefined);
+    const chmod = vi.spyOn(api, "chmodRemotePath").mockResolvedValue(undefined);
+    render(<FileManager tab={tab} />);
+    const fileName = await screen.findByText("deploy.sh");
+    fireEvent.contextMenu(fileName);
+    fireEvent.click(screen.getByRole("button", { name: "文件权限..." }));
+
+    const dialog = screen.getByRole("dialog", { name: "修改文件权限" });
+    fireEvent.click(within(dialog).getByRole("checkbox", { name: "组 写入" }));
+    fireEvent.click(within(dialog).getByRole("button", { name: "确定" }));
+
+    await waitFor(() => expect(chmod).toHaveBeenCalledWith(tab.sessionId, "/root/deploy.sh", 0o775));
+    expect(chown).not.toHaveBeenCalled();
+  });
+
   it("opens a remote file in the text editor on double click", async () => {
     const readText = vi.spyOn(api, "readRemoteText").mockResolvedValue({
       path: "/root/deploy.sh",
