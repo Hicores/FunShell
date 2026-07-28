@@ -38,8 +38,10 @@ ps -eo pid=,user=,rss=,pcpu=,comm=,args= --sort=-pcpu 2>/dev/null || ps 2>/dev/n
 pub const SOCKET_LISTENER_SCRIPT: &str = r#"LC_ALL=C
 echo __ADDRESSES__
 ip -o addr show 2>/dev/null
-echo __SOCKETS__
-ss -H -lnutp 2>/dev/null
+echo __SOCKETS4__
+ss -H -4lnutp 2>/dev/null
+echo __SOCKETS6__
+ss -H -6lnutp 2>/dev/null
 echo __TCPINFO__
 echo __SUMMARIES__
 sample_dir="${TMPDIR:-/tmp}/funshell-sockets-$$"
@@ -159,7 +161,7 @@ pub fn socket_connection_script(
         String::new()
     };
     Some(format!(
-        "LC_ALL=C\necho __ADDRESSES__\nip -o addr show 2>/dev/null\necho __SOCKETS__\nss -H -{family_flag}{protocol_flag}nap state connected {filter} 2>/dev/null | sed 's/^/{protocol} /'\necho __TCPINFO__\n{tcp_info}\n"
+        "LC_ALL=C\necho __ADDRESSES__\nip -o addr show 2>/dev/null\necho __SOCKETS{family_flag}__\nss -H -{family_flag}{protocol_flag}nap state connected {filter} 2>/dev/null | sed 's/^/{protocol} /'\necho __TCPINFO__\n{tcp_info}\n"
     ))
 }
 
@@ -172,13 +174,19 @@ mod tests {
         assert!(SOCKET_LISTENER_SCRIPT.contains("sleep 1"));
         assert!(SOCKET_LISTENER_SCRIPT.contains("after_sent[connection] - previous"));
         assert!(SOCKET_LISTENER_SCRIPT.contains("awk -v protocol="));
+        assert!(SOCKET_LISTENER_SCRIPT.contains("echo __SOCKETS4__"));
+        assert!(SOCKET_LISTENER_SCRIPT.contains("ss -H -4lnutp"));
+        assert!(SOCKET_LISTENER_SCRIPT.contains("echo __SOCKETS6__"));
+        assert!(SOCKET_LISTENER_SCRIPT.contains("ss -H -6lnutp"));
         let script = socket_connection_script("tcp", "IPv4", 22).expect("script");
+        assert!(script.contains("echo __SOCKETS4__"));
         assert!(script.contains("ss -H -4tnap state connected '( sport = :22 )'"));
         assert!(script.contains("| sed 's/^/tcp /'"));
         assert!(script.contains("ss -H -4tinp state connected '( sport = :22 )'"));
         assert!(!script.contains("ss -H -tunap"));
 
         let udp = socket_connection_script("udp", "IPv6", 53).expect("UDP script");
+        assert!(udp.contains("echo __SOCKETS6__"));
         assert!(udp.contains("ss -H -6unap state connected '( sport = :53 )'"));
         assert!(udp.contains("| sed 's/^/udp /'"));
         assert!(!udp.contains("ss -H -6uinp"));

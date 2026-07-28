@@ -138,12 +138,21 @@ pub fn parse_sockets(output: &str) -> Vec<SocketInfo> {
         .flatten()
         .filter_map(|line| parse_interface_address(line))
         .collect::<HashMap<_, _>>();
-    let mut sockets = values
-        .get("SOCKETS")
-        .into_iter()
-        .flatten()
-        .filter_map(|line| parse_socket_line(line, &address_interfaces))
-        .collect::<Vec<_>>();
+    let mut sockets = [
+        ("SOCKETS", None),
+        ("SOCKETS4", Some("IPv4")),
+        ("SOCKETS6", Some("IPv6")),
+    ]
+    .into_iter()
+    .flat_map(|(section, address_family)| {
+        let address_interfaces = &address_interfaces;
+        values
+            .get(section)
+            .into_iter()
+            .flatten()
+            .filter_map(move |line| parse_socket_line(line, address_interfaces, address_family))
+    })
+    .collect::<Vec<_>>();
 
     if let Some(lines) = values.get("TCPINFO") {
         let mut last_key: Option<(String, Option<u16>, String, Option<u16>)> = None;
@@ -340,6 +349,7 @@ fn parse_filesystems(lines: Option<&Vec<String>>) -> Vec<FilesystemInfo> {
 fn parse_socket_line(
     line: &str,
     address_interfaces: &HashMap<String, String>,
+    address_family: Option<&str>,
 ) -> Option<SocketInfo> {
     let fields = line.split_whitespace().collect::<Vec<_>>();
     if fields.len() < 6 {
@@ -354,7 +364,9 @@ fn parse_socket_line(
         .nth(1)
         .and_then(|value| value.split('"').next())
         .map(str::to_owned);
-    let address_family = socket_address_family(&local_address, &remote_address).to_owned();
+    let address_family = address_family
+        .unwrap_or_else(|| socket_address_family(&local_address, &remote_address))
+        .to_owned();
     let interface_name = socket_interface(&local_address, address_interfaces);
     Some(SocketInfo {
         protocol: fields[0].to_owned(),
@@ -499,6 +511,17 @@ mod tests {
         assert_eq!(sockets[0].interface_name.as_deref(), Some("eth0"));
         assert_eq!(sockets[1].address_family, "IPv6");
         assert_eq!(sockets[1].interface_name.as_deref(), Some("eth1"));
+    }
+
+    #[test]
+    fn preserves_family_for_ambiguous_wildcard_listeners() {
+        let output = "__ADDRESSES__\n__SOCKETS4__\ntcp LISTEN 0 4096 *:8080 *:* users:((\"server\",pid=10,fd=3))\n__SOCKETS6__\ntcp LISTEN 0 4096 *:8080 *:* users:((\"server\",pid=10,fd=4))\n__TCPINFO__\n";
+        let sockets = parse_sockets(output);
+        assert_eq!(sockets.len(), 2);
+        assert_eq!(sockets[0].local_address, "*");
+        assert_eq!(sockets[0].address_family, "IPv4");
+        assert_eq!(sockets[1].local_address, "*");
+        assert_eq!(sockets[1].address_family, "IPv6");
     }
 
     #[test]
