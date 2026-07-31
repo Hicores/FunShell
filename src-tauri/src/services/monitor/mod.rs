@@ -15,7 +15,30 @@ echo __CPU_B__; head -n 1 /proc/stat 2>/dev/null
 echo __NET_B__; cat /proc/net/dev 2>/dev/null
 echo __MEM__; cat /proc/meminfo 2>/dev/null
 echo __DF__; df -P -B1 2>/dev/null || df -P -k 2>/dev/null
-echo __PROC__; ps -eo pid=,user=,rss=,pcpu=,comm=,args= --sort=-pcpu 2>/dev/null | head -n 21 || ps 2>/dev/null
+echo __PROC__
+if command -v top >/dev/null 2>&1; then
+    proc_top=$(LC_ALL=C top -b -n 2 -d 0.2 2>/dev/null | awk '
+        /^top -/ { sample++; next }
+        sample < 2 { next }
+        /^[[:space:]]*[0-9]+[[:space:]]/ {
+            command = $12
+            for (i = 13; i <= NF; i++) command = command " " $i
+            res = $6
+            gsub(/[^0-9.]/, "", res)
+            cpu = $9
+            gsub(/,/, ".", cpu)
+            if (res != "" && cpu != "") print $1, $2, res, cpu, $12, command
+            count++
+            if (count >= 20) exit
+        }')
+    if [ -n "$proc_top" ]; then
+        printf '%s\n' "$proc_top"
+    else
+        ps -eo pid=,user=,rss=,pcpu=,comm=,args= --sort=-pcpu 2>/dev/null | head -n 21 || ps 2>/dev/null
+    fi
+else
+    ps -eo pid=,user=,rss=,pcpu=,comm=,args= --sort=-pcpu 2>/dev/null | head -n 21 || ps 2>/dev/null
+fi
 "#;
 
 pub const SYSTEM_SCRIPT: &str = r#"LC_ALL=C
@@ -167,7 +190,15 @@ pub fn socket_connection_script(
 
 #[cfg(test)]
 mod tests {
-    use super::{SOCKET_LISTENER_SCRIPT, socket_connection_script};
+    use super::{SNAPSHOT_SCRIPT, SOCKET_LISTENER_SCRIPT, socket_connection_script};
+
+    #[test]
+    fn samples_process_cpu_from_the_second_top_iteration() {
+        assert!(SNAPSHOT_SCRIPT.contains("top -b -n 2 -d 0.2"));
+        assert!(SNAPSHOT_SCRIPT.contains("sample < 2"));
+        assert!(SNAPSHOT_SCRIPT.contains("printf '%s\\n' \"$proc_top\""));
+        assert!(SNAPSHOT_SCRIPT.contains("ps -eo pid=,user=,rss=,pcpu=,comm=,args="));
+    }
 
     #[test]
     fn filters_socket_details_on_the_remote_host() {
