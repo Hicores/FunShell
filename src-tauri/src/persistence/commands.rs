@@ -8,6 +8,14 @@ use crate::{
     persistence::Database,
 };
 
+pub(crate) fn normalize_history_command(command: &str) -> String {
+    command
+        .replace("\r\n", "\n")
+        .replace('\r', "\n")
+        .trim_end()
+        .to_owned()
+}
+
 impl Database {
     pub fn add_history(
         &self,
@@ -17,7 +25,7 @@ impl Database {
         let entry = CommandHistoryEntry {
             id: Uuid::new_v4().to_string(),
             connection_id: connection_id.map(str::to_owned),
-            command: command.trim_end().to_owned(),
+            command: normalize_history_command(command),
             favorite: false,
             executed_at: Utc::now().to_rfc3339(),
         };

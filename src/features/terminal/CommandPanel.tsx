@@ -1,6 +1,7 @@
 import { History, Play, Plus, Search, Star, Trash2 } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { api } from "../../lib/ipc";
+import { commandHistoryPreview } from "../../lib/commandText";
 import type { CommandHistoryEntry, CommandPreset, WorkspaceTab } from "../../types";
 import { useAppStore } from "../../stores/appStore";
 import { Modal } from "../../components/common/Modal";
@@ -76,7 +77,7 @@ export function CommandPanel({ tab }: { tab: WorkspaceTab }) {
             const source = historyConnection(entry.connectionId);
             const sourceName = source?.name ?? (entry.connectionId ? "已删除服务器" : "未关联服务器");
             const sourceTitle = source ? `${source.name} (${source.host})` : entry.connectionId ?? "未关联服务器";
-            return <div className="history-row" key={entry.id}><button type="button" title="收藏" onClick={async () => { await api.favoriteHistory(entry.id, !entry.favorite); await refresh(); }}><Star size={14} fill={entry.favorite ? "currentColor" : "none"} /></button><button className="command-history-command" type="button" title="输入到命令框" onClick={() => insert(entry.command, false)}><code>{entry.command}</code></button><span className="history-server" title={sourceTitle}>{sourceName}</span><span>{new Date(entry.executedAt).toLocaleString()}</span><button type="button" onClick={() => void run(entry.command)}><Play size={14} />执行</button></div>;
+            return <div className="history-row" key={entry.id}><button type="button" title="收藏" onClick={async () => { await api.favoriteHistory(entry.id, !entry.favorite); await refresh(); }}><Star size={14} fill={entry.favorite ? "currentColor" : "none"} /></button><button className="command-history-command" type="button" title="输入到命令框" onClick={() => insert(entry.command, false)}><code title={entry.command}>{commandHistoryPreview(entry.command)}</code></button><span className="history-server" title={sourceTitle}>{sourceName}</span><span>{new Date(entry.executedAt).toLocaleString()}</span><button type="button" onClick={() => void run(entry.command)}><Play size={14} />执行</button></div>;
           }) : presets.filter((preset) => preset.name.includes(search) || preset.command.includes(search)).map((preset) => (
             <div key={preset.id}><Star size={14} /><strong>{preset.name}</strong><code>{preset.command}</code><span className="command-actions"><button type="button" onClick={() => insert(preset.command)}>插入</button><button type="button" onClick={() => void run(preset.command)}><Play size={14} />执行</button></span></div>
           ))}

@@ -1,4 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
+import { normalizeCommandText } from "./commandText";
 import { listen, type EventCallback, type UnlistenFn } from "@tauri-apps/api/event";
 import {
   mockConnections,
@@ -71,7 +72,7 @@ const mockRootDirectories: RemoteFileEntry[] = ["bin", "boot", "dev", "etc", "ho
 }));
 
 function recordMockHistory(connectionId: string | null, command: string) {
-  const commandText = command.trimEnd();
+  const commandText = normalizeCommandText(command);
   if (!commandText.trim()) return;
   const existingIndex = mockHistory.findIndex((item) => item.connectionId === connectionId && item.command === commandText);
   const existing = existingIndex >= 0 ? mockHistory.splice(existingIndex, 1)[0] : undefined;

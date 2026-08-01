@@ -345,6 +345,26 @@ mod tests {
     }
 
     #[test]
+    fn normalizes_multiline_command_history_before_deduplication() {
+        let directory = tempdir().expect("tempdir");
+        let database = Database::open(&directory.path().join("test.db")).expect("database");
+
+        let first = database
+            .add_history(Some("connection-1"), "printf a\r\nprintf b\r\n")
+            .expect("CRLF history");
+        let second = database
+            .add_history(Some("connection-1"), "printf a\nprintf b")
+            .expect("LF history");
+
+        assert_eq!(first.id, second.id);
+        let history = database
+            .list_history(Some("connection-1"), None, 100)
+            .expect("list history");
+        assert_eq!(history.len(), 1);
+        assert_eq!(history[0].command, "printf a\nprintf b");
+    }
+
+    #[test]
     fn lists_all_command_history_and_filters_by_connection() {
         let directory = tempdir().expect("tempdir");
         let database = Database::open(&directory.path().join("test.db")).expect("database");

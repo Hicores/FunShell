@@ -37,6 +37,19 @@ describe("command preset variables", () => {
     window.removeEventListener("funshell-insert-command", listener);
   });
 
+  it("keeps a multiline history entry intact when inserting it", async () => {
+    const command = "cat <<'EOF'\nhello\nEOF";
+    vi.spyOn(api, "history").mockResolvedValue([{ id: "history-multiline", connectionId: tab.connectionId, command, favorite: false, executedAt: "2026-07-18T10:00:00Z" }]);
+    const listener = vi.fn();
+    window.addEventListener("funshell-insert-command", listener);
+    render(<CommandPanel tab={tab} />);
+
+    const preview = await screen.findByText("cat <<'EOF' ↵ hello ↵ EOF");
+    fireEvent.click(preview.closest("button")!);
+    expect(listener).toHaveBeenCalledWith(expect.objectContaining({ detail: { sessionId: tab.sessionId, command } }));
+    window.removeEventListener("funshell-insert-command", listener);
+  });
+
   it("switches between the current server and all server histories", async () => {
     const [current, other] = mockConnections;
     const historyTab = { ...tab, connectionId: current.id, title: current.name };

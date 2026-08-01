@@ -1,15 +1,17 @@
 import { Search, Settings, Zap } from "lucide-react";
-import { useEffect, useRef, useState, type MouseEvent } from "react";
+import { useEffect, useRef, useState, type CSSProperties, type MouseEvent } from "react";
 import { FitAddon } from "@xterm/addon-fit";
 import { SearchAddon } from "@xterm/addon-search";
 import { WebLinksAddon } from "@xterm/addon-web-links";
 import { Terminal } from "@xterm/xterm";
 import { ContextMenu } from "../../components/common/ContextMenu";
 import { bindAsyncDisposer } from "../../lib/asyncDisposer";
+import { normalizeCommandText } from "../../lib/commandText";
 import { api, isTauri, onEvent } from "../../lib/ipc";
 import { useAppStore } from "../../stores/appStore";
 import type { TerminalOutputEvent, WorkspaceTab } from "../../types";
 import { DEFAULT_TERMINAL_FONT_FAMILY, DEFAULT_TERMINAL_SCROLLBACK_LINES, TerminalSettingsDialog } from "./TerminalSettingsDialog";
+import { captureTerminalHistoryInput, createTerminalHistoryCaptureState } from "./terminalHistoryCapture";
 
 function encodeBase64(value: string) {
   const bytes = new TextEncoder().encode(value);
@@ -56,8 +58,7 @@ export function TerminalView({ tab, active }: TerminalViewProps) {
   const [search, setSearch] = useState("");
   const [history, setHistory] = useState<string[]>([]);
   const [historyIndex, setHistoryIndex] = useState<number | null>(null);
-  const inputBufferRef = useRef("");
-  const escapeSequenceRef = useRef(false);
+  const historyCaptureRef = useRef(createTerminalHistoryCaptureState());
   const [context, setContext] = useState<{ x: number; y: number; action: TerminalContextAction; text: string } | null>(null);
   const contextRequestRef = useRef(0);
   const [terminalFontFamily, setTerminalFontFamily] = useState(DEFAULT_TERMINAL_FONT_FAMILY);
@@ -120,31 +121,13 @@ export function TerminalView({ tab, active }: TerminalViewProps) {
     const input = terminal.onData((data) => {
       if (stateRef.current !== "connected") return;
       void api.terminalInput(sessionIdRef.current, encodeBase64(data));
-      let line = inputBufferRef.current;
-      let inEscapeSequence = escapeSequenceRef.current;
-      for (const character of data) {
-        if (inEscapeSequence) {
-          if (/[A-Za-z~]/.test(character)) inEscapeSequence = false;
-          continue;
-        }
-        if (character === "\x1b") { inEscapeSequence = true; continue; }
-        if (character === "\r" || character === "\n") {
-          const commandText = line.trim();
-          if (commandText) {
-            void api.recordHistory(connectionIdRef.current, commandText)
-              .then(() => window.dispatchEvent(new CustomEvent("funshell-command-executed", { detail: { sessionId: sessionIdRef.current } })))
-              .catch(() => undefined);
-          }
-          line = "";
-          continue;
-        }
-        if (character === "\u007f") { line = line.slice(0, -1); continue; }
-        if (character === "\u0003" || character === "\u0015") { line = ""; continue; }
-        if (character === "\u0017") { line = line.replace(/\s*\S+\s*$/, ""); continue; }
-        if (character === "\t" || character >= " ") line += character;
+      const captured = captureTerminalHistoryInput(historyCaptureRef.current, data);
+      historyCaptureRef.current = captured.state;
+      if (captured.command) {
+        void api.recordHistory(connectionIdRef.current, captured.command)
+          .then(() => window.dispatchEvent(new CustomEvent("funshell-command-executed", { detail: { sessionId: sessionIdRef.current } })))
+          .catch(() => undefined);
       }
-      inputBufferRef.current = line;
-      escapeSequenceRef.current = inEscapeSequence;
     });
     const resize = terminal.onResize(({ cols, rows }) => {
       if (stateRef.current === "connected") void api.resizeTerminal(sessionIdRef.current, cols, rows);
@@ -244,7 +227,7 @@ export function TerminalView({ tab, active }: TerminalViewProps) {
       notify("服务器仍在连接中");
       return;
     }
-    const value = command.trimEnd();
+    const value = normalizeCommandText(command);
     if (!value) return;
     setCommand("");
     setHistory((current) => [value, ...current.filter((item) => item !== value)].slice(0, 300));
@@ -320,8 +303,11 @@ export function TerminalView({ tab, active }: TerminalViewProps) {
     }
   };
 
+  const commandRows = Math.min(4, Math.max(1, command.split(/\r\n?|\n/).length));
+  const terminalStyle = { "--command-bar-height": `${12 + commandRows * 20}px` } as CSSProperties;
+
   return (
-    <div className="terminal-view">
+    <div className="terminal-view" style={terminalStyle}>
       <div ref={hostRef} className="xterm-host" onContextMenu={(event) => void openTerminalContextMenu(event)} />
       {context && (
         <ContextMenu x={context.x} y={context.y} onClose={() => setContext(null)}>
@@ -349,19 +335,20 @@ export function TerminalView({ tab, active }: TerminalViewProps) {
         </div>
       )}
       <div className="command-bar">
-        <input
+        <textarea
+          rows={commandRows}
           value={command}
           disabled={tab.state !== "connected"}
-          placeholder={tab.state === "connecting" ? "正在连接服务器..." : tab.state === "error" ? "连接失败，请重新连接" : "命令输入（Enter 执行，终端区域支持完整交互）"}
+          placeholder={tab.state === "connecting" ? "正在连接服务器..." : tab.state === "error" ? "连接失败，请重新连接" : "命令输入（Enter 执行，Shift+Enter 换行）"}
           onChange={(event) => { setCommand(event.target.value); setHistoryIndex(null); }}
           onKeyDown={(event) => {
             if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); void submit(); return; }
-            if (event.key === "ArrowUp" && history.length) {
+            if (event.key === "ArrowUp" && !command.includes("\n") && history.length) {
               event.preventDefault();
               const next = Math.min((historyIndex ?? -1) + 1, history.length - 1);
               setHistoryIndex(next); setCommand(history[next]);
             }
-            if (event.key === "ArrowDown" && historyIndex != null) {
+            if (event.key === "ArrowDown" && !command.includes("\n") && historyIndex != null) {
               event.preventDefault();
               const next = historyIndex - 1;
               setHistoryIndex(next >= 0 ? next : null); setCommand(next >= 0 ? history[next] : "");

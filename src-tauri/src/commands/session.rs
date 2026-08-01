@@ -4,6 +4,7 @@ use tauri::{AppHandle, State};
 use crate::{
     domain::{ExecResult, KnownHostInfo, SessionDescriptor},
     error::{AppError, AppResult},
+    persistence::normalize_history_command,
     state::AppState,
 };
 
@@ -91,6 +92,7 @@ pub async fn submit_terminal_command(
     session_id: String,
     command: String,
 ) -> AppResult<()> {
+    let command = normalize_history_command(&command);
     if command.trim().is_empty() {
         return Ok(());
     }
