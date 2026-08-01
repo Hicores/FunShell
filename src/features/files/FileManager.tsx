@@ -9,6 +9,8 @@ import { formatBytes, formatIdentity, formatMode } from "../../lib/format";
 import { api, isTauri } from "../../lib/ipc";
 import { useAppStore } from "../../stores/appStore";
 import type { RemoteFileEntry, RemoteIdentities, WorkspaceTab } from "../../types";
+import { ArchiveDialog, type ArchiveDialogState } from "./ArchiveDialog";
+import { defaultArchiveName, isTarGzipArchive, normalizeArchiveName } from "./archive";
 import { PermissionDialog } from "./PermissionDialog";
 import { RemoteDirectoryTree } from "./RemoteDirectoryTree";
 import { openRemoteEditorWindow } from "./openEditorWindow";
@@ -69,6 +71,8 @@ export function FileManager({ tab }: { tab: WorkspaceTab }) {
   const [identitiesError, setIdentitiesError] = useState<string | null>(null);
   const [context, setContext] = useState<{ x: number; y: number; file: RemoteFileEntry | null; targetPath: string } | null>(null);
   const [createDialog, setCreateDialog] = useState<{ kind: "file" | "directory"; name: string; parentPath: string } | null>(null);
+  const [archiveDialog, setArchiveDialog] = useState<ArchiveDialogState | null>(null);
+  const [archiveRunning, setArchiveRunning] = useState(false);
   const dropTargetRef = useRef<HTMLDivElement>(null);
   const skipNextRefreshPathRef = useRef<string | null>(null);
   const fileRequestRef = useRef(0);
@@ -305,6 +309,59 @@ export function FileManager({ tab }: { tab: WorkspaceTab }) {
     } catch (error) { notify(String(error)); }
   };
 
+  const openCreateArchiveDialog = (file: RemoteFileEntry) => {
+    const destinationDirectory = parentRemote(file.path);
+    setContext(null);
+    setArchiveDialog({
+      kind: "create",
+      sourcePath: file.path,
+      destinationDirectory,
+      archiveName: defaultArchiveName(file.name),
+    });
+  };
+
+  const openExtractArchiveDialog = (file: RemoteFileEntry) => {
+    setContext(null);
+    setArchiveDialog({
+      kind: "extract",
+      archivePath: file.path,
+      destinationPath: parentRemote(file.path),
+    });
+  };
+
+  const runArchiveOperation = async () => {
+    if (!archiveDialog || archiveRunning) return;
+    setArchiveRunning(true);
+    try {
+      if (archiveDialog.kind === "create") {
+        const archiveName = normalizeArchiveName(archiveDialog.archiveName);
+        if (!archiveName) {
+          notify("请输入当前目录内有效的压缩包名称");
+          return;
+        }
+        const archivePath = joinRemote(archiveDialog.destinationDirectory, archiveName);
+        await api.createRemoteArchive(tab.sessionId, archiveDialog.sourcePath, archivePath);
+        setArchiveDialog(null);
+        if (archiveDialog.destinationDirectory === path) await refresh();
+        notify(`打包完成：${archivePath}`);
+      } else {
+        const destinationPath = normalizeRemoteDirectory(archiveDialog.destinationPath);
+        if (!destinationPath) {
+          notify("请输入以 / 开头的远程绝对路径");
+          return;
+        }
+        await api.extractRemoteArchive(tab.sessionId, archiveDialog.archivePath, destinationPath);
+        setArchiveDialog(null);
+        if (destinationPath === path) await refresh();
+        notify(`解包完成：${destinationPath}`);
+      }
+    } catch (error) {
+      notify(String(error));
+    } finally {
+      setArchiveRunning(false);
+    }
+  };
+
   const rename = async (file: RemoteFileEntry) => {
     const name = window.prompt("新名称", file.name);
     if (!name?.trim() || name === file.name) return;
@@ -392,6 +449,8 @@ export function FileManager({ tab }: { tab: WorkspaceTab }) {
             <button type="button" onClick={() => void navigator.clipboard.writeText(context.file!.path)}>复制路径</button>
             <button type="button" onClick={() => void downloadFile(context.file!)}>下载</button>
             <button type="button" onClick={() => void uploadFiles()}>上传</button>
+            <button type="button" onClick={() => openCreateArchiveDialog(context.file!)}>打包</button>
+            {isTarGzipArchive(context.file.name) && <button type="button" onClick={() => openExtractArchiveDialog(context.file!)}>解包</button>}
             <hr />
             <button type="button" onClick={() => void rename(context.file!)}>重命名</button>
             <button type="button" className="danger" onClick={() => void remove(context.file!)}>删除</button>
@@ -407,6 +466,13 @@ export function FileManager({ tab }: { tab: WorkspaceTab }) {
       <Modal open={createDialog != null} title={createDialog?.kind === "file" ? "新建文件" : "新建文件夹"} width={430} onClose={() => setCreateDialog(null)} footer={<><button type="button" onClick={() => setCreateDialog(null)}>取消</button><button className="primary-button" type="button" disabled={!createDialog?.name.trim()} onClick={() => void createEntry()}>创建</button></>}>
         <div className="form-grid"><label className="wide">目标目录<input value={createDialog?.parentPath ?? ""} readOnly /></label><label className="wide">{createDialog?.kind === "file" ? "文件名称" : "文件夹名称"}<input autoFocus value={createDialog?.name ?? ""} onChange={(event) => setCreateDialog((current) => current ? { ...current, name: event.target.value } : null)} onKeyDown={(event) => { if (event.key === "Enter") void createEntry(); }} /></label></div>
       </Modal>
+      <ArchiveDialog
+        value={archiveDialog}
+        running={archiveRunning}
+        onChange={setArchiveDialog}
+        onClose={() => { if (!archiveRunning) setArchiveDialog(null); }}
+        onConfirm={() => void runArchiveOperation()}
+      />
       <Modal
         open={editorOpen && (editorDocuments.length > 0 || editorLoadingPaths.length > 0)}
         title={editorDocuments.length > 1 ? `远程编辑 (${editorDocuments.length} 个文件)` : editor ? `远程编辑 - ${editor.path}` : `正在打开 - ${editorLoadingPaths[0] ?? ""}`}

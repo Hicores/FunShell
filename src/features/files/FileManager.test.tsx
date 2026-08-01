@@ -164,6 +164,41 @@ describe("FileManager", () => {
     expect(editors[1]).toHaveValue("/root/.bash_history");
   });
 
+  it("packs a file or directory into the current directory with a customizable tar.gz name", async () => {
+    const createArchive = vi.spyOn(api, "createRemoteArchive").mockResolvedValue("/root/gateway-backup.tar.gz");
+    render(<FileManager tab={tab} />);
+
+    fireEvent.contextMenu(await screen.findByText("gateway"));
+    const menu = screen.getByRole("menu");
+    fireEvent.click(within(menu).getByRole("button", { name: "打包" }));
+
+    const dialog = screen.getByRole("dialog", { name: "打包为 tar.gz" });
+    expect(within(dialog).getByRole("textbox", { name: "打包对象" })).toHaveValue("/root/gateway");
+    expect(within(dialog).getByRole("textbox", { name: "压缩包保存目录" })).toHaveValue("/root");
+    expect((within(dialog).getByRole("textbox", { name: "压缩包名称" }) as HTMLInputElement).value).toMatch(/^gateway\.\d{8}-\d{6}\.tar\.gz$/);
+
+    fireEvent.change(within(dialog).getByRole("textbox", { name: "压缩包名称" }), { target: { value: "gateway-backup" } });
+    fireEvent.click(within(dialog).getByRole("button", { name: "开始打包" }));
+    await waitFor(() => expect(createArchive).toHaveBeenCalledWith(tab.sessionId, "/root/gateway", "/root/gateway-backup.tar.gz"));
+  });
+
+  it("extracts tar.gz archives to the containing directory by default or a custom path", async () => {
+    const extractArchive = vi.spyOn(api, "extractRemoteArchive").mockResolvedValue("/srv/restored");
+    render(<FileManager tab={tab} />);
+
+    fireEvent.contextMenu(await screen.findByText("gateway-release.tar.gz"));
+    const menu = screen.getByRole("menu");
+    fireEvent.click(within(menu).getByRole("button", { name: "解包" }));
+
+    const dialog = screen.getByRole("dialog", { name: "解包 tar.gz" });
+    expect(within(dialog).getByRole("textbox", { name: "待解包文件" })).toHaveValue("/root/gateway-release.tar.gz");
+    expect(within(dialog).getByRole("textbox", { name: "解包路径" })).toHaveValue("/root");
+
+    fireEvent.change(within(dialog).getByRole("textbox", { name: "解包路径" }), { target: { value: "/srv/restored" } });
+    fireEvent.click(within(dialog).getByRole("button", { name: "开始解包" }));
+    await waitFor(() => expect(extractArchive).toHaveBeenCalledWith(tab.sessionId, "/root/gateway-release.tar.gz", "/srv/restored"));
+  });
+
   it("shows directory commands on empty space and creates an empty remote file", async () => {
     const createFile = vi.spyOn(api, "createRemoteFile").mockResolvedValue(undefined);
     const { container } = render(<FileManager tab={tab} />);

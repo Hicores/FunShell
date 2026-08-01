@@ -197,6 +197,18 @@ function mockCall(command: string, args?: Record<string, unknown>): unknown {
         ` 3:  ${String(args?.target ?? "8.8.8.8")}                     18.731ms reached`,
       ].join("\n"),
     };
+    case "create_remote_archive": {
+      const archivePath = String(args?.archivePath ?? "");
+      if (archivePath.startsWith("/root/")) {
+        const name = archivePath.split("/").at(-1) ?? "archive.tar.gz";
+        const entry: RemoteFileEntry = { name, path: archivePath, kind: "file", linkTarget: null, size: 4_096_000, modified: Math.floor(Date.now() / 1000), permissions: 0o644, user: "root", group: "root", userId: 0, groupId: 0 };
+        const existing = mockRemoteFiles.findIndex((item) => item.path === archivePath);
+        if (existing >= 0) mockRemoteFiles[existing] = entry;
+        else mockRemoteFiles.push(entry);
+      }
+      return archivePath;
+    }
+    case "extract_remote_archive": return String(args?.destinationPath ?? "");
     case "list_remote_files": {
       const path = String(args?.path ?? "/root");
       if (path === "/") return mockRootDirectories;
@@ -333,6 +345,8 @@ export const api = {
   deleteRemotePath: (sessionId: string, path: string, directory: boolean, recursive = false) => call<void>("delete_remote_path", { sessionId, path, directory, recursive }),
   chmodRemotePath: (sessionId: string, path: string, mode: number) => call<void>("chmod_remote_path", { sessionId, path, mode }),
   chownRemotePath: (sessionId: string, path: string, owner: string, group: string) => call<void>("chown_remote_path", { sessionId, path, owner, group }),
+  createRemoteArchive: (sessionId: string, sourcePath: string, archivePath: string) => call<string>("create_remote_archive", { sessionId, sourcePath, archivePath }),
+  extractRemoteArchive: (sessionId: string, archivePath: string, destinationPath: string) => call<string>("extract_remote_archive", { sessionId, archivePath, destinationPath }),
   uploadRemoteFile: (sessionId: string, localPath: string, remotePath: string) => call<string>("upload_remote_file", { sessionId, localPath, remotePath }),
   downloadRemoteFile: (sessionId: string, remotePath: string, localPath: string) => call<string>("download_remote_file", { sessionId, remotePath, localPath }),
   cancelTransfer: (taskId: string) => call<void>("cancel_file_transfer", { taskId }),
