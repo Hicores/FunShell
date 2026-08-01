@@ -11,6 +11,7 @@ const MISSING_GZIP_MARKER: &str = "__FUNSHELL_ARCHIVE_MISSING_GZIP__";
 const SOURCE_MISSING_MARKER: &str = "__FUNSHELL_ARCHIVE_SOURCE_MISSING__";
 const ARCHIVE_EXISTS_MARKER: &str = "__FUNSHELL_ARCHIVE_EXISTS__";
 const DESTINATION_INVALID_MARKER: &str = "__FUNSHELL_ARCHIVE_DESTINATION_INVALID__";
+const SUCCESS_MARKER: &str = "__FUNSHELL_ARCHIVE_SUCCESS__";
 
 #[tauri::command]
 pub async fn create_remote_archive(
@@ -54,7 +55,7 @@ fn create_archive_command(source_path: &str, archive_path: &str) -> AppResult<St
     Ok(format!(
         "{} if [ ! -e {source} ] && [ ! -L {source} ]; then printf '%s\\n' '{SOURCE_MISSING_MARKER}' >&2; exit 2; fi; \
          if [ -e {archive} ] || [ -L {archive} ]; then printf '%s\\n' '{ARCHIVE_EXISTS_MARKER}' >&2; exit 17; fi; \
-         tar -czf {archive} -C {parent} {entry}",
+         tar -czf {archive} -C {parent} {entry} && printf '%s\\n' '{SUCCESS_MARKER}'",
         dependency_check(),
         source = shell_quote(source_path.trim_end_matches('/')),
         archive = shell_quote(archive_path),
@@ -70,7 +71,7 @@ fn extract_archive_command(archive_path: &str, destination_path: &str) -> AppRes
     Ok(format!(
         "{} if [ ! -f {archive} ]; then printf '%s\\n' '{SOURCE_MISSING_MARKER}' >&2; exit 2; fi; \
          if ! mkdir -p {destination}; then printf '%s\\n' '{DESTINATION_INVALID_MARKER}' >&2; exit 3; fi; \
-         tar -tzf {archive} >/dev/null && tar -xzf {archive} -C {destination}",
+         tar -tzf {archive} >/dev/null && tar -xzf {archive} -C {destination} && printf '%s\\n' '{SUCCESS_MARKER}'",
         dependency_check(),
         archive = shell_quote(archive_path),
         destination = shell_quote(destination_path),
@@ -126,9 +127,6 @@ fn validate_absolute_remote_path(path: &str, label: &str) -> AppResult<()> {
 }
 
 fn ensure_archive_command_succeeded(action: &str, result: &ExecResult) -> AppResult<()> {
-    if result.exit_status == Some(0) {
-        return Ok(());
-    }
     let output = format!("{}\n{}", result.stderr, result.stdout);
     let detail = if output.contains(MISSING_TAR_MARKER) {
         "服务器缺少 tar 命令，请安装 tar 后重试".into()
@@ -144,6 +142,8 @@ fn ensure_archive_command_succeeded(action: &str, result: &ExecResult) -> AppRes
         "当前目录已经存在同名压缩包，请修改压缩包名称".into()
     } else if output.contains(DESTINATION_INVALID_MARKER) {
         "解包路径创建失败，请检查路径和写入权限".into()
+    } else if output.contains(SUCCESS_MARKER) || result.exit_status == Some(0) {
+        return Ok(());
     } else {
         remote_command_failure_detail(result)
     };
@@ -184,6 +184,7 @@ mod tests {
         .expect("archive command");
         assert!(command.contains("tar -czf '/srv/releases/my app.20260801-203000.tar.gz'"));
         assert!(command.contains("-C '/srv/releases' './my app'"));
+        assert!(command.ends_with("printf '%s\\n' '__FUNSHELL_ARCHIVE_SUCCESS__'"));
     }
 
     #[test]
@@ -197,6 +198,7 @@ mod tests {
         assert!(command.contains(
             "tar -xzf '/srv/releases/my app.20260801-203000.tar.gz' -C '/opt/restored app'"
         ));
+        assert!(command.ends_with("printf '%s\\n' '__FUNSHELL_ARCHIVE_SUCCESS__'"));
     }
 
     #[test]
@@ -207,6 +209,16 @@ mod tests {
     #[test]
     fn rejects_the_remote_root_as_a_single_archive_entry() {
         assert!(split_remote_path("/", "打包对象路径").is_err());
+    }
+
+    #[test]
+    fn accepts_an_explicit_success_marker_when_ssh_omits_exit_status() {
+        let result = ExecResult {
+            stdout: "__FUNSHELL_ARCHIVE_SUCCESS__\n".into(),
+            stderr: String::new(),
+            exit_status: None,
+        };
+        ensure_archive_command_succeeded("打包", &result).expect("success marker");
     }
 
     #[test]
