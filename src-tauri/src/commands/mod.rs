@@ -1,5 +1,6 @@
 use serde::Serialize;
 
+pub mod archive;
 pub mod connections;
 pub mod files;
 pub mod history;
