@@ -9,13 +9,27 @@ use tokio::sync::Mutex;
 
 use crate::{
     error::AppResult,
-    services::ssh::{client::ClientHandler, client::map_sftp},
+    services::ssh::{
+        client::{ClientHandler, map_sftp},
+        sudo::SudoContext,
+    },
 };
 
-pub async fn open_sftp(handle: &Arc<Mutex<Handle<ClientHandler>>>) -> AppResult<SftpSession> {
+pub async fn open_sftp(
+    handle: &Arc<Mutex<Handle<ClientHandler>>>,
+    sudo: Option<&SudoContext>,
+) -> AppResult<SftpSession> {
     let handle = handle.lock().await;
     let channel = handle.channel_open_session().await?;
-    channel.request_subsystem(true, "sftp").await?;
+    if let Some(sudo) = sudo {
+        let command = sudo.sftp_command();
+        channel.exec(true, command).await?;
+        if let Some(input) = sudo.stdin_payload() {
+            channel.data(input.as_slice()).await?;
+        }
+    } else {
+        channel.request_subsystem(true, "sftp").await?;
+    }
     drop(handle);
     map_sftp(SftpSession::new(channel.into_stream()).await)
 }
@@ -55,10 +69,19 @@ impl PipelinedSftpReader {
 pub async fn open_pipelined_reader(
     handle: &Arc<Mutex<Handle<ClientHandler>>>,
     path: String,
+    sudo: Option<&SudoContext>,
 ) -> AppResult<PipelinedSftpReader> {
     let handle = handle.lock().await;
     let channel = handle.channel_open_session().await?;
-    channel.request_subsystem(true, "sftp").await?;
+    if let Some(sudo) = sudo {
+        let command = sudo.sftp_command();
+        channel.exec(true, command).await?;
+        if let Some(input) = sudo.stdin_payload() {
+            channel.data(input.as_slice()).await?;
+        }
+    } else {
+        channel.request_subsystem(true, "sftp").await?;
+    }
     drop(handle);
 
     let config = Config {

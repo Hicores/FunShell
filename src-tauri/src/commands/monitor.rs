@@ -39,7 +39,7 @@ pub async fn measure_session_latency(
     let started = Instant::now();
     let result = state
         .sessions
-        .execute_monitor(&session_id, &format!("printf '%s' '{PAYLOAD}'"))
+        .execute_monitor_unprivileged(&session_id, &format!("printf '%s' '{PAYLOAD}'"))
         .await?;
     ensure_success(&result.stderr, result.exit_status)?;
     if result.stdout != PAYLOAD {

@@ -398,6 +398,8 @@ mod tests {
             auto_reconnect: true,
             max_reconnect_attempts: 0,
             multi_connection_mode: false,
+            use_sudo: false,
+            sudo_secret_id: None,
             sort_order: 0,
             deleted: false,
             created_at: String::new(),

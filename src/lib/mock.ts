@@ -39,6 +39,8 @@ export const mockConnections: ConnectionProfile[] = [
   autoReconnect: true,
   maxReconnectAttempts: 0,
   multiConnectionMode: false,
+  useSudo: false,
+  sudoSecretId: null,
   sortOrder: index,
   deleted: false,
   createdAt: now,

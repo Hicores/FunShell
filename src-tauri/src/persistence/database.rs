@@ -73,6 +73,8 @@ impl Database {
                     auto_reconnect INTEGER NOT NULL DEFAULT 0,
                     max_reconnect_attempts INTEGER NOT NULL DEFAULT 0,
                     multi_connection_mode INTEGER NOT NULL DEFAULT 0,
+                    use_sudo INTEGER NOT NULL DEFAULT 0,
+                    sudo_secret_id TEXT,
                     sort_order INTEGER NOT NULL DEFAULT 0,
                     deleted INTEGER NOT NULL DEFAULT 0,
                     created_at TEXT NOT NULL,
@@ -205,7 +207,29 @@ impl Database {
                     [],
                 )?;
             }
-            connection.execute("UPDATE schema_version SET version=3 WHERE version < 3", [])?;
+            let has_use_sudo = connection.query_row(
+                "SELECT EXISTS(SELECT 1 FROM pragma_table_info('connections') WHERE name='use_sudo')",
+                [],
+                |row| row.get::<_, bool>(0),
+            )?;
+            if !has_use_sudo {
+                connection.execute(
+                    "ALTER TABLE connections ADD COLUMN use_sudo INTEGER NOT NULL DEFAULT 0",
+                    [],
+                )?;
+            }
+            let has_sudo_secret_id = connection.query_row(
+                "SELECT EXISTS(SELECT 1 FROM pragma_table_info('connections') WHERE name='sudo_secret_id')",
+                [],
+                |row| row.get::<_, bool>(0),
+            )?;
+            if !has_sudo_secret_id {
+                connection.execute(
+                    "ALTER TABLE connections ADD COLUMN sudo_secret_id TEXT",
+                    [],
+                )?;
+            }
+            connection.execute("UPDATE schema_version SET version=4 WHERE version < 4", [])?;
             connection.execute(
                 "UPDATE transfer_history SET state='canceled', updated_at=?1 WHERE state='running'",
                 [chrono::Utc::now().to_rfc3339()],
@@ -246,11 +270,17 @@ mod tests {
             auto_reconnect: true,
             max_reconnect_attempts: 4,
             multi_connection_mode: true,
+            use_sudo: true,
+            sudo_password: None,
             sort_order: None,
         };
 
         let saved = database
-            .save_connection(&input, Some("secret-1".into()))
+            .save_connection(
+                &input,
+                Some("secret-1".into()),
+                Some("sudo-secret-1".into()),
+            )
             .expect("save");
         let listed = database.list_connections(false).expect("list");
         assert_eq!(listed.len(), 1);
@@ -278,6 +308,8 @@ mod tests {
         assert!(moved.auto_reconnect);
         assert_eq!(moved.max_reconnect_attempts, 4);
         assert!(moved.multi_connection_mode);
+        assert!(moved.use_sudo);
+        assert_eq!(moved.sudo_secret_id.as_deref(), Some("sudo-secret-1"));
     }
 
     #[test]
@@ -307,6 +339,16 @@ mod tests {
                     [],
                     |row| row.get::<_, bool>(0),
                 )?;
+                let sudo_column_exists = connection.query_row(
+                    "SELECT EXISTS(SELECT 1 FROM pragma_table_info('connections') WHERE name='use_sudo')",
+                    [],
+                    |row| row.get::<_, bool>(0),
+                )?;
+                let sudo_secret_column_exists = connection.query_row(
+                    "SELECT EXISTS(SELECT 1 FROM pragma_table_info('connections') WHERE name='sudo_secret_id')",
+                    [],
+                    |row| row.get::<_, bool>(0),
+                )?;
                 let version = connection.query_row(
                     "SELECT version FROM schema_version LIMIT 1",
                     [],
@@ -314,7 +356,9 @@ mod tests {
                 )?;
                 assert!(reconnect_column_exists);
                 assert!(multi_connection_column_exists);
-                assert_eq!(version, 3);
+                assert!(sudo_column_exists);
+                assert!(sudo_secret_column_exists);
+                assert_eq!(version, 4);
                 Ok(())
             })
             .expect("inspect migrated schema");

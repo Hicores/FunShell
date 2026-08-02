@@ -5,7 +5,26 @@ import { api } from "../../lib/ipc";
 import { useAppStore } from "../../stores/appStore";
 import type { AuthMethod, SaveConnectionInput } from "../../types";
 
-const createBlank = (folderId: string | null = null): SaveConnectionInput => ({ name: "", host: "", port: 22, username: "root", authMethod: "password", password: "", keyId: null, routeId: null, folderId, startupCommand: null, keepaliveSeconds: 30, connectTimeoutSeconds: 10, compression: false, autoReconnect: false, maxReconnectAttempts: 0, multiConnectionMode: false });
+const createBlank = (folderId: string | null = null): SaveConnectionInput => ({
+  name: "",
+  host: "",
+  port: 22,
+  username: "root",
+  authMethod: "password",
+  password: "",
+  keyId: null,
+  routeId: null,
+  folderId,
+  startupCommand: null,
+  keepaliveSeconds: 30,
+  connectTimeoutSeconds: 10,
+  compression: false,
+  autoReconnect: false,
+  maxReconnectAttempts: 0,
+  multiConnectionMode: false,
+  useSudo: false,
+  sudoPassword: "",
+});
 
 export function ConnectionEditor() {
   const open = useAppStore((state) => state.connectionEditorOpen);
@@ -30,6 +49,7 @@ export function ConnectionEditor() {
       routeId: editing.routeId, startupCommand: editing.startupCommand, keepaliveSeconds: editing.keepaliveSeconds,
       connectTimeoutSeconds: editing.connectTimeoutSeconds, compression: editing.compression, autoReconnect: editing.autoReconnect,
       maxReconnectAttempts: editing.maxReconnectAttempts, multiConnectionMode: editing.multiConnectionMode,
+      useSudo: editing.useSudo, sudoPassword: "",
     } : createBlank(newConnectionFolderId));
   }, [editing, newConnectionFolderId, open]);
 
@@ -68,6 +88,11 @@ export function ConnectionEditor() {
                       <button type="button" onClick={() => openKeyManager(true)}><KeyRound size={14} />密钥管理</button>
                     </div>
                   )}
+                  <label className="checkbox-line wide"><input type="checkbox" checked={form.useSudo} onChange={(event) => update("useSudo", event.target.checked)} />使用 sudo 提权（文件管理、监控、进程和网络）</label>
+                  {form.useSudo && <>
+                    <label className="wide">sudo 密码<input type="password" placeholder={editing?.sudoSecretId ? "留空则保持已保存的 sudo 密码" : form.authMethod === "password" ? "留空则复用 SSH 登录密码" : "NOPASSWD 时可留空"} value={form.sudoPassword ?? ""} onChange={(event) => update("sudoPassword", event.target.value)} /></label>
+                    <p className="field-note wide">连接时会验证 sudo，并让后台信息采集和 SFTP 文件通道自动以高权限运行；交互终端保持当前登录用户环境。</p>
+                  </>}
                 </div>
               </fieldset>
             </>

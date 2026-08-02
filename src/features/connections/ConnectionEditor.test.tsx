@@ -16,6 +16,12 @@ describe("ConnectionEditor", () => {
     });
 
     render(<ConnectionEditor />);
+    const sudo = screen.getByRole("checkbox", { name: "使用 sudo 提权（文件管理、监控、进程和网络）" });
+    expect(sudo).not.toBeChecked();
+    expect(screen.queryByLabelText("sudo 密码")).not.toBeInTheDocument();
+    fireEvent.click(sudo);
+    expect(screen.getByLabelText("sudo 密码")).toHaveAttribute("placeholder", "留空则复用 SSH 登录密码");
+
     fireEvent.click(screen.getByRole("button", { name: "终端" }));
 
     const autoReconnect = screen.getByRole("checkbox", { name: "断线自动重连" });
@@ -32,6 +38,21 @@ describe("ConnectionEditor", () => {
     expect(maximum).toHaveValue(5);
     fireEvent.click(multiConnection);
     expect(multiConnection).toBeChecked();
+  });
+
+  it("keeps a stored sudo credential hidden while editing", () => {
+    useAppStore.setState({
+      connectionEditorOpen: true,
+      editingConnection: { ...mockConnections[0], useSudo: true, sudoSecretId: "sudo-secret-1" },
+      folders: mockFolders,
+      keys: [],
+      routes: [],
+    });
+
+    render(<ConnectionEditor />);
+    expect(screen.getByRole("checkbox", { name: "使用 sudo 提权（文件管理、监控、进程和网络）" })).toBeChecked();
+    expect(screen.getByLabelText("sudo 密码")).toHaveAttribute("placeholder", "留空则保持已保存的 sudo 密码");
+    expect(screen.getByLabelText("sudo 密码")).toHaveValue("");
   });
 
   it("loads an existing profile and switches authentication controls", () => {

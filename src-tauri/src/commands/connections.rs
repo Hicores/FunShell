@@ -25,29 +25,48 @@ pub fn save_connection(
     input: SaveConnectionInput,
 ) -> AppResult<ConnectionProfile> {
     validate_connection(&input)?;
-    let secret_id = match input
-        .password
+    let existing = input
+        .id
         .as_deref()
-        .filter(|password| !password.is_empty())
-    {
-        Some(password) => {
-            let existing = input
-                .id
-                .as_deref()
-                .and_then(|id| state.database.connection_by_id(id).ok().flatten())
-                .and_then(|profile| profile.secret_id);
-            if let Some(id) = existing {
-                state
-                    .vault
-                    .replace(&id, "ssh_password", password.as_bytes())?;
-                Some(id)
-            } else {
-                Some(state.vault.store("ssh_password", password.as_bytes())?)
-            }
-        }
-        None => None,
+        .map(|id| state.database.connection_by_id(id))
+        .transpose()?
+        .flatten();
+    let secret_id = save_optional_password(
+        &state,
+        input.password.as_deref(),
+        existing
+            .as_ref()
+            .and_then(|profile| profile.secret_id.as_deref()),
+        "ssh_password",
+    )?;
+    let sudo_secret_id = save_optional_password(
+        &state,
+        input.sudo_password.as_deref(),
+        existing
+            .as_ref()
+            .and_then(|profile| profile.sudo_secret_id.as_deref()),
+        "sudo_password",
+    )?;
+    state
+        .database
+        .save_connection(&input, secret_id, sudo_secret_id)
+}
+
+fn save_optional_password(
+    state: &State<'_, AppState>,
+    password: Option<&str>,
+    existing_id: Option<&str>,
+    kind: &str,
+) -> AppResult<Option<String>> {
+    let Some(password) = password.filter(|password| !password.is_empty()) else {
+        return Ok(None);
     };
-    state.database.save_connection(&input, secret_id)
+    if let Some(id) = existing_id {
+        state.vault.replace(id, kind, password.as_bytes())?;
+        Ok(Some(id.to_owned()))
+    } else {
+        Ok(Some(state.vault.store(kind, password.as_bytes())?))
+    }
 }
 
 #[tauri::command]

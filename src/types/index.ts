@@ -29,6 +29,8 @@ export interface ConnectionProfile {
   autoReconnect: boolean;
   maxReconnectAttempts: number;
   multiConnectionMode: boolean;
+  useSudo: boolean;
+  sudoSecretId: string | null;
   sortOrder: number;
   deleted: boolean;
   createdAt: string;
@@ -53,6 +55,8 @@ export interface SaveConnectionInput {
   autoReconnect: boolean;
   maxReconnectAttempts: number;
   multiConnectionMode: boolean;
+  useSudo: boolean;
+  sudoPassword?: string | null;
   sortOrder?: number;
 }
 

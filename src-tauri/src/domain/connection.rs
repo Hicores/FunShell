@@ -58,6 +58,8 @@ pub struct ConnectionProfile {
     pub auto_reconnect: bool,
     pub max_reconnect_attempts: u32,
     pub multi_connection_mode: bool,
+    pub use_sudo: bool,
+    pub sudo_secret_id: Option<String>,
     pub sort_order: i64,
     pub deleted: bool,
     pub created_at: String,
@@ -84,6 +86,8 @@ pub struct SaveConnectionInput {
     pub auto_reconnect: bool,
     pub max_reconnect_attempts: u32,
     pub multi_connection_mode: bool,
+    pub use_sudo: bool,
+    pub sudo_password: Option<String>,
     pub sort_order: Option<i64>,
 }
 

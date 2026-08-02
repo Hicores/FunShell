@@ -23,6 +23,11 @@ use crate::{
         auth::authenticate,
         client::{ClientHandler, ForwardedChannel},
         files::{PipelinedSftpReader, open_pipelined_reader, open_sftp},
+        sudo::{
+            SFTP_SERVER_DISCOVERY_SCRIPT, SFTP_SERVER_MISSING_MARKER, SUDO_PROMPT_MARKER,
+            SUDO_SUCCESS_MARKER, SudoContext, SudoCredential, configured_sudo_password,
+            password_probe_command, passwordless_probe_command,
+        },
         transport::{client_config, connect_for_profile},
     },
 };
@@ -40,6 +45,7 @@ pub struct ManagedSession {
     terminal_handle: Arc<Mutex<Handle<ClientHandler>>>,
     monitor_handle: Arc<Mutex<Handle<ClientHandler>>>,
     file_handle: Arc<Mutex<Handle<ClientHandler>>>,
+    sudo: Option<SudoContext>,
     terminal: mpsc::Sender<TerminalCommand>,
     remote_routes: Arc<DashMap<(String, u32), (String, u16)>>,
     lifecycle: CancellationToken,
@@ -95,6 +101,19 @@ impl SessionManager {
         }
         let monitor_handle = handles.get(1).unwrap_or(&terminal_handle).clone();
         let file_handle = handles.get(2).unwrap_or(&terminal_handle).clone();
+        let sudo = if profile.use_sudo {
+            match prepare_sudo_context(&profile, vault, &file_handle).await {
+                Ok(context) => context,
+                Err(error) => {
+                    let _ = channel.close().await;
+                    let _ =
+                        disconnect_handles(&handles, "FunShell sudo initialization failed").await;
+                    return Err(error);
+                }
+            }
+        } else {
+            None
+        };
         if let Some(command) = profile.startup_command.as_deref() {
             if let Err(error) = channel.data(format!("{command}\n").as_bytes()).await {
                 let _ = channel.close().await;
@@ -145,6 +164,7 @@ impl SessionManager {
             terminal_handle,
             monitor_handle,
             file_handle,
+            sudo,
             terminal: sender,
             remote_routes,
             lifecycle: lifecycle.clone(),
@@ -248,17 +268,26 @@ impl SessionManager {
 
     pub async fn execute_monitor(&self, session_id: &str, command: &str) -> AppResult<ExecResult> {
         let session = self.get(session_id)?;
+        execute_with_sudo(&session.monitor_handle, command, session.sudo.as_ref()).await
+    }
+
+    pub async fn execute_monitor_unprivileged(
+        &self,
+        session_id: &str,
+        command: &str,
+    ) -> AppResult<ExecResult> {
+        let session = self.get(session_id)?;
         execute_with_handle(&session.monitor_handle, command).await
     }
 
     pub async fn execute_file(&self, session_id: &str, command: &str) -> AppResult<ExecResult> {
         let session = self.get(session_id)?;
-        execute_with_handle(&session.file_handle, command).await
+        execute_with_sudo(&session.file_handle, command, session.sudo.as_ref()).await
     }
 
     pub async fn sftp(&self, session_id: &str) -> AppResult<russh_sftp::client::SftpSession> {
         let session = self.get(session_id)?;
-        open_sftp(&session.file_handle).await
+        open_sftp(&session.file_handle, session.sudo.as_ref()).await
     }
 
     pub async fn download_reader(
@@ -267,7 +296,7 @@ impl SessionManager {
         remote_path: String,
     ) -> AppResult<PipelinedSftpReader> {
         let session = self.get(session_id)?;
-        open_pipelined_reader(&session.file_handle, remote_path).await
+        open_pipelined_reader(&session.file_handle, remote_path, session.sudo.as_ref()).await
     }
 
     pub fn profile(&self, session_id: &str) -> AppResult<ConnectionProfile> {
@@ -338,9 +367,39 @@ async fn execute_with_handle(
     handle: &Arc<Mutex<Handle<ClientHandler>>>,
     command: &str,
 ) -> AppResult<ExecResult> {
+    execute_with_handle_input(handle, command, None).await
+}
+
+async fn execute_with_sudo(
+    handle: &Arc<Mutex<Handle<ClientHandler>>>,
+    command: &str,
+    sudo: Option<&SudoContext>,
+) -> AppResult<ExecResult> {
+    let Some(sudo) = sudo else {
+        return execute_with_handle(handle, command).await;
+    };
+    let elevated = sudo.command(command);
+    let input = sudo.stdin_payload();
+    execute_with_handle_input(
+        handle,
+        &elevated,
+        input.as_ref().map(|value| value.as_slice()),
+    )
+    .await
+}
+
+async fn execute_with_handle_input(
+    handle: &Arc<Mutex<Handle<ClientHandler>>>,
+    command: &str,
+    input: Option<&[u8]>,
+) -> AppResult<ExecResult> {
     let handle = handle.lock().await;
     let mut channel = handle.channel_open_session().await?;
     channel.exec(true, command).await?;
+    if let Some(input) = input {
+        channel.data(input).await?;
+        let _ = channel.eof().await;
+    }
     drop(handle);
     let mut stdout = Vec::new();
     let mut stderr = Vec::new();
@@ -375,6 +434,101 @@ async fn execute_with_handle(
         stderr: decode_exec_output(stderr),
         exit_status,
     })
+}
+
+async fn prepare_sudo_context(
+    profile: &ConnectionProfile,
+    vault: &VaultService,
+    handle: &Arc<Mutex<Handle<ClientHandler>>>,
+) -> AppResult<Option<SudoContext>> {
+    let identity = execute_with_handle(handle, "id -u").await?;
+    if identity.stdout.trim() == "0" {
+        return Ok(None);
+    }
+
+    let configured_password = configured_sudo_password(profile, vault)?;
+    let passwordless = execute_with_handle(handle, &passwordless_probe_command()).await?;
+    let credential = if sudo_result_succeeded(&passwordless) {
+        SudoCredential::Passwordless
+    } else if let Some(password) = configured_password {
+        let credential = SudoCredential::Password(password);
+        let input = credential.stdin_payload();
+        let result = execute_with_handle_input(
+            handle,
+            &password_probe_command(),
+            input.as_ref().map(|value| value.as_slice()),
+        )
+        .await?;
+        if !sudo_result_succeeded(&result) {
+            return Err(sudo_setup_error(&result, true));
+        }
+        credential
+    } else {
+        return Err(sudo_setup_error(&passwordless, false));
+    };
+
+    let discovery_command = credential.command(SFTP_SERVER_DISCOVERY_SCRIPT);
+    let input = credential.stdin_payload();
+    let discovery = execute_with_handle_input(
+        handle,
+        &discovery_command,
+        input.as_ref().map(|value| value.as_slice()),
+    )
+    .await?;
+    let sftp_server = discovery
+        .stdout
+        .lines()
+        .map(str::trim)
+        .find(|line| line.starts_with('/') && !line.chars().any(char::is_whitespace))
+        .map(str::to_owned);
+    let Some(sftp_server) = sftp_server else {
+        if discovery.stderr.contains(SFTP_SERVER_MISSING_MARKER) {
+            return Err(AppError::Message(
+                "服务器缺少可由 sudo 启动的 OpenSSH sftp-server".into(),
+            ));
+        }
+        return Err(sudo_setup_error(
+            &discovery,
+            credential.stdin_payload().is_some(),
+        ));
+    };
+
+    Ok(Some(SudoContext::new(credential, sftp_server)))
+}
+
+fn sudo_result_succeeded(result: &ExecResult) -> bool {
+    result.stdout.contains(SUDO_SUCCESS_MARKER) || result.exit_status == Some(0)
+}
+
+fn sudo_setup_error(result: &ExecResult, password_attempted: bool) -> AppError {
+    let output = format!("{}\n{}", result.stderr, result.stdout);
+    let normalized = output.to_ascii_lowercase();
+    let detail = if normalized.contains("sudo: not found")
+        || normalized.contains("sudo: command not found")
+        || normalized.contains("sudo: no such file")
+    {
+        "服务器未安装 sudo".into()
+    } else if normalized.contains("must have a tty")
+        || normalized.contains("no tty present")
+        || normalized.contains("a terminal is required")
+    {
+        "服务器 sudo 策略要求 TTY，后台管理通道需要允许非交互 sudo".into()
+    } else if normalized.contains("not in the sudoers")
+        || normalized.contains("may not run sudo")
+        || normalized.contains("is not allowed to run sudo")
+    {
+        "当前登录用户没有 sudo 权限".into()
+    } else if password_attempted {
+        "sudo 密码验证失败，请检查连接配置中的 sudo 密码".into()
+    } else {
+        "sudo 需要密码，请在连接配置中填写 sudo 密码，或为该用户配置 NOPASSWD".into()
+    };
+    let remote = output.replace(SUDO_PROMPT_MARKER, "").trim().to_owned();
+    if remote.is_empty() {
+        AppError::Message(detail)
+    } else {
+        AppError::Message(format!("{detail}: {remote}"))
+    }
 }
 
 async fn connect_authenticated_handle(
