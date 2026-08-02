@@ -59,7 +59,7 @@ export function EditorWindow({ sessionId, path }: EditorWindowProps) {
         <div className="editor-window-heading"><FileText size={18} /><div><strong>{title}</strong><span title={path}>{path}</span></div></div>
         <div className="editor-window-actions">
           <button type="button" className="editor-window-save" title={dirty ? "保存远程文件" : "没有待保存的修改"} disabled={loading || saving || !dirty} onClick={() => void save()}><Save size={15} />{saving ? "保存中..." : "保存"}</button>
-          <button type="button" className="editor-window-close" onClick={() => void close}><X size={16} />关闭</button>
+          <button type="button" className="editor-window-close" onClick={() => void close()}><X size={16} />关闭</button>
         </div>
       </header>
       {loading ? <div className="editor-window-loading" role="status"><LoaderCircle size={22} className="spin" /><span>正在读取远程文本...</span></div> : loadError ? <div className="editor-window-error" role="alert"><strong>文件读取失败</strong><span>{loadError}</span><button type="button" onClick={() => window.location.reload()}>重试</button></div> : <div className="editor-window-editor"><textarea className="editor-window-textarea" value={content} onChange={(event) => { setContent(event.target.value); setDirty(true); setSaveMessage(null); setSaveError(null); }} spellCheck={false} autoFocus />{saveError && <div className="editor-window-save-error" role="alert">保存失败：{saveError}</div>}{saveMessage && <div className="editor-window-save-message" role="status">{saveMessage}</div>}</div>}
