@@ -44,6 +44,24 @@ describe("FileManager", () => {
     expect(screen.getByRole("button", { name: "文本编辑" })).toBeInTheDocument();
   });
 
+  it("renames a file through the styled dialog", async () => {
+    const rename = vi.spyOn(api, "renameRemotePath").mockResolvedValue(undefined);
+    render(<FileManager tab={tab} />);
+
+    fireEvent.contextMenu(await screen.findByText("deploy.sh"));
+    fireEvent.click(within(screen.getByRole("menu")).getByRole("button", { name: "重命名" }));
+
+    const dialog = screen.getByRole("dialog", { name: "重命名文件" });
+    expect(within(dialog).getByRole("textbox", { name: "所在目录" })).toHaveValue("/root");
+    expect(within(dialog).getByRole("textbox", { name: "原名称" })).toHaveValue("deploy.sh");
+    const name = within(dialog).getByRole("textbox", { name: "新名称" });
+    expect(name).toHaveValue("deploy.sh");
+    fireEvent.change(name, { target: { value: "deploy-v2.sh" } });
+    fireEvent.click(within(dialog).getByRole("button", { name: "确定" }));
+
+    await waitFor(() => expect(rename).toHaveBeenCalledWith(tab.sessionId, "/root/deploy.sh", "/root/deploy-v2.sh"));
+  });
+
   it("shows the source path for symbolic links", async () => {
     render(<FileManager tab={tab} />);
 

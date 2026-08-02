@@ -13,6 +13,7 @@ import { ArchiveDialog, type ArchiveDialogState } from "./ArchiveDialog";
 import { defaultArchiveName, isTarGzipArchive, normalizeArchiveName } from "./archive";
 import { PermissionDialog } from "./PermissionDialog";
 import { RemoteDirectoryTree } from "./RemoteDirectoryTree";
+import { RenameDialog, type RenameDialogState } from "./RenameDialog";
 import { openRemoteEditorWindow } from "./openEditorWindow";
 import { useFileDrop } from "./useFileDrop";
 
@@ -73,6 +74,8 @@ export function FileManager({ tab }: { tab: WorkspaceTab }) {
   const [createDialog, setCreateDialog] = useState<{ kind: "file" | "directory"; name: string; parentPath: string } | null>(null);
   const [archiveDialog, setArchiveDialog] = useState<ArchiveDialogState | null>(null);
   const [archiveRunning, setArchiveRunning] = useState(false);
+  const [renameDialog, setRenameDialog] = useState<RenameDialogState | null>(null);
+  const [renaming, setRenaming] = useState(false);
   const dropTargetRef = useRef<HTMLDivElement>(null);
   const skipNextRefreshPathRef = useRef<string | null>(null);
   const fileRequestRef = useRef(0);
@@ -362,11 +365,34 @@ export function FileManager({ tab }: { tab: WorkspaceTab }) {
     }
   };
 
-  const rename = async (file: RemoteFileEntry) => {
-    const name = window.prompt("新名称", file.name);
-    if (!name?.trim() || name === file.name) return;
-    try { await api.renameRemotePath(tab.sessionId, file.path, joinRemote(path, name.trim())); await refresh(); }
-    catch (error) { notify(String(error)); }
+  const openRenameDialog = (file: RemoteFileEntry) => {
+    setContext(null);
+    setRenameDialog({
+      sourcePath: file.path,
+      parentPath: parentRemote(file.path),
+      originalName: file.name,
+      name: file.name,
+      kind: file.kind,
+    });
+  };
+
+  const rename = async () => {
+    if (!renameDialog || renaming) return;
+    const name = renameDialog.name.trim();
+    if (!name || name.includes("/") || name === "." || name === "..") return notify("名称无效");
+    if (renameDialog.parentPath === path && visibleFiles.some((file) => file.path !== renameDialog.sourcePath && file.name === name)) return notify("当前目录已存在同名项目");
+    setRenaming(true);
+    try {
+      await api.renameRemotePath(tab.sessionId, renameDialog.sourcePath, joinRemote(renameDialog.parentPath, name));
+      setRenameDialog(null);
+      setSelected(null);
+      await refresh();
+      notify(`已重命名为 ${name}`);
+    } catch (error) {
+      notify(String(error));
+    } finally {
+      setRenaming(false);
+    }
   };
 
   const remove = async (file: RemoteFileEntry) => {
@@ -452,7 +478,7 @@ export function FileManager({ tab }: { tab: WorkspaceTab }) {
             <button type="button" onClick={() => openCreateArchiveDialog(context.file!)}>打包</button>
             {isTarGzipArchive(context.file.name) && <button type="button" onClick={() => openExtractArchiveDialog(context.file!)}>解包</button>}
             <hr />
-            <button type="button" onClick={() => void rename(context.file!)}>重命名</button>
+            <button type="button" onClick={() => openRenameDialog(context.file!)}>重命名</button>
             <button type="button" className="danger" onClick={() => void remove(context.file!)}>删除</button>
             <button type="button" onClick={() => setPermissionFile(context.file!)}>文件权限...</button>
           </> : <>
@@ -472,6 +498,13 @@ export function FileManager({ tab }: { tab: WorkspaceTab }) {
         onChange={setArchiveDialog}
         onClose={() => { if (!archiveRunning) setArchiveDialog(null); }}
         onConfirm={() => void runArchiveOperation()}
+      />
+      <RenameDialog
+        value={renameDialog}
+        saving={renaming}
+        onChange={setRenameDialog}
+        onClose={() => { if (!renaming) setRenameDialog(null); }}
+        onConfirm={() => void rename()}
       />
       <Modal
         open={editorOpen && (editorDocuments.length > 0 || editorLoadingPaths.length > 0)}
