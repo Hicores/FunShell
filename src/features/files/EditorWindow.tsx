@@ -16,6 +16,7 @@ export function EditorWindow({ sessionId, path }: EditorWindowProps) {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
+  const [closeError, setCloseError] = useState<string | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -33,8 +34,13 @@ export function EditorWindow({ sessionId, path }: EditorWindowProps) {
 
   const close = async () => {
     if (dirty && !window.confirm("文件有未保存修改，确认关闭？")) return;
-    if (isTauri()) await getCurrentWindow().close();
-    else window.close();
+    setCloseError(null);
+    try {
+      if (isTauri()) await getCurrentWindow().close();
+      else window.close();
+    } catch (reason) {
+      setCloseError(String(reason));
+    }
   };
 
   const save = async () => {
@@ -62,6 +68,7 @@ export function EditorWindow({ sessionId, path }: EditorWindowProps) {
           <button type="button" className="editor-window-close" onClick={() => void close()}><X size={16} />关闭</button>
         </div>
       </header>
+      {closeError && <div className="editor-window-close-error" role="alert">窗口关闭失败：{closeError}</div>}
       {loading ? <div className="editor-window-loading" role="status"><LoaderCircle size={22} className="spin" /><span>正在读取远程文本...</span></div> : loadError ? <div className="editor-window-error" role="alert"><strong>文件读取失败</strong><span>{loadError}</span><button type="button" onClick={() => window.location.reload()}>重试</button></div> : <div className="editor-window-editor"><textarea className="editor-window-textarea" value={content} onChange={(event) => { setContent(event.target.value); setDirty(true); setSaveMessage(null); setSaveError(null); }} spellCheck={false} autoFocus />{saveError && <div className="editor-window-save-error" role="alert">保存失败：{saveError}</div>}{saveMessage && <div className="editor-window-save-message" role="status">{saveMessage}</div>}</div>}
     </main>
   );

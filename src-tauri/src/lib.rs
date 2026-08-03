@@ -171,3 +171,26 @@ pub fn run() {
         .run(tauri::generate_context!())
         .expect("failed to run FunShell");
 }
+
+#[cfg(test)]
+mod capability_tests {
+    #[test]
+    fn editor_windows_are_allowed_to_close() {
+        let capability: serde_json::Value =
+            serde_json::from_str(include_str!("../capabilities/default.json"))
+                .expect("default capability must contain valid JSON");
+        let windows = capability["windows"]
+            .as_array()
+            .expect("default capability must declare windows");
+        let permissions = capability["permissions"]
+            .as_array()
+            .expect("default capability must declare permissions");
+
+        assert!(windows.iter().any(|value| value == "editor-*"));
+        assert!(
+            permissions
+                .iter()
+                .any(|value| value == "core:window:allow-close")
+        );
+    }
+}

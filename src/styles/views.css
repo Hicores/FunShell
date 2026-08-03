@@ -60,7 +60,7 @@
 .editor-file-picker > button > span { display: grid; min-width: 0; gap: 2px; }
 .editor-file-picker > button strong, .editor-file-picker > button small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .editor-file-picker > button small { color: #738791; font: 10px "Cascadia Mono", Consolas, monospace; }
-.editor-window-shell { display: grid; height: 100vh; min-width: 0; min-height: 0; grid-template-rows: 52px minmax(0, 1fr); background: #edf2f4; color: #263f4d; }
+.editor-window-shell { position: relative; display: grid; height: 100vh; min-width: 0; min-height: 0; grid-template-rows: 52px minmax(0, 1fr); background: #edf2f4; color: #263f4d; }
 .editor-window-header { display: flex; min-width: 0; align-items: center; gap: 12px; border-bottom: 1px solid #bcc9cf; padding: 0 12px; background: #f7f9fa; }
 .editor-window-heading { display: flex; min-width: 0; flex: 1; align-items: center; gap: 9px; color: #2c718f; }
 .editor-window-heading > div { display: grid; min-width: 0; gap: 2px; }
@@ -75,6 +75,7 @@
 .editor-window-editor { display: grid; min-height: 0; grid-template-rows: minmax(0, 1fr) auto; }
 .editor-window-save-error, .editor-window-save-message { min-height: 28px; padding: 6px 12px; font-size: 12px; }
 .editor-window-save-error { border-top: 1px solid #e7b4b4; background: #fff1f1; color: #a04444; }
+.editor-window-close-error { position: absolute; z-index: 3; top: 58px; right: 12px; max-width: min(520px, calc(100vw - 24px)); border: 1px solid #e0a7a7; padding: 7px 10px; background: #fff1f1; color: #a04444; box-shadow: 0 3px 10px rgb(74 49 49 / 18%); font-size: 12px; word-break: break-word; }
 .editor-window-save-message { border-top: 1px solid #b8dec6; background: #eef9f1; color: #287148; }
 .editor-window-error { display: grid; align-content: center; justify-items: center; gap: 10px; padding: 24px; color: #a04444; }
 .editor-window-error span { max-width: min(760px, 90vw); color: #6f4a4a; text-align: center; word-break: break-word; }
