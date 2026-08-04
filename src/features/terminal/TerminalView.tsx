@@ -32,6 +32,10 @@ interface TerminalViewProps {
 
 export type TerminalContextAction = "copy" | "paste";
 
+export function shouldWriteTerminalStatus(state: string) {
+  return state !== "connected" && state !== "reconnected";
+}
+
 export function terminalContextAction(selection: string, clipboard: string): TerminalContextAction | null {
   if (selection) return "copy";
   return clipboard ? "paste" : null;
@@ -168,8 +172,8 @@ export function TerminalView({ tab, active }: TerminalViewProps) {
   useEffect(() => {
     const onTerminalStatus = (event: Event) => {
       const detail = (event as CustomEvent<{ tabId: string; state: string; message: string }>).detail;
-      if (detail?.tabId !== tab.id || !detail.message || !terminalRef.current) return;
-      const color = detail.state === "connected" || detail.state === "reconnected" ? "32" : detail.state === "error" ? "31" : "33";
+      if (detail?.tabId !== tab.id || !detail.message || !terminalRef.current || !shouldWriteTerminalStatus(detail.state)) return;
+      const color = detail.state === "error" ? "31" : "33";
       terminalRef.current.writeln(`\r\n\x1b[${color}m${detail.message}\x1b[0m`);
     };
     window.addEventListener("funshell-terminal-status", onTerminalStatus);

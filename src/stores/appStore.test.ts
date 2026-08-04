@@ -36,6 +36,7 @@ describe("appStore tab lifecycle", () => {
     resolveConnect?.({ id: pending.sessionId, connectionId: mockConnections[0].id, title: mockConnections[0].name, state: "connected" });
     await connecting;
     expect(useAppStore.getState().tabs[0]).toMatchObject({ id: pending.id, sessionId: pending.sessionId, state: "connected" });
+    expect(useAppStore.getState().toast).toBe(`已连接 ${mockConnections[0].name}`);
   });
 
   it("opens one tool tab per session and closes the session after its last tab", async () => {

@@ -17,10 +17,15 @@ pub fn parse_snapshot(output: &str) -> ServerSnapshot {
         .and_then(|value| value.parse::<f64>().ok())
         .unwrap_or(0.0) as u64;
     let load_average = parse_load(sections.get("LOAD"));
-    let cpu_percent = parse_cpu(
-        sections.get("CPU_A").and_then(|lines| lines.first()),
-        sections.get("CPU_B").and_then(|lines| lines.first()),
-    );
+    let cpu_percent = sections
+        .get("PROC")
+        .and_then(|lines| parse_top_cpu(lines))
+        .unwrap_or_else(|| {
+            parse_cpu(
+                sections.get("CPU_A").and_then(|lines| lines.first()),
+                sections.get("CPU_B").and_then(|lines| lines.first()),
+            )
+        });
     let memory = parse_memory(sections.get("MEM"));
     let interfaces = parse_network(sections.get("NET_A"), sections.get("NET_B"));
     let filesystems = parse_filesystems(sections.get("DF"));
@@ -239,6 +244,14 @@ fn parse_load(lines: Option<&Vec<String>>) -> [f64; 3] {
         values.get(1).copied().unwrap_or(0.0),
         values.get(2).copied().unwrap_or(0.0),
     ]
+}
+
+fn parse_top_cpu(lines: &[String]) -> Option<f64> {
+    lines.iter().find_map(|line| {
+        let value = line.strip_prefix("__TOP_CPU__")?.trim().replace(',', ".");
+        let value = value.parse::<f64>().ok()?;
+        value.is_finite().then_some(value.clamp(0.0, 100.0))
+    })
 }
 
 fn parse_cpu(first: Option<&String>, second: Option<&String>) -> f64 {
@@ -509,9 +522,10 @@ mod tests {
 
     #[test]
     fn parses_core_snapshot_values() {
-        let output = "__UPTIME__\n120.4 20\n__LOAD__\n0.10 0.20 0.30 1/100\n__CPU_A__\ncpu 100 0 50 850 0 0 0\n__NET_A__\neth0: 1000 0 0 0 0 0 0 0 2000 0 0 0 0 0 0 0\n__CPU_B__\ncpu 120 0 60 920 0 0 0\n__NET_B__\neth0: 1200 0 0 0 0 0 0 0 2500 0 0 0 0 0 0 0\n__MEM__\nMemTotal: 1000 kB\nMemAvailable: 400 kB\nSwapTotal: 500 kB\nSwapFree: 300 kB\n__DF__\nFilesystem 1-blocks Used Available Use% Mounted on\n/dev/a 1000 600 400 60% /\n__PROC__\n1 root 100 2.5 init /sbin/init\n";
+        let output = "__UPTIME__\n120.4 20\n__LOAD__\n0.10 0.20 0.30 1/100\n__CPU_A__\ncpu 100 0 50 850 0 0 0\n__NET_A__\neth0: 1000 0 0 0 0 0 0 0 2000 0 0 0 0 0 0 0\n__CPU_B__\ncpu 120 0 60 920 0 0 0\n__NET_B__\neth0: 1200 0 0 0 0 0 0 0 2500 0 0 0 0 0 0 0\n__MEM__\nMemTotal: 1000 kB\nMemAvailable: 400 kB\nSwapTotal: 500 kB\nSwapFree: 300 kB\n__DF__\nFilesystem 1-blocks Used Available Use% Mounted on\n/dev/a 1000 600 400 60% /\n__PROC__\n__TOP_CPU__ 18.4\n1 root 100 2.5 init /sbin/init\n";
         let snapshot = parse_snapshot(output);
         assert_eq!(snapshot.uptime_seconds, 120);
+        assert_eq!(snapshot.cpu_percent, 18.4);
         assert_eq!(snapshot.memory_used, 600 * 1024);
         assert_eq!(snapshot.interfaces[0].receive_bps, 1000);
         assert_eq!(snapshot.top_processes[0].pid, 1);
@@ -522,6 +536,12 @@ mod tests {
         let rows = parse_processes("42 root 2048 1.5 sshd /usr/sbin/sshd -D");
         assert_eq!(rows[0].memory_bytes, 2 * 1024 * 1024);
         assert_eq!(rows[0].command, "/usr/sbin/sshd -D");
+    }
+
+    #[test]
+    fn falls_back_to_proc_stat_when_top_cpu_is_missing() {
+        let output = "__CPU_A__\ncpu 100 0 50 850 0 0 0\n__CPU_B__\ncpu 120 0 60 920 0 0 0\n";
+        assert_eq!(parse_snapshot(output).cpu_percent, 30.0);
     }
 
     #[test]

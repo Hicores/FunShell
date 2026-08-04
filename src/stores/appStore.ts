@@ -166,6 +166,7 @@ export const useAppStore = create<AppStore>((set, get) => ({
       set((state) => ({
         sessions: [...state.sessions.filter((item) => item.id !== requestedSessionId), session],
         tabs: state.tabs.map((tab) => tab.id === pendingTab.id ? { ...tab, sessionId: session.id, state: session.state } : tab),
+        toast: `已连接 ${connection.name}`,
       }));
       if (!isTauri()) set((state) => ({ snapshots: { ...state.snapshots, [session.id]: mockSnapshot } }));
       emitTerminalStatus(pendingTab.id, "connected", "连接成功");

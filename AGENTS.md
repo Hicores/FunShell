@@ -9,6 +9,15 @@
 - Keep UI modules and Rust services split by feature; do not accumulate unrelated code in a single file.
 - Update this file only with reproducible build/runtime pitfalls and their verified resolution.
 
+## Automated completion workflow
+
+- After implementing a requested code change, finish the workflow in the same turn: inspect the diff, run the relevant tests, run the Windows release build with `scripts/build.ps1`, verify that `src-tauri/target/release/funshell.exe` exists, and commit the task's changes automatically unless the user explicitly asks not to commit.
+- Run `cargo fmt`, `cargo test`, and `cargo clippy` from `src-tauri` when the change touches Rust; run `npm test` and `npm.cmd run build` when the change touches the frontend. The release build remains mandatory after either kind of change.
+- Do not stage unrelated pre-existing worktree changes. Preserve user edits and never reset, checkout, or overwrite them. If task-owned and unrelated edits overlap in one file and cannot be separated safely, stop before committing and report the boundary.
+- Use a concise Conventional Commit message that describes the completed task. Verify the commit succeeded and report the commit hash together with the build artifact path.
+- A release compiler success with only the final `dest/FunShell.exe` copy blocked by an already running FunShell process still counts as a successful compilation after verifying the release executable; do not terminate the user's running process just to replace a locked file. Report the locked-copy status and artifact path, and continue the automatic commit.
+- Do not wait for another user message between implementation, verification, build, and commit. Stop only for a real test/build failure, an unsafe unresolved file boundary, or a required external authorization.
+
 ## Verified environment notes
 
 - The repository root has no Cargo workspace manifest. Run `cargo fmt`, `cargo test`, and `cargo clippy` from `src-tauri`; running them from the root fails before checking the Rust code.

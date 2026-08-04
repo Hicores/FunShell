@@ -20,6 +20,20 @@ if command -v top >/dev/null 2>&1; then
     proc_top=$(LC_ALL=C top -b -n 2 -d 0.2 2>/dev/null | awk '
         /^top -/ { sample++; next }
         sample < 2 { next }
+        /^%?Cpu/ && !cpu_seen {
+            idle = $8
+            gsub(/,/, ".", idle)
+            wait = $10
+            gsub(/,/, ".", wait)
+            if (idle != "" && wait != "") {
+                cpu = 100 - idle - wait
+                if (cpu < 0) cpu = 0
+                if (cpu > 100) cpu = 100
+                printf "__TOP_CPU__ %.1f\n", cpu
+                cpu_seen = 1
+            }
+            next
+        }
         /^[[:space:]]*[0-9]+[[:space:]]/ {
             command = $12
             for (i = 13; i <= NF; i++) command = command " " $i
@@ -196,6 +210,7 @@ mod tests {
     fn samples_process_cpu_from_the_second_top_iteration() {
         assert!(SNAPSHOT_SCRIPT.contains("top -b -n 2 -d 0.2"));
         assert!(SNAPSHOT_SCRIPT.contains("sample < 2"));
+        assert!(SNAPSHOT_SCRIPT.contains("__TOP_CPU__"));
         assert!(SNAPSHOT_SCRIPT.contains("printf '%s\\n' \"$proc_top\""));
         assert!(SNAPSHOT_SCRIPT.contains("ps -eo pid=,user=,rss=,pcpu=,comm=,args="));
     }
