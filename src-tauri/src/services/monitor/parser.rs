@@ -112,6 +112,31 @@ pub fn parse_processes(output: &str) -> Vec<ProcessInfo> {
         .collect()
 }
 
+pub fn parse_process_list(output: &str) -> Vec<ProcessInfo> {
+    let values = sections(output);
+    let Some(process_lines) = values.get("PROCESSES") else {
+        return parse_processes(output);
+    };
+    let interval_cpu = values
+        .get("INTERVAL_CPU")
+        .into_iter()
+        .flatten()
+        .filter_map(|line| {
+            let mut fields = line.split_whitespace();
+            let pid = fields.next()?.parse::<u32>().ok()?;
+            let cpu = fields.next()?.replace(',', ".").parse::<f64>().ok()?;
+            cpu.is_finite().then_some((pid, cpu.max(0.0)))
+        })
+        .collect::<HashMap<_, _>>();
+    let mut processes = parse_processes(&process_lines.join("\n"));
+    processes.iter_mut().for_each(|process| {
+        if let Some(cpu) = interval_cpu.get(&process.pid) {
+            process.cpu_percent = *cpu;
+        }
+    });
+    processes
+}
+
 pub fn parse_process_details(output: &str, pid: u32) -> ProcessDetails {
     let values = sections(output);
     let first = |name: &str| {
@@ -518,7 +543,10 @@ fn extract_number_after(value: &str, marker: &str) -> Option<u32> {
 
 #[cfg(test)]
 mod tests {
-    use super::{parse_processes, parse_snapshot, parse_socket_listener_snapshot, parse_sockets};
+    use super::{
+        parse_process_list, parse_processes, parse_snapshot, parse_socket_listener_snapshot,
+        parse_sockets,
+    };
 
     #[test]
     fn parses_core_snapshot_values() {
@@ -535,6 +563,15 @@ mod tests {
     fn parses_process_rows() {
         let rows = parse_processes("42 root 2048 1.5 sshd /usr/sbin/sshd -D");
         assert_eq!(rows[0].memory_bytes, 2 * 1024 * 1024);
+        assert_eq!(rows[0].command, "/usr/sbin/sshd -D");
+    }
+
+    #[test]
+    fn merges_interval_cpu_with_complete_process_metadata() {
+        let output =
+            "__INTERVAL_CPU__\n42 37.5\n__PROCESSES__\n42 root 2048 1.5 sshd /usr/sbin/sshd -D\n";
+        let rows = parse_process_list(output);
+        assert_eq!(rows[0].cpu_percent, 37.5);
         assert_eq!(rows[0].command, "/usr/sbin/sshd -D");
     }
 

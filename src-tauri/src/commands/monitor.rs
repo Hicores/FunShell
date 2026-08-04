@@ -11,7 +11,7 @@ use crate::{
     error::{AppError, AppResult},
     services::monitor::{
         PROCESS_SCRIPT, SNAPSHOT_SCRIPT, SOCKET_LISTENER_SCRIPT, SYSTEM_SCRIPT,
-        parse_process_details, parse_processes, parse_snapshot, parse_socket_listener_snapshot,
+        parse_process_details, parse_process_list, parse_snapshot, parse_socket_listener_snapshot,
         parse_sockets, parse_system_info, socket_connection_script,
     },
     state::AppState,
@@ -72,7 +72,7 @@ pub async fn list_processes(
         .execute_monitor(&session_id, PROCESS_SCRIPT)
         .await?;
     ensure_success(&result.stderr, result.exit_status)?;
-    Ok(parse_processes(&result.stdout))
+    Ok(parse_process_list(&result.stdout))
 }
 
 #[tauri::command]

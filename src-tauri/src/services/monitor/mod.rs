@@ -1,7 +1,7 @@
 mod parser;
 
 pub use parser::{
-    parse_process_details, parse_processes, parse_snapshot, parse_socket_listener_snapshot,
+    parse_process_details, parse_process_list, parse_snapshot, parse_socket_listener_snapshot,
     parse_sockets, parse_system_info,
 };
 
@@ -69,6 +69,18 @@ printf 'cache='; (awk -F: '/cache size/{gsub(/^ +/,"",$2);print $2;exit}' /proc/
 "#;
 
 pub const PROCESS_SCRIPT: &str = r#"LC_ALL=C
+echo __INTERVAL_CPU__
+if command -v top >/dev/null 2>&1; then
+    LC_ALL=C top -b -n 2 -d 0.2 2>/dev/null | awk '
+        /^top -/ { sample++; next }
+        sample < 2 { next }
+        /^[[:space:]]*[0-9]+[[:space:]]/ {
+            cpu = $9
+            gsub(/,/, ".", cpu)
+            if (cpu != "") print $1, cpu
+        }'
+fi
+echo __PROCESSES__
 ps -eo pid=,user=,rss=,pcpu=,comm=,args= --sort=-pcpu 2>/dev/null || ps 2>/dev/null
 "#;
 
@@ -204,7 +216,9 @@ pub fn socket_connection_script(
 
 #[cfg(test)]
 mod tests {
-    use super::{SNAPSHOT_SCRIPT, SOCKET_LISTENER_SCRIPT, socket_connection_script};
+    use super::{
+        PROCESS_SCRIPT, SNAPSHOT_SCRIPT, SOCKET_LISTENER_SCRIPT, socket_connection_script,
+    };
 
     #[test]
     fn samples_process_cpu_from_the_second_top_iteration() {
@@ -213,6 +227,15 @@ mod tests {
         assert!(SNAPSHOT_SCRIPT.contains("__TOP_CPU__"));
         assert!(SNAPSHOT_SCRIPT.contains("printf '%s\\n' \"$proc_top\""));
         assert!(SNAPSHOT_SCRIPT.contains("ps -eo pid=,user=,rss=,pcpu=,comm=,args="));
+    }
+
+    #[test]
+    fn process_list_combines_interval_cpu_with_ps_metadata() {
+        assert!(PROCESS_SCRIPT.contains("top -b -n 2 -d 0.2"));
+        assert!(PROCESS_SCRIPT.contains("sample < 2"));
+        assert!(PROCESS_SCRIPT.contains("echo __INTERVAL_CPU__"));
+        assert!(PROCESS_SCRIPT.contains("echo __PROCESSES__"));
+        assert!(PROCESS_SCRIPT.contains("ps -eo pid=,user=,rss=,pcpu=,comm=,args="));
     }
 
     #[test]

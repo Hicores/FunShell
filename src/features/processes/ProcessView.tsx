@@ -16,8 +16,21 @@ function processSortValue(process: ProcessInfo, key: ProcessSortKey): SortValue 
   return process[key];
 }
 
+export function mergeLiveProcessMetrics(processes: ProcessInfo[], liveProcesses: ProcessInfo[]) {
+  const liveByPid = new Map(liveProcesses.map((process) => [process.pid, process]));
+  const knownPids = new Set(processes.map((process) => process.pid));
+  return [
+    ...processes.map((process) => {
+      const live = liveByPid.get(process.pid);
+      return live ? { ...process, memoryBytes: live.memoryBytes, cpuPercent: live.cpuPercent } : process;
+    }),
+    ...liveProcesses.filter((process) => !knownPids.has(process.pid)),
+  ];
+}
+
 export function ProcessView({ tab, active = true }: { tab: WorkspaceTab; active?: boolean }) {
   const notify = useAppStore((state) => state.notify);
+  const snapshot = useAppStore((state) => state.snapshots[tab.sessionId]);
   const [processes, setProcesses] = useState<ProcessInfo[]>([]);
   const [selected, setSelected] = useState<ProcessInfo | null>(null);
   const [details, setDetails] = useState<ProcessDetails | null>(null);
@@ -40,13 +53,14 @@ export function ProcessView({ tab, active = true }: { tab: WorkspaceTab; active?
     let timer = 0;
     const poll = async () => {
       await refresh();
-      if (!disposed) timer = window.setTimeout(() => void poll(), 3200);
+      if (!disposed) timer = window.setTimeout(() => void poll(), 2200);
     };
     void poll();
     return () => { disposed = true; window.clearTimeout(timer); };
   }, [active, refresh]);
   const choose = async (process: ProcessInfo) => { setSelected(process); try { setDetails(await api.processDetails(tab.sessionId, process.pid)); } catch (error) { notify(String(error)); } };
-  const filtered = useMemo(() => processes.filter((process) => `${process.pid} ${process.user} ${process.name} ${process.command}`.toLowerCase().includes(query.toLowerCase())), [processes, query]);
+  const liveProcesses = useMemo(() => mergeLiveProcessMetrics(processes, snapshot?.topProcesses ?? []), [processes, snapshot?.topProcesses]);
+  const filtered = useMemo(() => liveProcesses.filter((process) => `${process.pid} ${process.user} ${process.name} ${process.command}`.toLowerCase().includes(query.toLowerCase())), [liveProcesses, query]);
   const sortedProcesses = useMemo(() => sortRows(filtered, (process) => processSortValue(process, sort.key), sort.direction), [filtered, sort]);
   const virtualProcesses = useVirtualRows(sortedProcesses, 27);
   const sortProcesses = (key: ProcessSortKey, defaultDirection: "asc" | "desc") => setSort((current) => nextSortState(current, key, defaultDirection));

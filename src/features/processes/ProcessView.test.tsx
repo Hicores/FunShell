@@ -1,8 +1,8 @@
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { api } from "../../lib/ipc";
-import type { WorkspaceTab } from "../../types";
-import { ProcessView } from "./ProcessView";
+import type { ProcessInfo, WorkspaceTab } from "../../types";
+import { mergeLiveProcessMetrics, ProcessView } from "./ProcessView";
 
 const tab: WorkspaceTab = {
   id: "session-1:processes",
@@ -14,6 +14,13 @@ const tab: WorkspaceTab = {
 };
 
 describe("ProcessView", () => {
+  it("uses the sidebar snapshot metrics for matching process IDs", () => {
+    const base: ProcessInfo[] = [{ pid: 42, user: "root", memoryBytes: 1024, cpuPercent: 1.5, name: "worker", command: "/opt/worker" }];
+    const live: ProcessInfo[] = [{ pid: 42, user: "root", memoryBytes: 4096, cpuPercent: 73.2, name: "worker", command: "worker" }];
+
+    expect(mergeLiveProcessMetrics(base, live)[0]).toEqual({ ...base[0], memoryBytes: 4096, cpuPercent: 73.2 });
+  });
+
   it("does not poll while its workspace tab is hidden", () => {
     const processes = vi.spyOn(api, "processes");
     render(<ProcessView tab={tab} active={false} />);
