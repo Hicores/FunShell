@@ -1,6 +1,7 @@
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { api } from "../../lib/ipc";
+import { useAppStore } from "../../stores/appStore";
 import type { ProcessInfo, WorkspaceTab } from "../../types";
 import { mergeLiveProcessMetrics, ProcessView } from "./ProcessView";
 
@@ -14,6 +15,10 @@ const tab: WorkspaceTab = {
 };
 
 describe("ProcessView", () => {
+  beforeEach(() => {
+    useAppStore.setState({ processSort: { key: "pid", direction: "asc" } });
+  });
+
   it("uses the sidebar snapshot metrics for matching process IDs", () => {
     const base: ProcessInfo[] = [{ pid: 42, user: "root", memoryBytes: 1024, cpuPercent: 1.5, name: "worker", command: "/opt/worker" }];
     const live: ProcessInfo[] = [{ pid: 42, user: "root", memoryBytes: 4096, cpuPercent: 73.2, name: "worker", command: "worker" }];
@@ -59,5 +64,20 @@ describe("ProcessView", () => {
 
     await waitFor(() => expect(terminate).toHaveBeenCalledWith(tab.sessionId, 488485, true));
     expect(confirm).toHaveBeenCalledTimes(2);
+  });
+
+  it("restores the last sort state when the process view is entered again", async () => {
+    const saveProcessSort = vi.spyOn(api, "saveProcessSort");
+    const firstView = render(<ProcessView tab={tab} />);
+    const firstTable = firstView.container.querySelector<HTMLTableElement>(".process-table")!;
+    await waitFor(() => expect(within(firstTable).getAllByRole("row")).toHaveLength(5));
+
+    fireEvent.click(within(within(firstTable).getByRole("columnheader", { name: "CPU" })).getByRole("button"));
+    await waitFor(() => expect(saveProcessSort).toHaveBeenCalledWith("cpuPercent", "desc"));
+    firstView.unmount();
+
+    const secondView = render(<ProcessView tab={tab} />);
+    const secondTable = secondView.container.querySelector<HTMLTableElement>(".process-table")!;
+    expect(within(secondTable).getByRole("columnheader", { name: "CPU" })).toHaveAttribute("aria-sort", "descending");
   });
 });

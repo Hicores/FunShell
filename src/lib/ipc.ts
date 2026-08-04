@@ -53,6 +53,8 @@ let mockSettings: AppSettings = {
   terminalFontSize: 13,
   terminalScrollbackLines: 3000,
   quickConnectionCollapsedFolderIds: [],
+  processSortKey: "pid",
+  processSortDirection: "asc",
 };
 let mockSessionSequence = 0;
 let mockSocketTick = 0;
@@ -109,6 +111,14 @@ function mockCall(command: string, args?: Record<string, unknown>): unknown {
       mockSettings = {
         ...mockSettings,
         quickConnectionCollapsedFolderIds: [...(args?.folderIds as string[])],
+      };
+      return { ...mockSettings };
+    }
+    case "save_process_sort": {
+      mockSettings = {
+        ...mockSettings,
+        processSortKey: args?.key as AppSettings["processSortKey"],
+        processSortDirection: args?.direction as AppSettings["processSortDirection"],
       };
       return { ...mockSettings };
     }
@@ -304,6 +314,7 @@ export const api = {
   getSettings: () => call<AppSettings>("get_settings"),
   saveSettings: (settings: AppSettings) => call<AppSettings>("save_settings", { settings }),
   saveQuickConnectionCollapsedFolders: (folderIds: string[]) => call<AppSettings>("save_quick_connection_collapsed_folders", { folderIds }),
+  saveProcessSort: (key: AppSettings["processSortKey"], direction: AppSettings["processSortDirection"]) => call<AppSettings>("save_process_sort", { key, direction }),
   geoIp: (ip: string) => call<GeoIpInfo>("lookup_geo_ip", { ip }),
   listConnections: (includeDeleted = false) => call<ConnectionProfile[]>("list_connections", { includeDeleted }),
   saveConnection: (input: SaveConnectionInput) => call<ConnectionProfile>("save_connection", { input }),

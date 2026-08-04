@@ -300,6 +300,13 @@ export interface VaultStatus {
   unlocked: boolean;
 }
 
+export type ProcessSortKey = "pid" | "user" | "memoryBytes" | "cpuPercent" | "name";
+
+export interface ProcessSortState {
+  key: ProcessSortKey;
+  direction: "asc" | "desc";
+}
+
 export interface AppSettings {
   geoipEnabled: boolean;
   confirmCloseActiveSessions: boolean;
@@ -307,6 +314,8 @@ export interface AppSettings {
   terminalFontSize: number;
   terminalScrollbackLines: number;
   quickConnectionCollapsedFolderIds: string[];
+  processSortKey: ProcessSortKey;
+  processSortDirection: ProcessSortState["direction"];
 }
 
 export interface GeoIpInfo {

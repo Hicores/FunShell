@@ -2,15 +2,13 @@ import { RefreshCw, Search } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api } from "../../lib/ipc";
 import { formatBytes } from "../../lib/format";
-import type { ProcessDetails, ProcessInfo, WorkspaceTab } from "../../types";
+import type { ProcessDetails, ProcessInfo, ProcessSortKey, WorkspaceTab } from "../../types";
 import { useAppStore } from "../../stores/appStore";
 import { ContextMenu } from "../../components/common/ContextMenu";
 import { IconButton } from "../../components/common/IconButton";
 import { SortableHeader } from "../../components/common/SortableHeader";
-import { nextSortState, sortRows, type SortState, type SortValue } from "../../lib/sort";
+import { nextSortState, sortRows, type SortValue } from "../../lib/sort";
 import { useVirtualRows, VirtualTableSpacer } from "../../components/common/useVirtualRows";
-
-type ProcessSortKey = "pid" | "user" | "memoryBytes" | "cpuPercent" | "name";
 
 function processSortValue(process: ProcessInfo, key: ProcessSortKey): SortValue {
   return process[key];
@@ -31,13 +29,14 @@ export function mergeLiveProcessMetrics(processes: ProcessInfo[], liveProcesses:
 export function ProcessView({ tab, active = true }: { tab: WorkspaceTab; active?: boolean }) {
   const notify = useAppStore((state) => state.notify);
   const snapshot = useAppStore((state) => state.snapshots[tab.sessionId]);
+  const sort = useAppStore((state) => state.processSort);
+  const setProcessSort = useAppStore((state) => state.setProcessSort);
   const [processes, setProcesses] = useState<ProcessInfo[]>([]);
   const [selected, setSelected] = useState<ProcessInfo | null>(null);
   const [details, setDetails] = useState<ProcessDetails | null>(null);
   const [query, setQuery] = useState("");
   const [loading, setLoading] = useState(false);
   const [context, setContext] = useState<{ x: number; y: number; process: ProcessInfo } | null>(null);
-  const [sort, setSort] = useState<SortState<ProcessSortKey>>({ key: "pid", direction: "asc" });
   const refreshingRef = useRef(false);
   const refresh = useCallback(async () => {
     if (refreshingRef.current) return;
@@ -63,7 +62,9 @@ export function ProcessView({ tab, active = true }: { tab: WorkspaceTab; active?
   const filtered = useMemo(() => liveProcesses.filter((process) => `${process.pid} ${process.user} ${process.name} ${process.command}`.toLowerCase().includes(query.toLowerCase())), [liveProcesses, query]);
   const sortedProcesses = useMemo(() => sortRows(filtered, (process) => processSortValue(process, sort.key), sort.direction), [filtered, sort]);
   const virtualProcesses = useVirtualRows(sortedProcesses, 27);
-  const sortProcesses = (key: ProcessSortKey, defaultDirection: "asc" | "desc") => setSort((current) => nextSortState(current, key, defaultDirection));
+  const sortProcesses = (key: ProcessSortKey, defaultDirection: "asc" | "desc") => {
+    void setProcessSort(nextSortState(sort, key, defaultDirection));
+  };
   const terminate = async (process: ProcessInfo | null, force: boolean) => {
     if (!process || !window.confirm(`${force ? "强制停止" : "终止"}进程 ${process.pid} ${process.name}？`)) return;
     if (force && !window.confirm(`强制停止会立即结束进程 ${process.pid}，未保存的数据可能丢失。再次确认？`)) return;

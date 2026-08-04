@@ -92,6 +92,8 @@ export function SettingsDialog() {
         terminalFontSize: current.terminalFontSize,
         terminalScrollbackLines: current.terminalScrollbackLines,
         quickConnectionCollapsedFolderIds: current.quickConnectionCollapsedFolderIds,
+        processSortKey: current.processSortKey,
+        processSortDirection: current.processSortDirection,
       }));
       notify("设置已保存");
     } catch (error) {

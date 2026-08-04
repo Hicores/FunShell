@@ -5,6 +5,7 @@ import type {
   ConnectionFolder,
   ConnectionProfile,
   KeyProfile,
+  ProcessSortState,
   ProxyProfile,
   RouteProfile,
   ServerSnapshot,
@@ -28,6 +29,7 @@ interface AppStore {
   activeTabId: string | null;
   snapshots: Record<string, ServerSnapshot>;
   quickConnectionCollapsedFolderIds: string[];
+  processSort: ProcessSortState;
   connectionManagerOpen: boolean;
   connectionEditorOpen: boolean;
   keyManagerOpen: boolean;
@@ -45,6 +47,7 @@ interface AppStore {
   openWorkspace: (kind: Exclude<WorkspaceKind, "terminal">) => void;
   setSnapshot: (sessionId: string, snapshot: ServerSnapshot) => void;
   setQuickConnectionFolderCollapsed: (folderId: string, collapsed: boolean) => Promise<void>;
+  setProcessSort: (sort: ProcessSortState) => Promise<void>;
   openConnectionManager: (open: boolean) => void;
   editConnection: (connection?: ConnectionProfile, folderId?: string | null) => void;
   closeConnectionEditor: () => void;
@@ -83,6 +86,7 @@ export const useAppStore = create<AppStore>((set, get) => ({
   activeTabId: null,
   snapshots: {},
   quickConnectionCollapsedFolderIds: [],
+  processSort: { key: "pid", direction: "asc" },
   connectionManagerOpen: false,
   connectionEditorOpen: false,
   keyManagerOpen: false,
@@ -99,7 +103,17 @@ export const useAppStore = create<AppStore>((set, get) => ({
       const [connections, folders, keys, proxies, routes, tunnelProfiles, settings] = await Promise.all([
         api.listConnections(), api.listFolders(), api.listKeys(), api.listProxies(), api.listRoutes(), api.tunnelProfiles(), api.getSettings(),
       ]);
-      set({ connections, folders, keys, proxies, routes, tunnelProfiles, quickConnectionCollapsedFolderIds: settings.quickConnectionCollapsedFolderIds, initialized: true });
+      set({
+        connections,
+        folders,
+        keys,
+        proxies,
+        routes,
+        tunnelProfiles,
+        quickConnectionCollapsedFolderIds: settings.quickConnectionCollapsedFolderIds,
+        processSort: { key: settings.processSortKey, direction: settings.processSortDirection },
+        initialized: true,
+      });
     } catch (error) {
       set({ toast: String(error), initialized: true });
     } finally {
@@ -276,6 +290,14 @@ export const useAppStore = create<AppStore>((set, get) => ({
     });
     try {
       await api.saveQuickConnectionCollapsedFolders(folderIds);
+    } catch (error) {
+      set({ toast: String(error) });
+    }
+  },
+  setProcessSort: async (processSort) => {
+    set({ processSort });
+    try {
+      await api.saveProcessSort(processSort.key, processSort.direction);
     } catch (error) {
       set({ toast: String(error) });
     }

@@ -5,6 +5,23 @@ use serde::{Deserialize, Serialize};
 
 use crate::error::{AppError, AppResult};
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum ProcessSortKey {
+    Pid,
+    User,
+    MemoryBytes,
+    CpuPercent,
+    Name,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum SortDirection {
+    Asc,
+    Desc,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default, rename_all = "camelCase")]
 pub struct AppSettings {
@@ -14,6 +31,8 @@ pub struct AppSettings {
     pub terminal_font_size: u16,
     pub terminal_scrollback_lines: u32,
     pub quick_connection_collapsed_folder_ids: Vec<String>,
+    pub process_sort_key: ProcessSortKey,
+    pub process_sort_direction: SortDirection,
 }
 
 impl Default for AppSettings {
@@ -26,6 +45,8 @@ impl Default for AppSettings {
             terminal_font_size: 13,
             terminal_scrollback_lines: 3_000,
             quick_connection_collapsed_folder_ids: Vec::new(),
+            process_sort_key: ProcessSortKey::Pid,
+            process_sort_direction: SortDirection::Asc,
         }
     }
 }
@@ -83,6 +104,21 @@ impl SettingsService {
         Ok(next)
     }
 
+    pub fn save_process_sort(
+        &self,
+        key: ProcessSortKey,
+        direction: SortDirection,
+    ) -> AppResult<AppSettings> {
+        let mut current = self.value.write();
+        let mut next = current.clone();
+        next.process_sort_key = key;
+        next.process_sort_direction = direction;
+        validate(&next)?;
+        self.write(&next)?;
+        *current = next.clone();
+        Ok(next)
+    }
+
     fn write(&self, value: &AppSettings) -> AppResult<()> {
         let encoded = serde_json::to_vec_pretty(value)?;
         fs::write(&self.path, encoded).map_err(|error| {
@@ -130,7 +166,7 @@ mod tests {
 
     use tempfile::tempdir;
 
-    use super::{AppSettings, SettingsService};
+    use super::{AppSettings, ProcessSortKey, SettingsService, SortDirection};
 
     #[test]
     fn persists_portable_settings() {
@@ -192,6 +228,29 @@ mod tests {
                 .is_empty()
         );
         assert_eq!(settings.get().terminal_scrollback_lines, 3_000);
+        assert_eq!(settings.get().process_sort_key, ProcessSortKey::Pid);
+        assert_eq!(settings.get().process_sort_direction, SortDirection::Asc);
+    }
+
+    #[test]
+    fn persists_process_sort_without_overwriting_other_settings() {
+        let directory = tempdir().expect("tempdir");
+        let path = directory.path().join("settings.json");
+        let settings = SettingsService::load(path.clone()).expect("load");
+        let mut value = settings.get();
+        value.geoip_enabled = false;
+        settings.save(value).expect("save");
+
+        let saved = settings
+            .save_process_sort(ProcessSortKey::CpuPercent, SortDirection::Desc)
+            .expect("save process sort");
+
+        assert!(!saved.geoip_enabled);
+        assert_eq!(saved.process_sort_key, ProcessSortKey::CpuPercent);
+        assert_eq!(saved.process_sort_direction, SortDirection::Desc);
+        let reloaded = SettingsService::load(path).expect("reload").get();
+        assert_eq!(reloaded.process_sort_key, ProcessSortKey::CpuPercent);
+        assert_eq!(reloaded.process_sort_direction, SortDirection::Desc);
     }
 
     #[test]

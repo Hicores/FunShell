@@ -43,6 +43,8 @@ describe("HomeView", () => {
       terminalFontSize: 13,
       terminalScrollbackLines: 3000,
       quickConnectionCollapsedFolderIds: [],
+      processSortKey: "pid",
+      processSortDirection: "asc",
     });
     useAppStore.setState({
       connections: mockConnections,

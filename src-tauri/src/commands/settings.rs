@@ -1,6 +1,11 @@
 use tauri::State;
 
-use crate::{domain::GeoIpInfo, error::AppResult, settings::AppSettings, state::AppState};
+use crate::{
+    domain::GeoIpInfo,
+    error::AppResult,
+    settings::{AppSettings, ProcessSortKey, SortDirection},
+    state::AppState,
+};
 
 #[tauri::command]
 pub fn get_settings(state: State<'_, AppState>) -> AppResult<AppSettings> {
@@ -20,6 +25,15 @@ pub fn save_quick_connection_collapsed_folders(
     state
         .settings
         .save_quick_connection_collapsed_folders(folder_ids)
+}
+
+#[tauri::command]
+pub fn save_process_sort(
+    state: State<'_, AppState>,
+    key: ProcessSortKey,
+    direction: SortDirection,
+) -> AppResult<AppSettings> {
+    state.settings.save_process_sort(key, direction)
 }
 
 #[tauri::command]
