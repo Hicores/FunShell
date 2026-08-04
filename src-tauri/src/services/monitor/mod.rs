@@ -17,7 +17,7 @@ echo __MEM__; cat /proc/meminfo 2>/dev/null
 echo __DF__; df -P -B1 2>/dev/null || df -P -k 2>/dev/null
 echo __PROC__
 if command -v top >/dev/null 2>&1; then
-    proc_top=$(LC_ALL=C top -b -n 2 -d 0.2 -o %CPU 2>/dev/null | awk '
+    proc_top=$(LC_ALL=C top -b -n 2 -d 1.0 -o %CPU 2>/dev/null | awk '
         function memory_kib(value, suffix, amount) {
             value = tolower(value)
             suffix = substr(value, length(value), 1)
@@ -109,7 +109,7 @@ printf 'cache='; (awk -F: '/cache size/{gsub(/^ +/,"",$2);print $2;exit}' /proc/
 pub const PROCESS_SCRIPT: &str = r#"LC_ALL=C
 echo __INTERVAL_CPU__
 if command -v top >/dev/null 2>&1; then
-    LC_ALL=C top -b -n 2 -d 0.2 2>/dev/null | awk '
+    LC_ALL=C top -b -n 2 -d 1.0 2>/dev/null | awk '
         /^top -/ { sample++; next }
         sample < 2 { next }
         /^[[:space:]]*[0-9]+[[:space:]]/ {
@@ -260,7 +260,7 @@ mod tests {
 
     #[test]
     fn samples_process_cpu_from_the_second_top_iteration() {
-        assert!(SNAPSHOT_SCRIPT.contains("top -b -n 2 -d 0.2 -o %CPU"));
+        assert!(SNAPSHOT_SCRIPT.contains("top -b -n 2 -d 1.0 -o %CPU"));
         assert!(SNAPSHOT_SCRIPT.contains("sample < 2"));
         assert!(SNAPSHOT_SCRIPT.contains("remember_memory(row, res)"));
         assert!(SNAPSHOT_SCRIPT.contains("__TOP_CPU__"));
@@ -270,7 +270,7 @@ mod tests {
 
     #[test]
     fn process_list_combines_interval_cpu_with_ps_metadata() {
-        assert!(PROCESS_SCRIPT.contains("top -b -n 2 -d 0.2"));
+        assert!(PROCESS_SCRIPT.contains("top -b -n 2 -d 1.0"));
         assert!(PROCESS_SCRIPT.contains("sample < 2"));
         assert!(PROCESS_SCRIPT.contains("echo __INTERVAL_CPU__"));
         assert!(PROCESS_SCRIPT.contains("echo __PROCESSES__"));
