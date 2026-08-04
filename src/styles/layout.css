@@ -69,7 +69,13 @@
 
 .process-mini { padding: 0; min-height: 116px; }
 .mini-table-head, .process-mini-row { display: grid; grid-template-columns: 68px 50px 1fr; min-width: 0; }
-.mini-table-head { padding: 5px 7px; background: #5b9bd0; color: white; }
+.mini-table-head { min-height: 29px; padding: 0 7px; background: #5b9bd0; color: white; }
+.mini-table-head > button { display: flex; min-width: 0; align-items: center; justify-content: center; gap: 2px; border: 0; padding: 0; background: transparent; color: inherit; font: inherit; }
+.mini-table-head > button svg { flex: 0 0 auto; opacity: .45; }
+.mini-table-head > button:hover, .mini-table-head > button.active { background: #4389bd; }
+.mini-table-head > button.active svg { opacity: 1; }
+.mini-table-head > button:focus-visible { outline: 2px solid white; outline-offset: -3px; }
+.mini-table-head > span { align-self: center; }
 .process-mini-row { width: 100%; height: 24px; align-items: center; padding: 0 7px; background: #f4fafc; text-align: left; }
 .process-mini-row:nth-child(odd) { background: #e8f4f8; }
 .process-mini-row span { text-align: right; padding-right: 9px; }

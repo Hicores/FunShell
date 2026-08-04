@@ -4,9 +4,20 @@ import { api } from "../../lib/ipc";
 import { mockConnections, mockSnapshot } from "../../lib/mock";
 import { useAppStore } from "../../stores/appStore";
 import type { WorkspaceTab } from "../../types";
-import { ServerSidebar } from "./ServerSidebar";
+import { ServerSidebar, sortSidebarProcesses } from "./ServerSidebar";
 
 describe("ServerSidebar", () => {
+  it("sorts the process summary in descending order without toggling direction", () => {
+    const processes = [
+      { pid: 1, user: "root", memoryBytes: 10, cpuPercent: 80, name: "cpu-heavy", command: "cpu-heavy" },
+      { pid: 2, user: "root", memoryBytes: 500, cpuPercent: 5, name: "memory-heavy", command: "memory-heavy" },
+    ];
+
+    expect(sortSidebarProcesses(processes, "cpuPercent").map((process) => process.pid)).toEqual([1, 2]);
+    expect(sortSidebarProcesses(processes, "memoryBytes").map((process) => process.pid)).toEqual([2, 1]);
+    expect(processes.map((process) => process.pid)).toEqual([1, 2]);
+  });
+
   it("keeps sampling connected terminal sessions that are behind the active tab", async () => {
     const foreground: WorkspaceTab = { id: "session-foreground", sessionId: "session-foreground", connectionId: mockConnections[0].id, title: "Gateway", kind: "terminal", state: "connected" };
     const background: WorkspaceTab = { id: "session-background", sessionId: "session-background", connectionId: mockConnections[1].id, title: "Database", kind: "terminal", state: "connected" };

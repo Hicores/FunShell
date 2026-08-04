@@ -18,6 +18,32 @@ echo __DF__; df -P -B1 2>/dev/null || df -P -k 2>/dev/null
 echo __PROC__
 if command -v top >/dev/null 2>&1; then
     proc_top=$(LC_ALL=C top -b -n 2 -d 0.2 -o %CPU 2>/dev/null | awk '
+        function memory_kib(value, suffix, amount) {
+            value = tolower(value)
+            suffix = substr(value, length(value), 1)
+            amount = value + 0
+            if (suffix == "p") return amount * 1024 * 1024 * 1024 * 1024
+            if (suffix == "t") return amount * 1024 * 1024 * 1024
+            if (suffix == "g") return amount * 1024 * 1024
+            if (suffix == "m") return amount * 1024
+            return amount
+        }
+        function remember_memory(row, value, i, smallest) {
+            if (memory_count < 20) {
+                memory_count++
+                memory_rows[memory_count] = row
+                memory_values[memory_count] = value
+                return
+            }
+            smallest = 1
+            for (i = 2; i <= memory_count; i++) {
+                if (memory_values[i] < memory_values[smallest]) smallest = i
+            }
+            if (value > memory_values[smallest]) {
+                memory_rows[smallest] = row
+                memory_values[smallest] = value
+            }
+        }
         /^top -/ { sample++; next }
         sample < 2 { next }
         /^%?Cpu/ && !cpu_seen {
@@ -37,13 +63,25 @@ if command -v top >/dev/null 2>&1; then
         /^[[:space:]]*[0-9]+[[:space:]]/ {
             command = $12
             for (i = 13; i <= NF; i++) command = command " " $i
-            res = $6
-            gsub(/[^0-9.]/, "", res)
+            res = memory_kib($6)
             cpu = $9
             gsub(/,/, ".", cpu)
-            if (res != "" && cpu != "") print $1, $2, res, cpu, $12, command
-            count++
-            if (count >= 20) exit
+            if (res != "" && cpu != "") {
+                row = $1 " " $2 " " sprintf("%.0f", res) " " cpu " " $12 " " command
+                if (cpu_count < 20) print row
+                cpu_count++
+                remember_memory(row, res)
+            }
+        }
+        END {
+            for (output = 1; output <= memory_count; output++) {
+                largest = 1
+                for (i = 2; i <= memory_count; i++) {
+                    if (memory_values[i] > memory_values[largest]) largest = i
+                }
+                print memory_rows[largest]
+                memory_values[largest] = -1
+            }
         }')
     if [ -n "$proc_top" ]; then
         printf '%s\n' "$proc_top"
@@ -224,6 +262,7 @@ mod tests {
     fn samples_process_cpu_from_the_second_top_iteration() {
         assert!(SNAPSHOT_SCRIPT.contains("top -b -n 2 -d 0.2 -o %CPU"));
         assert!(SNAPSHOT_SCRIPT.contains("sample < 2"));
+        assert!(SNAPSHOT_SCRIPT.contains("remember_memory(row, res)"));
         assert!(SNAPSHOT_SCRIPT.contains("__TOP_CPU__"));
         assert!(SNAPSHOT_SCRIPT.contains("printf '%s\\n' \"$proc_top\""));
         assert!(SNAPSHOT_SCRIPT.contains("ps -eo pid=,user=,rss=,pcpu=,comm=,args="));

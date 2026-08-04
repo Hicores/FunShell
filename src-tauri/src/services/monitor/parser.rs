@@ -1,5 +1,5 @@
 use std::{
-    collections::{BTreeMap, HashMap},
+    collections::{BTreeMap, HashMap, HashSet},
     net::Ipv6Addr,
 };
 
@@ -29,10 +29,12 @@ pub fn parse_snapshot(output: &str) -> ServerSnapshot {
     let memory = parse_memory(sections.get("MEM"));
     let interfaces = parse_network(sections.get("NET_A"), sections.get("NET_B"));
     let filesystems = parse_filesystems(sections.get("DF"));
-    let top_processes = sections
+    let mut top_processes = sections
         .get("PROC")
         .map(|lines| parse_processes(&lines.join("\n")))
         .unwrap_or_default();
+    let mut seen_processes = HashSet::new();
+    top_processes.retain(|process| seen_processes.insert(process.pid));
     ServerSnapshot {
         uptime_seconds,
         load_average,
@@ -557,6 +559,15 @@ mod tests {
         assert_eq!(snapshot.memory_used, 600 * 1024);
         assert_eq!(snapshot.interfaces[0].receive_bps, 1000);
         assert_eq!(snapshot.top_processes[0].pid, 1);
+    }
+
+    #[test]
+    fn deduplicates_cpu_and_memory_process_candidates() {
+        let output = "__PROC__\n1 root 100 12.0 init /sbin/init\n2 root 400 1.0 worker /opt/worker\n1 root 100 12.0 init /sbin/init\n";
+        let snapshot = parse_snapshot(output);
+        assert_eq!(snapshot.top_processes.len(), 2);
+        assert_eq!(snapshot.top_processes[0].pid, 1);
+        assert_eq!(snapshot.top_processes[1].pid, 2);
     }
 
     #[test]

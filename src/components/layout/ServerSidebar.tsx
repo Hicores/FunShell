@@ -1,11 +1,23 @@
 import { useEffect, useState } from "react";
-import { ChevronDown, Copy, Eye, EyeOff, Network, ServerCog } from "lucide-react";
+import { ArrowDown, ChevronDown, Copy, Eye, EyeOff, Network, ServerCog } from "lucide-react";
 import { api } from "../../lib/ipc";
 import { formatBytes, formatDuration, formatRate } from "../../lib/format";
 import { displayIpAddress } from "../../lib/address";
 import { useAppStore } from "../../stores/appStore";
 import { ProgressBar } from "../common/ProgressBar";
 import { appendNetworkRateSample, NetworkRateChart, type NetworkRateSample } from "./NetworkRateChart";
+import type { ProcessInfo } from "../../types";
+
+export type SidebarProcessSortKey = "memoryBytes" | "cpuPercent";
+
+export function sortSidebarProcesses(processes: ProcessInfo[], key: SidebarProcessSortKey) {
+  return [...processes].sort((left, right) => {
+    const primary = right[key] - left[key];
+    if (primary !== 0) return primary;
+    const secondary = key === "cpuPercent" ? right.memoryBytes - left.memoryBytes : right.cpuPercent - left.cpuPercent;
+    return secondary !== 0 ? secondary : left.pid - right.pid;
+  });
+}
 
 export function ServerSidebar() {
   const tabs = useAppStore((state) => state.tabs);
@@ -23,6 +35,7 @@ export function ServerSidebar() {
   const [networkHistory, setNetworkHistory] = useState<Record<string, NetworkRateSample[]>>({});
   const [latencies, setLatencies] = useState<Record<string, number>>({});
   const [revealedHosts, setRevealedHosts] = useState<Record<string, boolean>>({});
+  const [processSortKey, setProcessSortKey] = useState<SidebarProcessSortKey>("cpuPercent");
   const selectedNetwork = snapshot?.interfaces.find((item) => item.name === networkName) ?? snapshot?.interfaces[0];
   const networkHistoryKey = sessionTab && selectedNetwork ? `${sessionTab.sessionId}:${selectedNetwork.name}` : "";
   const latency = sessionTab ? latencies[sessionTab.sessionId] : undefined;
@@ -105,6 +118,7 @@ export function ServerSidebar() {
 
   const memoryPercent = snapshot?.memoryTotal ? snapshot.memoryUsed / snapshot.memoryTotal * 100 : 0;
   const swapPercent = snapshot?.swapTotal ? snapshot.swapUsed / snapshot.swapTotal * 100 : 0;
+  const visibleProcesses = sortSidebarProcesses(snapshot?.topProcesses ?? [], processSortKey).slice(0, 5);
 
   return (
     <aside className="server-sidebar">
@@ -136,8 +150,12 @@ export function ServerSidebar() {
         onClick={() => sessionConnected && openWorkspace("processes")}
         onKeyDown={(event) => { if (sessionConnected && (event.key === "Enter" || event.key === " ")) { event.preventDefault(); openWorkspace("processes"); } }}
       >
-        <div className="mini-table-head"><span>内存</span><span>CPU</span><span>命令</span></div>
-        {(snapshot?.topProcesses ?? []).slice(0, 5).map((process) => (
+        <div className="mini-table-head">
+          <button type="button" className={processSortKey === "memoryBytes" ? "active" : ""} aria-pressed={processSortKey === "memoryBytes"} title="按内存占用从高到低排序" onClick={(event) => { event.stopPropagation(); setProcessSortKey("memoryBytes"); }} onKeyDown={(event) => event.stopPropagation()}><span>内存</span><ArrowDown size={12} /></button>
+          <button type="button" className={processSortKey === "cpuPercent" ? "active" : ""} aria-pressed={processSortKey === "cpuPercent"} title="按 CPU 占用从高到低排序" onClick={(event) => { event.stopPropagation(); setProcessSortKey("cpuPercent"); }} onKeyDown={(event) => event.stopPropagation()}><span>CPU</span><ArrowDown size={12} /></button>
+          <span>命令</span>
+        </div>
+        {visibleProcesses.map((process) => (
           <div className="process-mini-row" key={process.pid}>
             <span>{formatBytes(process.memoryBytes, 0)}</span><span>{process.cpuPercent.toFixed(1)}</span><strong>{process.name}</strong>
           </div>
