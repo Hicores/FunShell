@@ -51,8 +51,9 @@ zeroize = "1.8"
 tempfile = "3.23"
 
 [profile.release]
-codegen-units = 1
-lto = true
+codegen-units = 16
+incremental = true
+lto = "thin"
 opt-level = "s"
 panic = "abort"
 strip = "symbols"
