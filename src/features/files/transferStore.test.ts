@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { TransferProgressEvent } from "../../types";
 import { currentTransferSpeed, MAX_RUNTIME_TRANSFERS, runningTransferCount, unreadTransferCount, useTransferStore } from "./transferStore";
 
@@ -56,12 +56,22 @@ describe("transferStore", () => {
   });
 
   it("calculates progress speed from local event arrival times and expires stale samples", () => {
-    useTransferStore.getState().record({ ...transfer, state: "running", transferred: 0 });
-    useTransferStore.getState().record({ ...transfer, state: "running", transferred: 2_048 });
-    const sample = useTransferStore.getState().rates[transfer.taskId];
-    expect(sample.speedBps).toBeGreaterThanOrEqual(0);
-    expect(currentTransferSpeed({ speedBps: 2_048, sampledAt: 10_000, transferred: 2_048 }, 11_000)).toBe(2_048);
-    expect(currentTransferSpeed({ speedBps: 2_048, sampledAt: 10_000, transferred: 2_048 }, 11_501)).toBe(0);
+    vi.useFakeTimers();
+    try {
+      vi.setSystemTime(10_000);
+      useTransferStore.getState().record({ ...transfer, state: "running", transferred: 0 });
+      vi.advanceTimersByTime(1_000);
+      useTransferStore.getState().record({ ...transfer, state: "running", transferred: 64 * 1_024 });
+      expect(useTransferStore.getState().rates[transfer.taskId].speedBps).toBe(64 * 1_024);
+
+      vi.advanceTimersByTime(1);
+      useTransferStore.getState().record({ ...transfer, state: "running", transferred: 128 * 1_024 });
+      expect(useTransferStore.getState().rates[transfer.taskId].speedBps).toBe(64 * 1_024);
+      expect(currentTransferSpeed({ speedBps: 2_048, sampledAt: 10_000, transferred: 2_048 }, 11_000)).toBe(2_048);
+      expect(currentTransferSpeed({ speedBps: 2_048, sampledAt: 10_000, transferred: 2_048 }, 11_501)).toBe(0);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("keeps late startup history viewed when the panel is already open", () => {

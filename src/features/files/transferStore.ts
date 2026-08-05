@@ -4,11 +4,14 @@ import type { TransferProgressEvent } from "../../types";
 const EMPTY_TRANSFERS: TransferProgressEvent[] = [];
 export const MAX_RUNTIME_TRANSFERS = 500;
 export const TRANSFER_SPEED_STALE_MS = 1_500;
+export const TRANSFER_RATE_WINDOW_MS = 1_000;
 
 export interface TransferRateSample {
   speedBps: number;
   sampledAt: number;
   transferred: number;
+  windowStartedAt?: number;
+  windowTransferred?: number;
 }
 
 function groupTransfers(transfers: TransferProgressEvent[]) {
@@ -56,15 +59,30 @@ export const useTransferStore = create<TransferStore>((set) => ({
     const next = recentTransfers([nextTask, ...current.filter((item) => item.taskId !== task.taskId)]);
     const sampledAt = Date.now();
     const previousRate = state.rates[task.taskId];
-    const previousTransferred = previousRate?.transferred ?? existing?.transferred ?? task.transferred;
-    const elapsed = sampledAt - (previousRate?.sampledAt ?? sampledAt);
-    const delta = task.transferred - previousTransferred;
     const rates = { ...state.rates };
     if (task.state === "running") {
+      let speedBps = previousRate?.speedBps ?? 0;
+      let windowStartedAt = previousRate?.windowStartedAt ?? previousRate?.sampledAt ?? sampledAt;
+      let windowTransferred = previousRate?.windowTransferred ?? previousRate?.transferred ?? task.transferred;
+      if (!previousRate || task.transferred < previousRate.transferred || sampledAt < previousRate.sampledAt) {
+        speedBps = 0;
+        windowStartedAt = sampledAt;
+        windowTransferred = task.transferred;
+      } else {
+        const elapsed = sampledAt - windowStartedAt;
+        const delta = task.transferred - windowTransferred;
+        if (delta > 0 && elapsed >= TRANSFER_RATE_WINDOW_MS) {
+          speedBps = delta * 1000 / elapsed;
+          windowStartedAt = sampledAt;
+          windowTransferred = task.transferred;
+        }
+      }
       rates[task.taskId] = {
-        speedBps: delta > 0 && elapsed > 0 ? delta * 1000 / elapsed : previousRate?.speedBps ?? 0,
+        speedBps,
         sampledAt,
         transferred: task.transferred,
+        windowStartedAt,
+        windowTransferred,
       };
     } else {
       delete rates[task.taskId];

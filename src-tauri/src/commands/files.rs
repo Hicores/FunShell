@@ -4,7 +4,7 @@ use russh_sftp::protocol::{FileAttributes, FileType, OpenFlags};
 use std::{
     collections::{HashMap, HashSet, hash_map::Entry},
     path::PathBuf,
-    time::Instant,
+    time::{Duration, Instant},
 };
 
 use tauri::{AppHandle, Emitter, Manager, State};
@@ -28,6 +28,7 @@ use crate::{
 const MAX_TEXT_FILE_SIZE: u64 = 5 * 1024 * 1024;
 const DOWNLOAD_CHUNK_SIZE: u64 = 128 * 1024;
 const DOWNLOAD_PIPELINE_DEPTH: usize = 32;
+const TRANSFER_PROGRESS_INTERVAL: Duration = Duration::from_millis(100);
 const USERS_MARKER: &str = "__FUNSHELL_USERS__";
 const GROUPS_MARKER: &str = "__FUNSHELL_GROUPS__";
 
@@ -647,6 +648,8 @@ where
 {
     let mut buffer = vec![0_u8; 64 * 1024];
     let mut transferred = 0_u64;
+    let mut last_progress = Instant::now();
+    emit_transfer(&context, 0, "running");
     loop {
         let read = tokio::select! {
             _ = context.cancellation.cancelled() => {
@@ -669,7 +672,10 @@ where
             return Err(error.into());
         }
         transferred = transferred.saturating_add(read as u64);
-        emit_transfer(&context, transferred, "running");
+        if transfer_progress_due(last_progress.elapsed(), transferred, context.total) {
+            emit_transfer(&context, transferred, "running");
+            last_progress = Instant::now();
+        }
     }
     emit_transfer(&context, transferred, "completed");
     Ok(())
@@ -722,13 +728,17 @@ async fn download_pipelined(
             return Err(error.into());
         }
         transferred = transferred.saturating_add(data.len() as u64);
-        if last_progress.elapsed().as_millis() >= 100 || transferred >= context.total {
+        if transfer_progress_due(last_progress.elapsed(), transferred, context.total) {
             emit_transfer(&context, transferred, "running");
             last_progress = Instant::now();
         }
     }
     emit_transfer(&context, transferred, "completed");
     Ok(())
+}
+
+fn transfer_progress_due(elapsed: Duration, transferred: u64, total: u64) -> bool {
+    elapsed >= TRANSFER_PROGRESS_INTERVAL || transferred >= total
 }
 
 fn emit_transfer(context: &TransferContext<'_>, transferred: u64, state: &str) {
@@ -785,8 +795,9 @@ fn remote_command_failure_detail(stdout: &str, stderr: &str, exit_status: Option
 mod tests {
     use super::{
         DOWNLOAD_CHUNK_SIZE, chown_command, download_ranges, parse_owner_map,
-        parse_remote_identities, remote_command_failure_detail, shell_quote,
+        parse_remote_identities, remote_command_failure_detail, shell_quote, transfer_progress_due,
     };
+    use std::time::Duration;
 
     #[test]
     fn quotes_posix_paths() {
@@ -829,6 +840,13 @@ mod tests {
                 (DOWNLOAD_CHUNK_SIZE * 2, 17),
             ]
         );
+    }
+
+    #[test]
+    fn throttles_progress_events_but_always_reports_the_final_chunk() {
+        assert!(!transfer_progress_due(Duration::from_millis(99), 64, 128));
+        assert!(transfer_progress_due(Duration::from_millis(100), 64, 128));
+        assert!(transfer_progress_due(Duration::ZERO, 128, 128));
     }
 
     #[test]
