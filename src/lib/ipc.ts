@@ -55,6 +55,7 @@ let mockSettings: AppSettings = {
   quickConnectionCollapsedFolderIds: [],
   processSortKey: "pid",
   processSortDirection: "asc",
+  theme: "system",
 };
 let mockSessionSequence = 0;
 let mockSocketTick = 0;
@@ -120,6 +121,10 @@ function mockCall(command: string, args?: Record<string, unknown>): unknown {
         processSortKey: args?.key as AppSettings["processSortKey"],
         processSortDirection: args?.direction as AppSettings["processSortDirection"],
       };
+      return { ...mockSettings };
+    }
+    case "save_theme": {
+      mockSettings = { ...mockSettings, theme: args?.theme as AppSettings["theme"] };
       return { ...mockSettings };
     }
     case "lookup_geo_ip": {
@@ -315,6 +320,7 @@ export const api = {
   saveSettings: (settings: AppSettings) => call<AppSettings>("save_settings", { settings }),
   saveQuickConnectionCollapsedFolders: (folderIds: string[]) => call<AppSettings>("save_quick_connection_collapsed_folders", { folderIds }),
   saveProcessSort: (key: AppSettings["processSortKey"], direction: AppSettings["processSortDirection"]) => call<AppSettings>("save_process_sort", { key, direction }),
+  saveTheme: (theme: AppSettings["theme"]) => call<AppSettings>("save_theme", { theme }),
   geoIp: (ip: string) => call<GeoIpInfo>("lookup_geo_ip", { ip }),
   listConnections: (includeDeleted = false) => call<ConnectionProfile[]>("list_connections", { includeDeleted }),
   saveConnection: (input: SaveConnectionInput) => call<ConnectionProfile>("save_connection", { input }),

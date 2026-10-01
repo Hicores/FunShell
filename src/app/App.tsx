@@ -10,6 +10,7 @@ import { SettingsDialog } from "../features/settings/SettingsDialog";
 import { VaultUnlockGate } from "../features/security/VaultUnlockGate";
 import { useAppStore } from "../stores/appStore";
 import { api, onEvent } from "../lib/ipc";
+import { useTheme } from "../lib/theme";
 import type { SessionStatusEvent, TransferProgressEvent } from "../types";
 import { useDesktopGuards } from "./useDesktopGuards";
 import { useTransferStore } from "../features/files/transferStore";
@@ -20,6 +21,8 @@ import "../styles/views.css";
 
 export function App() {
   useDesktopGuards();
+  const theme = useAppStore((state) => state.theme);
+  useTheme(theme);
   const initialize = useAppStore((state) => state.initialize);
   const initialized = useAppStore((state) => state.initialized);
   const busy = useAppStore((state) => state.busy);

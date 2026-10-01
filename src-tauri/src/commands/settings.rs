@@ -3,7 +3,7 @@ use tauri::State;
 use crate::{
     domain::GeoIpInfo,
     error::AppResult,
-    settings::{AppSettings, ProcessSortKey, SortDirection},
+    settings::{AppSettings, ProcessSortKey, SortDirection, ThemeMode},
     state::AppState,
 };
 
@@ -34,6 +34,11 @@ pub fn save_process_sort(
     direction: SortDirection,
 ) -> AppResult<AppSettings> {
     state.settings.save_process_sort(key, direction)
+}
+
+#[tauri::command]
+pub fn save_theme(state: State<'_, AppState>, theme: ThemeMode) -> AppResult<AppSettings> {
+    state.settings.save_theme(theme)
 }
 
 #[tauri::command]

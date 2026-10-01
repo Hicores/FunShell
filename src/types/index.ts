@@ -2,6 +2,7 @@ export type AuthMethod = "password" | "public_key";
 export type ProxyKind = "http_connect" | "socks5";
 export type RouteKind = "direct" | "proxy" | "jump_host";
 export type TunnelKind = "local" | "remote" | "dynamic";
+export type ThemeMode = "system" | "light" | "dark";
 
 export interface ConnectionFolder {
   id: string;
@@ -316,6 +317,7 @@ export interface AppSettings {
   quickConnectionCollapsedFolderIds: string[];
   processSortKey: ProcessSortKey;
   processSortDirection: ProcessSortState["direction"];
+  theme: ThemeMode;
 }
 
 export interface GeoIpInfo {

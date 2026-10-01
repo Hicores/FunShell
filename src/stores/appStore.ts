@@ -13,6 +13,7 @@ import type {
   TunnelProfile,
   WorkspaceKind,
   WorkspaceTab,
+  ThemeMode,
 } from "../types";
 
 interface AppStore {
@@ -30,6 +31,7 @@ interface AppStore {
   snapshots: Record<string, ServerSnapshot>;
   quickConnectionCollapsedFolderIds: string[];
   processSort: ProcessSortState;
+  theme: ThemeMode;
   connectionManagerOpen: boolean;
   connectionEditorOpen: boolean;
   keyManagerOpen: boolean;
@@ -48,6 +50,7 @@ interface AppStore {
   setSnapshot: (sessionId: string, snapshot: ServerSnapshot) => void;
   setQuickConnectionFolderCollapsed: (folderId: string, collapsed: boolean) => Promise<void>;
   setProcessSort: (sort: ProcessSortState) => Promise<void>;
+  setTheme: (theme: ThemeMode) => Promise<void>;
   openConnectionManager: (open: boolean) => void;
   editConnection: (connection?: ConnectionProfile, folderId?: string | null) => void;
   closeConnectionEditor: () => void;
@@ -87,6 +90,7 @@ export const useAppStore = create<AppStore>((set, get) => ({
   snapshots: {},
   quickConnectionCollapsedFolderIds: [],
   processSort: { key: "pid", direction: "asc" },
+  theme: "system",
   connectionManagerOpen: false,
   connectionEditorOpen: false,
   keyManagerOpen: false,
@@ -112,6 +116,7 @@ export const useAppStore = create<AppStore>((set, get) => ({
         tunnelProfiles,
         quickConnectionCollapsedFolderIds: settings.quickConnectionCollapsedFolderIds,
         processSort: { key: settings.processSortKey, direction: settings.processSortDirection },
+        theme: settings.theme,
         initialized: true,
       });
     } catch (error) {
@@ -298,6 +303,14 @@ export const useAppStore = create<AppStore>((set, get) => ({
     set({ processSort });
     try {
       await api.saveProcessSort(processSort.key, processSort.direction);
+    } catch (error) {
+      set({ toast: String(error) });
+    }
+  },
+  setTheme: async (theme) => {
+    set({ theme });
+    try {
+      await api.saveTheme(theme);
     } catch (error) {
       set({ toast: String(error) });
     }

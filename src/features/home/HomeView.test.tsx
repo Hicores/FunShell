@@ -45,6 +45,7 @@ describe("HomeView", () => {
       quickConnectionCollapsedFolderIds: [],
       processSortKey: "pid",
       processSortDirection: "asc",
+      theme: "system",
     });
     useAppStore.setState({
       connections: mockConnections,

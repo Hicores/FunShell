@@ -3,8 +3,21 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="color-scheme" content="light" />
+    <meta name="color-scheme" content="light dark" />
     <title>FunShell</title>
+    <script>
+      // Paint the Windows system theme before the app bundle loads so dark mode never flashes light.
+      (function () {
+        try {
+          var prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+          var theme = prefersDark ? "dark" : "light";
+          document.documentElement.dataset.theme = theme;
+          document.documentElement.style.colorScheme = theme;
+        } catch (error) {
+          document.documentElement.dataset.theme = "light";
+        }
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>

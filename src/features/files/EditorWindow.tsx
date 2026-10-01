@@ -2,6 +2,7 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import { FileText, LoaderCircle, Save, X } from "lucide-react";
 import { useEffect, useState } from "react";
 import { api, isTauri } from "../../lib/ipc";
+import { applyTheme } from "../../lib/theme";
 
 interface EditorWindowProps {
   sessionId: string;
@@ -17,6 +18,14 @@ export function EditorWindow({ sessionId, path }: EditorWindowProps) {
   const [saveError, setSaveError] = useState<string | null>(null);
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
   const [closeError, setCloseError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let dispose: (() => void) | undefined;
+    void api.getSettings()
+      .then((settings) => { dispose = applyTheme(settings.theme); })
+      .catch(() => { dispose = applyTheme("system"); });
+    return () => dispose?.();
+  }, []);
 
   useEffect(() => {
     let active = true;

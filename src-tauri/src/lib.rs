@@ -98,6 +98,7 @@ pub fn run() {
             commands::settings::save_settings,
             commands::settings::save_quick_connection_collapsed_folders,
             commands::settings::save_process_sort,
+            commands::settings::save_theme,
             commands::settings::lookup_geo_ip,
             commands::connections::list_connections,
             commands::connections::save_connection,
@@ -192,6 +193,11 @@ mod capability_tests {
             permissions
                 .iter()
                 .any(|value| value == "core:window:allow-close")
+        );
+        assert!(
+            permissions
+                .iter()
+                .any(|value| value == "core:window:allow-set-theme")
         );
     }
 }

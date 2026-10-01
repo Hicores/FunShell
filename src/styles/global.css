@@ -1,10 +1,155 @@
 :root {
+  color-scheme: light;
+
+  /* Surfaces */
+  --bg-app: #eef2f5;
+  --bg-home: #fbfcfd;
+  --bg-surface: #ffffff;
+  --bg-surface-alt: #f8f9fa;
+  --bg-surface-sunken: #f2f5f7;
+  --bg-inset: #f2f4f5;
+  --bg-muted: #eef1f3;
+  --bg-chip: #f3f5f6;
+  --bg-hover: #eaf5fb;
+  --bg-selected: #d8ecf6;
+  --bg-active: #dceef7;
+  --bg-accent-soft: #e8f3f9;
+  --bg-success-soft: #eef9f1;
+  --bg-danger-soft: #fff1f1;
+  --bg-overlay: #152a364d;
+  --bg-busy: #fffffff2;
+  --bg-drop: #eef8fbd9;
+
+  /* Text */
+  --text-primary: #1c2733;
+  --text-heading: #17384a;
+  --text-label: #394d59;
+  --text-secondary: #52606d;
+  --text-muted: #71828c;
+  --text-faint: #84939c;
+  --text-accent: #176d9b;
+  --text-success: #24744c;
+  --text-danger: #a04444;
+  --text-danger-strong: #b33f3f;
+  --text-warning: #bf4c20;
+  --text-on-accent: #ffffff;
+
+  /* Borders */
+  --border-strong: #9aaab4;
+  --border: #b9c5cc;
+  --border-soft: #cbd4da;
+  --border-faint: #d4dce1;
+  --border-hairline: #e3e8eb;
+
+  /* Accent */
+  --accent: #2d8fc2;
+  --accent-strong: #257eae;
+  --accent-hover: #5b9fc2;
+  --accent-ring: #5b9fc233;
+  --focus-ring: #3d98c9;
+  --focus-ring-soft: #3d98c91c;
+
+  /* Status */
+  --danger: #c95353;
+  --danger-border: #cb6b6b;
+  --success-border: #7fbe98;
+  --usage-fill: #79bca5;
+  --status-idle: #9aa8b0;
+  --status-connecting: #e4a63b;
+  --status-error: #d84b4b;
+  --status-connected: #23b75b;
+  --status-connected-glow: #c8efd7;
+  --status-error-glow: #f3cccc;
+  --icon-directory: #e2ac3e;
+  --badge-danger: #d45454;
+
+  /* Charts */
+  --chart-grid: #9fb4bf;
+  --chart-label: #647984;
+  --chart-baseline: #77a9c0;
+  --chart-receive: #76a56f;
+  --chart-transmit: #f09a72;
+
+  /* Selection */
+  --selection-bg: #8dc4e8;
+  --selection-text: #102633;
+
   font-family: "Segoe UI", "Microsoft YaHei UI", sans-serif;
-  color: #1c2733;
-  background: #eef2f5;
+  color: var(--text-primary);
+  background: var(--bg-app);
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   letter-spacing: 0;
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+
+  --bg-app: #14171b;
+  --bg-home: #191d22;
+  --bg-surface: #20252b;
+  --bg-surface-alt: #242a31;
+  --bg-surface-sunken: #1a1f24;
+  --bg-inset: #1b2025;
+  --bg-muted: #2a3037;
+  --bg-chip: #2a3037;
+  --bg-hover: #263440;
+  --bg-selected: #2c4d61;
+  --bg-active: #2a4759;
+  --bg-accent-soft: #22323d;
+  --bg-success-soft: #1e3128;
+  --bg-danger-soft: #392327;
+  --bg-overlay: #000000a6;
+  --bg-busy: #20252bf2;
+  --bg-drop: #16303ff0;
+
+  --text-primary: #e3e9ed;
+  --text-heading: #e9eff3;
+  --text-label: #c2ccd4;
+  --text-secondary: #a4afb9;
+  --text-muted: #8c99a4;
+  --text-faint: #7a8792;
+  --text-accent: #5cb4e2;
+  --text-success: #5fcb8f;
+  --text-danger: #ef8d8d;
+  --text-danger-strong: #ff9d9d;
+  --text-warning: #f08a5b;
+  --text-on-accent: #ffffff;
+
+  --border-strong: #464f58;
+  --border: #3a434c;
+  --border-soft: #333b43;
+  --border-faint: #2d343b;
+  --border-hairline: #272d34;
+
+  --accent: #3d9dd0;
+  --accent-strong: #3588b5;
+  --accent-hover: #5596b8;
+  --accent-ring: #5596b855;
+  --focus-ring: #4aa3d5;
+  --focus-ring-soft: #4aa3d533;
+
+  --danger: #c95353;
+  --danger-border: #cb6b6b;
+  --success-border: #3f7d5c;
+  --usage-fill: #4f8f76;
+  --status-idle: #5c666e;
+  --status-connecting: #e4a63b;
+  --status-error: #d84b4b;
+  --status-connected: #3ecf76;
+  --status-connected-glow: #1e4030;
+  --status-error-glow: #4a2626;
+  --icon-directory: #e2ac3e;
+  --badge-danger: #d45454;
+
+  --chart-grid: #46525c;
+  --chart-label: #8794a0;
+  --chart-baseline: #77a9c0;
+  --chart-receive: #76a56f;
+  --chart-transmit: #f09a72;
+
+  --selection-bg: #2f6f96;
+  --selection-text: #eaf3f8;
 }
 
 * {
@@ -35,7 +180,7 @@ textarea {
   align-items: center;
   justify-content: center;
   gap: 10px;
-  color: #52606d;
+  color: var(--text-secondary);
 }
 
 button {
@@ -52,8 +197,8 @@ button:disabled {
 }
 
 ::selection {
-  background: #8dc4e8;
-  color: #102633;
+  background: var(--selection-bg);
+  color: var(--selection-text);
 }
 
 .spin {

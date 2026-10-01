@@ -22,6 +22,15 @@ pub enum SortDirection {
     Desc,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum ThemeMode {
+    #[default]
+    System,
+    Light,
+    Dark,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default, rename_all = "camelCase")]
 pub struct AppSettings {
@@ -33,6 +42,7 @@ pub struct AppSettings {
     pub quick_connection_collapsed_folder_ids: Vec<String>,
     pub process_sort_key: ProcessSortKey,
     pub process_sort_direction: SortDirection,
+    pub theme: ThemeMode,
 }
 
 impl Default for AppSettings {
@@ -47,6 +57,7 @@ impl Default for AppSettings {
             quick_connection_collapsed_folder_ids: Vec::new(),
             process_sort_key: ProcessSortKey::Pid,
             process_sort_direction: SortDirection::Asc,
+            theme: ThemeMode::System,
         }
     }
 }
@@ -119,6 +130,16 @@ impl SettingsService {
         Ok(next)
     }
 
+    pub fn save_theme(&self, theme: ThemeMode) -> AppResult<AppSettings> {
+        let mut current = self.value.write();
+        let mut next = current.clone();
+        next.theme = theme;
+        validate(&next)?;
+        self.write(&next)?;
+        *current = next.clone();
+        Ok(next)
+    }
+
     fn write(&self, value: &AppSettings) -> AppResult<()> {
         let encoded = serde_json::to_vec_pretty(value)?;
         fs::write(&self.path, encoded).map_err(|error| {
@@ -166,7 +187,7 @@ mod tests {
 
     use tempfile::tempdir;
 
-    use super::{AppSettings, ProcessSortKey, SettingsService, SortDirection};
+    use super::{AppSettings, ProcessSortKey, SettingsService, SortDirection, ThemeMode};
 
     #[test]
     fn persists_portable_settings() {
@@ -230,6 +251,24 @@ mod tests {
         assert_eq!(settings.get().terminal_scrollback_lines, 3_000);
         assert_eq!(settings.get().process_sort_key, ProcessSortKey::Pid);
         assert_eq!(settings.get().process_sort_direction, SortDirection::Asc);
+        assert_eq!(settings.get().theme, ThemeMode::System);
+    }
+
+    #[test]
+    fn persists_theme_without_overwriting_other_settings() {
+        let directory = tempdir().expect("tempdir");
+        let path = directory.path().join("settings.json");
+        let settings = SettingsService::load(path.clone()).expect("load");
+        let mut value = settings.get();
+        value.geoip_enabled = false;
+        settings.save(value).expect("save");
+
+        let saved = settings.save_theme(ThemeMode::Dark).expect("save theme");
+
+        assert!(!saved.geoip_enabled);
+        assert_eq!(saved.theme, ThemeMode::Dark);
+        let reloaded = SettingsService::load(path).expect("reload").get();
+        assert_eq!(reloaded.theme, ThemeMode::Dark);
     }
 
     #[test]

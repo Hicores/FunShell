@@ -16,13 +16,15 @@ describe("appStore tab lifecycle", () => {
       quickConnectionCollapsedFolderIds: [folderId],
       processSortKey: "cpuPercent",
       processSortDirection: "desc",
+      theme: "dark",
     });
-    useAppStore.setState({ initialized: false, quickConnectionCollapsedFolderIds: [], processSort: { key: "pid", direction: "asc" } });
+    useAppStore.setState({ initialized: false, quickConnectionCollapsedFolderIds: [], processSort: { key: "pid", direction: "asc" }, theme: "system" });
 
     await useAppStore.getState().initialize();
 
     expect(useAppStore.getState().quickConnectionCollapsedFolderIds).toEqual([folderId]);
     expect(useAppStore.getState().processSort).toEqual({ key: "cpuPercent", direction: "desc" });
+    expect(useAppStore.getState().theme).toBe("dark");
   });
 
   it("opens a connecting terminal tab before SSH finishes", async () => {
