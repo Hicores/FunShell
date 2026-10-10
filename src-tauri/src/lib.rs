@@ -141,6 +141,8 @@ pub fn run() {
             commands::files::chmod_remote_path,
             commands::files::chown_remote_path,
             commands::files::upload_remote_file,
+            commands::directory_upload::inspect_local_upload,
+            commands::directory_upload::upload_remote_directory,
             commands::files::download_remote_file,
             commands::files::open_remote_file,
             commands::files::cancel_file_transfer,

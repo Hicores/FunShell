@@ -224,6 +224,7 @@ function mockCall(command: string, args?: Record<string, unknown>): unknown {
       return archivePath;
     }
     case "extract_remote_archive": return String(args?.destinationPath ?? "");
+    case "inspect_local_upload": return { directory: false, fileCount: 1 };
     case "list_remote_files": {
       const path = String(args?.path ?? "/root");
       if (path === "/") return mockRootDirectories;
@@ -365,6 +366,8 @@ export const api = {
   createRemoteArchive: (sessionId: string, sourcePath: string, archivePath: string) => call<string>("create_remote_archive", { sessionId, sourcePath, archivePath }),
   extractRemoteArchive: (sessionId: string, archivePath: string, destinationPath: string) => call<string>("extract_remote_archive", { sessionId, archivePath, destinationPath }),
   uploadRemoteFile: (sessionId: string, localPath: string, remotePath: string) => call<string>("upload_remote_file", { sessionId, localPath, remotePath }),
+  inspectLocalUpload: (localPath: string) => call<{ directory: boolean; fileCount: number }>("inspect_local_upload", { localPath }),
+  uploadRemoteDirectory: (sessionId: string, localPath: string, remotePath: string, confirmed = false) => call<void>("upload_remote_directory", { sessionId, localPath, remotePath, confirmed }),
   downloadRemoteFile: (sessionId: string, remotePath: string, localPath: string) => call<string>("download_remote_file", { sessionId, remotePath, localPath }),
   cancelTransfer: (taskId: string) => call<void>("cancel_file_transfer", { taskId }),
   transferHistory: () => call<TransferProgressEvent[]>("list_transfer_history"),

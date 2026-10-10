@@ -2,6 +2,7 @@ use serde::Serialize;
 
 pub mod archive;
 pub mod connections;
+pub mod directory_upload;
 pub mod files;
 pub mod history;
 pub mod keys;

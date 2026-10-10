@@ -16,6 +16,7 @@ import { RemoteDirectoryTree } from "./RemoteDirectoryTree";
 import { RenameDialog, type RenameDialogState } from "./RenameDialog";
 import { openRemoteEditorWindow } from "./openEditorWindow";
 import { useFileDrop } from "./useFileDrop";
+import { usePathUpload } from "./usePathUpload";
 
 function joinRemote(base: string, name: string) {
   return base === "/" ? `/${name}` : `${base.replace(/\/$/, "")}/${name}`;
@@ -264,15 +265,7 @@ export function FileManager({ tab }: { tab: WorkspaceTab }) {
     setEditorOpen(false);
   };
 
-  const uploadPaths = useCallback(async (localPaths: string[], destinationPath = path) => {
-    if (!localPaths.length) return;
-    for (const localPath of localPaths) {
-      const name = localPath.replaceAll("\\", "/").split("/").at(-1) ?? "upload.bin";
-      try { await api.uploadRemoteFile(tab.sessionId, localPath, joinRemote(destinationPath, name)); }
-      catch (error) { notify(`上传 ${name} 失败: ${String(error)}`); }
-    }
-    if (destinationPath === path) await refresh();
-  }, [notify, path, refresh, tab.sessionId]);
+  const { uploadPaths, uploadWarning } = usePathUpload(tab, path, refresh, notify);
 
   const uploadFiles = async (destinationPath = path) => {
     if (!isTauri()) return notify("桌面程序中可选择本地文件上传");
@@ -284,7 +277,7 @@ export function FileManager({ tab }: { tab: WorkspaceTab }) {
     dropTargetRef,
     active,
     uploadPaths,
-    () => notify("请在 FunShell 桌面程序中拖入本地文件"),
+    () => notify("请在 FunShell 桌面程序中拖入本地文件或文件夹"),
   );
 
   const downloadFile = async (file: RemoteFileEntry) => {
@@ -463,7 +456,7 @@ export function FileManager({ tab }: { tab: WorkspaceTab }) {
               <VirtualTableSpacer height={virtualFiles.afterHeight} columns={6} />
             </tbody>
           </table>
-          {dropActive && <div className="file-drop-overlay"><Upload size={22} /><strong>上传到 {path}</strong></div>}
+          {dropActive && <div className="file-drop-overlay"><Upload size={22} /><strong>上传文件或文件夹到 {path}</strong></div>}
         </div>
       </div>
       {context && (
@@ -492,6 +485,7 @@ export function FileManager({ tab }: { tab: WorkspaceTab }) {
       <Modal open={createDialog != null} title={createDialog?.kind === "file" ? "新建文件" : "新建文件夹"} width={430} onClose={() => setCreateDialog(null)} footer={<><button type="button" onClick={() => setCreateDialog(null)}>取消</button><button className="primary-button" type="button" disabled={!createDialog?.name.trim()} onClick={() => void createEntry()}>创建</button></>}>
         <div className="form-grid"><label className="wide">目标目录<input value={createDialog?.parentPath ?? ""} readOnly /></label><label className="wide">{createDialog?.kind === "file" ? "文件名称" : "文件夹名称"}<input autoFocus value={createDialog?.name ?? ""} onChange={(event) => setCreateDialog((current) => current ? { ...current, name: event.target.value } : null)} onKeyDown={(event) => { if (event.key === "Enter") void createEntry(); }} /></label></div>
       </Modal>
+      {uploadWarning}
       <ArchiveDialog
         value={archiveDialog}
         running={archiveRunning}

@@ -508,6 +508,7 @@ pub async fn upload_remote_file(
     local_path: PathBuf,
     remote_path: String,
 ) -> AppResult<String> {
+    let lifecycle = state.sessions.lifecycle(&session_id)?;
     let metadata = tokio::fs::metadata(&local_path).await?;
     if !metadata.is_file() {
         return Err(AppError::Validation("当前上传接口仅接收文件".into()));
@@ -515,37 +516,56 @@ pub async fn upload_remote_file(
     let task_id = Uuid::new_v4().to_string();
     let source = local_path.display().to_string();
     let total = metadata.len();
-    let sftp = state.sessions.sftp(&session_id).await?;
-    let mut source_file = File::open(&local_path).await?;
-    let mut destination_file = map_sftp(
-        sftp.open_with_flags(
-            remote_path.clone(),
-            OpenFlags::CREATE | OpenFlags::TRUNCATE | OpenFlags::WRITE,
-        )
-        .await,
-    )?;
+    let prepare = async {
+        let sftp = state.sessions.sftp(&session_id).await?;
+        let source_file = File::open(&local_path).await?;
+        let destination_file = map_sftp(
+            sftp.open_with_flags(
+                remote_path.clone(),
+                OpenFlags::CREATE | OpenFlags::TRUNCATE | OpenFlags::WRITE,
+            )
+            .await,
+        )?;
+        Ok::<_, AppError>((source_file, destination_file))
+    };
+    let (mut source_file, mut destination_file) = tokio::select! {
+        biased;
+        _ = lifecycle.cancelled() => return Err(AppError::Message("会话已关闭，上传已取消".into())),
+        result = prepare => result?,
+    };
     let cancellation = state.transfers.start(&task_id);
-    let result = transfer(
-        TransferContext {
-            app: &app,
-            session_id: &session_id,
-            task_id: &task_id,
-            direction: "upload",
-            source: &source,
-            destination: &remote_path,
-            total,
-            cancellation,
-        },
-        &mut source_file,
-        &mut destination_file,
-    )
-    .await;
+    let result = {
+        let copying = transfer(
+            TransferContext {
+                app: &app,
+                session_id: &session_id,
+                task_id: &task_id,
+                direction: "upload",
+                source: &source,
+                destination: &remote_path,
+                total,
+                cancellation: cancellation.clone(),
+            },
+            &mut source_file,
+            &mut destination_file,
+        );
+        tokio::pin!(copying);
+        tokio::select! {
+            biased;
+            _ = lifecycle.cancelled() => {
+                cancellation.cancel();
+                copying.as_mut().await
+            }
+            result = &mut copying => result,
+        }
+    };
     state.transfers.finish(&task_id);
     result?;
-    destination_file
-        .shutdown()
-        .await
-        .map_err(|error| AppError::Sftp(error.to_string()))?;
+    tokio::select! {
+        biased;
+        _ = lifecycle.cancelled() => return Err(AppError::Message("会话已关闭，上传已取消".into())),
+        result = destination_file.shutdown() => result.map_err(|error| AppError::Sftp(error.to_string()))?,
+    }
     Ok(task_id)
 }
 
@@ -667,7 +687,15 @@ where
         if read == 0 {
             break;
         }
-        if let Err(error) = writer.write_all(&buffer[..read]).await {
+        let written = tokio::select! {
+            biased;
+            _ = context.cancellation.cancelled() => {
+                emit_transfer(&context, transferred, "canceled");
+                return Err(AppError::Message("文件传输已取消".into()));
+            }
+            result = writer.write_all(&buffer[..read]) => result,
+        };
+        if let Err(error) = written {
             emit_transfer(&context, transferred, "error");
             return Err(error.into());
         }

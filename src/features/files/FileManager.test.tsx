@@ -282,4 +282,54 @@ describe("FileManager", () => {
 
     await waitFor(() => expect(upload).toHaveBeenCalledWith(tab.sessionId, "C:\\builds\\release.zip", "/root/release.zip"));
   });
+
+  it.each([0, 64])("uploads a dropped folder with %i files without a warning", async (fileCount) => {
+    vi.spyOn(api, "inspectLocalUpload").mockResolvedValue({ directory: true, fileCount });
+    const uploadFolder = vi.spyOn(api, "uploadRemoteDirectory").mockResolvedValue(undefined);
+    const uploadFile = vi.spyOn(api, "uploadRemoteFile");
+    const { container } = render(<FileManager tab={tab} />);
+    await screen.findByText("deploy.sh");
+    fireEvent.drop(container.querySelector(".file-table-wrap")!, { dataTransfer: { files: [{ path: "C:\\builds\\release" }] } });
+    await waitFor(() => expect(uploadFolder).toHaveBeenCalledWith(tab.sessionId, "C:\\builds\\release", "/root/release", false));
+    expect(uploadFile).not.toHaveBeenCalled();
+    expect(screen.queryByRole("dialog", { name: "文件夹上传提示" })).not.toBeInTheDocument();
+  });
+
+  it("requires confirmation before uploading a folder with more than 64 files", async () => {
+    vi.spyOn(api, "inspectLocalUpload").mockResolvedValue({ directory: true, fileCount: 65 });
+    const upload = vi.spyOn(api, "uploadRemoteDirectory").mockResolvedValue(undefined);
+    const { container } = render(<FileManager tab={tab} />);
+    await screen.findByText("deploy.sh");
+    fireEvent.drop(container.querySelector(".file-table-wrap")!, { dataTransfer: { files: [{ path: "C:\\builds\\release" }] } });
+    const dialog = await screen.findByRole("dialog", { name: "文件夹上传提示" });
+    expect(within(dialog).getByText(/共包含 65 个文件/)).toBeInTheDocument();
+    expect(within(dialog).getByRole("textbox", { name: "上传路径" })).toHaveValue("/root/release");
+    expect(upload).not.toHaveBeenCalled();
+    fireEvent.click(within(dialog).getByRole("button", { name: "继续上传" }));
+    await waitFor(() => expect(upload).toHaveBeenCalledWith(tab.sessionId, "C:\\builds\\release", "/root/release", true));
+  });
+
+  it("cancels a large folder upload without remote changes", async () => {
+    vi.spyOn(api, "inspectLocalUpload").mockResolvedValue({ directory: true, fileCount: 65 });
+    const upload = vi.spyOn(api, "uploadRemoteDirectory");
+    const { container } = render(<FileManager tab={tab} />);
+    await screen.findByText("deploy.sh");
+    fireEvent.drop(container.querySelector(".file-table-wrap")!, { dataTransfer: { files: [{ path: "C:\\builds\\release" }] } });
+    const dialog = await screen.findByRole("dialog", { name: "文件夹上传提示" });
+    fireEvent.click(within(dialog).getByRole("button", { name: "取消" }));
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "文件夹上传提示" })).not.toBeInTheDocument());
+    expect(upload).not.toHaveBeenCalled();
+  });
+
+  it("dismisses a pending folder upload when the session closes", async () => {
+    vi.spyOn(api, "inspectLocalUpload").mockResolvedValue({ directory: true, fileCount: 65 });
+    const upload = vi.spyOn(api, "uploadRemoteDirectory");
+    const { container, rerender } = render(<FileManager tab={tab} />);
+    await screen.findByText("deploy.sh");
+    fireEvent.drop(container.querySelector(".file-table-wrap")!, { dataTransfer: { files: [{ path: "C:\\builds\\release" }] } });
+    await screen.findByRole("dialog", { name: "文件夹上传提示" });
+    rerender(<FileManager tab={{ ...tab, state: "disconnected" }} />);
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "文件夹上传提示" })).not.toBeInTheDocument());
+    expect(upload).not.toHaveBeenCalled();
+  });
 });
