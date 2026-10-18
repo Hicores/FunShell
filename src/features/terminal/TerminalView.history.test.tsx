@@ -7,16 +7,22 @@ import type { CommandHistoryEntry, WorkspaceTab } from "../../types";
 import { CommandPanel } from "./CommandPanel";
 import { TerminalView } from "./TerminalView";
 
-const terminalInput = vi.hoisted(() => ({ send: (_data: string) => {} }));
+const terminalInput = vi.hoisted(() => ({ send: (_data: string) => {}, line: "", column: 0 }));
 
 vi.mock("@xterm/xterm", () => ({
   Terminal: class {
     options = {};
     cols = 120;
     rows = 32;
+    buffer = { active: {
+      type: "normal", baseY: 0, cursorY: 0,
+      get cursorX() { return terminalInput.column; },
+      getLine: () => ({ isWrapped: false, translateToString: (_trim: boolean, start: number) => terminalInput.line.slice(start) }),
+    } };
+    registerMarker() { return { line: 0, isDisposed: false, dispose() { this.isDisposed = true; } }; }
     loadAddon() {}
     open() {}
-    write() {}
+    write(_data: string | Uint8Array, callback?: () => void) { callback?.(); }
     writeln() {}
     dispose() {}
     onData(callback: (data: string) => void) {
@@ -44,6 +50,8 @@ describe("direct terminal command history", () => {
 
   beforeEach(() => {
     entries = [];
+    terminalInput.line = "";
+    terminalInput.column = 0;
     useAppStore.setState({ connections: [], toast: null });
     vi.stubGlobal("ResizeObserver", class { observe() {} disconnect() {} });
     vi.spyOn(ipc, "isTauri").mockReturnValue(true);
@@ -95,6 +103,28 @@ describe("direct terminal command history", () => {
     fireEvent.keyDown(input, { key: "ArrowUp" });
     expect(input).toHaveValue(command);
     expect(api.recordHistory).toHaveBeenCalledExactlyOnceWith(tab.connectionId, command);
+  });
+
+  it("uses the remote echo to save a recalled, edited command and refresh history", async () => {
+    const prompt = "root@server:~# ";
+    terminalInput.line = prompt;
+    terminalInput.column = prompt.length;
+    render(<><TerminalView tab={tab} active /><CommandPanel tab={tab} /></>);
+    await screen.findByText("尚无命令历史");
+    act(() => {
+      terminalInput.send("\x1b[A");
+      terminalInput.send("\x1b[Dart\r");
+    });
+    expect(api.recordHistory).not.toHaveBeenCalled();
+    terminalInput.line = `${prompt}systemctl start server_main`;
+    const output = vi.mocked(ipc.onEvent).mock.calls.find(([name]) => name === "terminal-output")![1];
+    act(() => output({ event: "terminal-output", id: 1, payload: { sessionId: tab.sessionId, dataBase64: window.btoa("\r\n") } }));
+
+    expect(await screen.findByRole("button", { name: "systemctl start server_main" })).toBeInTheDocument();
+    expect(api.recordHistory).toHaveBeenCalledExactlyOnceWith(tab.connectionId, "systemctl start server_main");
+    const commandInput = screen.getByPlaceholderText("命令输入（Enter 执行，Shift+Enter 换行）");
+    fireEvent.keyDown(commandInput, { key: "ArrowUp" });
+    expect(commandInput).toHaveValue("systemctl start server_main");
   });
 
   it("reports persistence failures while still sending the command to the terminal", async () => {

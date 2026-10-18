@@ -53,13 +53,13 @@ export function captureTerminalHistoryInput(current: TerminalHistoryCaptureState
     if (character === "\t" || character >= " ") state.line += character;
   }
 
-  if (completedLines.length === 0) return { state, command: null as string | null };
+  if (completedLines.length === 0) return { state, command: null as string | null, submitted: false };
   state.pendingLines.push(...completedLines);
   if (state.bracketedPaste || sawBracketedPaste || state.line) {
-    return { state, command: null as string | null };
+    return { state, command: null as string | null, submitted: false };
   }
 
   const command = normalizeCommandText(state.pendingLines.join("\n"));
   state.pendingLines = [];
-  return { state, command: command.trim() ? command : null };
+  return { state, command: command.trim() ? command : null, submitted: true };
 }

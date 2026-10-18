@@ -11,7 +11,7 @@ import { api, isTauri, onEvent } from "../../lib/ipc";
 import { useAppStore } from "../../stores/appStore";
 import type { TerminalOutputEvent, WorkspaceTab } from "../../types";
 import { DEFAULT_TERMINAL_FONT_FAMILY, DEFAULT_TERMINAL_SCROLLBACK_LINES, TerminalSettingsDialog } from "./TerminalSettingsDialog";
-import { captureTerminalHistoryInput, createTerminalHistoryCaptureState } from "./terminalHistoryCapture";
+import { TerminalRenderedHistory } from "./terminalRenderedHistory";
 
 function encodeBase64(value: string) {
   const bytes = new TextEncoder().encode(value);
@@ -62,7 +62,7 @@ export function TerminalView({ tab, active }: TerminalViewProps) {
   const [search, setSearch] = useState("");
   const [history, setHistory] = useState<string[]>([]);
   const [historyIndex, setHistoryIndex] = useState<number | null>(null);
-  const historyCaptureRef = useRef(createTerminalHistoryCaptureState());
+  const historyCaptureRef = useRef<TerminalRenderedHistory | null>(null);
   const [context, setContext] = useState<{ x: number; y: number; action: TerminalContextAction; text: string } | null>(null);
   const contextRequestRef = useRef(0);
   const [terminalFontFamily, setTerminalFontFamily] = useState(DEFAULT_TERMINAL_FONT_FAMILY);
@@ -112,6 +112,8 @@ export function TerminalView({ tab, active }: TerminalViewProps) {
     terminalRef.current = terminal;
     fitRef.current = fit;
     searchRef.current = searchAddon;
+    const historyCapture = new TerminalRenderedHistory(terminal);
+    historyCaptureRef.current = historyCapture;
 
     if (tab.state === "connecting") {
       terminal.writeln(`\x1b[36m正在连接 ${tab.title}...\x1b[0m`);
@@ -124,15 +126,14 @@ export function TerminalView({ tab, active }: TerminalViewProps) {
 
     const input = terminal.onData((data) => {
       if (stateRef.current !== "connected") return;
-      void api.terminalInput(sessionIdRef.current, encodeBase64(data));
-      const captured = captureTerminalHistoryInput(historyCaptureRef.current, data);
-      historyCaptureRef.current = captured.state;
-      if (captured.command) {
-        const sessionId = sessionIdRef.current;
-        void api.recordHistory(connectionIdRef.current, captured.command)
+      const sessionId = sessionIdRef.current;
+      const connectionId = connectionIdRef.current;
+      historyCapture.input(data, (command) => {
+        void api.recordHistory(connectionId, command)
           .then(() => window.dispatchEvent(new CustomEvent("funshell-command-executed", { detail: { sessionId } })))
           .catch((error) => notify(`保存命令历史失败: ${String(error)}`));
-      }
+      });
+      void api.terminalInput(sessionId, encodeBase64(data));
     });
     const resize = terminal.onResize(({ cols, rows }) => {
       if (stateRef.current === "connected") void api.resizeTerminal(sessionIdRef.current, cols, rows);
@@ -144,7 +145,7 @@ export function TerminalView({ tab, active }: TerminalViewProps) {
     observer.observe(hostRef.current);
 
     const disposeOutput = bindAsyncDisposer(onEvent<TerminalOutputEvent>("terminal-output", (event) => {
-      if (event.payload.sessionId === sessionIdRef.current) terminal.write(decodeBase64(event.payload.dataBase64));
+      if (event.payload.sessionId === sessionIdRef.current) historyCapture.output(decodeBase64(event.payload.dataBase64));
     }));
 
     return () => {
@@ -152,6 +153,8 @@ export function TerminalView({ tab, active }: TerminalViewProps) {
       observer.disconnect();
       input.dispose();
       resize.dispose();
+      historyCapture.reset();
+      historyCaptureRef.current = null;
       terminal.dispose();
       terminalRef.current = null;
     };
@@ -237,8 +240,8 @@ export function TerminalView({ tab, active }: TerminalViewProps) {
   }, [notify, tab.connectionId, tab.sessionId]);
 
   useEffect(() => {
-    historyCaptureRef.current = createTerminalHistoryCaptureState();
-  }, [tab.sessionId]);
+    historyCaptureRef.current?.reset();
+  }, [tab.sessionId, tab.state]);
 
   useEffect(() => {
     if (active) window.setTimeout(() => fitRef.current?.fit(), 0);
