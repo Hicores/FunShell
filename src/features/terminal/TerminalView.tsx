@@ -128,9 +128,10 @@ export function TerminalView({ tab, active }: TerminalViewProps) {
       const captured = captureTerminalHistoryInput(historyCaptureRef.current, data);
       historyCaptureRef.current = captured.state;
       if (captured.command) {
+        const sessionId = sessionIdRef.current;
         void api.recordHistory(connectionIdRef.current, captured.command)
-          .then(() => window.dispatchEvent(new CustomEvent("funshell-command-executed", { detail: { sessionId: sessionIdRef.current } })))
-          .catch(() => undefined);
+          .then(() => window.dispatchEvent(new CustomEvent("funshell-command-executed", { detail: { sessionId } })))
+          .catch((error) => notify(`保存命令历史失败: ${String(error)}`));
       }
     });
     const resize = terminal.onResize(({ cols, rows }) => {
@@ -200,7 +201,25 @@ export function TerminalView({ tab, active }: TerminalViewProps) {
   }, [tab.sessionId]);
 
   useEffect(() => {
-    void api.history(tab.connectionId).then((entries) => setHistory(entries.map((entry) => entry.command))).catch(() => undefined);
+    let disposed = false;
+    let request = 0;
+    const refreshHistory = async () => {
+      const currentRequest = ++request;
+      try {
+        const entries = await api.history(tab.connectionId);
+        if (!disposed && currentRequest === request) {
+          setHistory(entries.map((entry) => entry.command));
+          setHistoryIndex(null);
+        }
+      } catch (error) {
+        if (!disposed && currentRequest === request) notify(`读取命令历史失败: ${String(error)}`);
+      }
+    };
+    const onCommandExecuted = (event: Event) => {
+      const detail = (event as CustomEvent<{ sessionId: string }>).detail;
+      if (detail?.sessionId === tab.sessionId) void refreshHistory();
+    };
+    void refreshHistory();
     const insert = (event: Event) => {
       const detail = (event as CustomEvent<{ sessionId: string; command: string }>).detail;
       if (detail?.sessionId === sessionIdRef.current) {
@@ -208,9 +227,18 @@ export function TerminalView({ tab, active }: TerminalViewProps) {
         setHistoryIndex(null);
       }
     };
+    window.addEventListener("funshell-command-executed", onCommandExecuted);
     window.addEventListener("funshell-insert-command", insert);
-    return () => window.removeEventListener("funshell-insert-command", insert);
-  }, [tab.connectionId, tab.sessionId]);
+    return () => {
+      disposed = true;
+      window.removeEventListener("funshell-command-executed", onCommandExecuted);
+      window.removeEventListener("funshell-insert-command", insert);
+    };
+  }, [notify, tab.connectionId, tab.sessionId]);
+
+  useEffect(() => {
+    historyCaptureRef.current = createTerminalHistoryCaptureState();
+  }, [tab.sessionId]);
 
   useEffect(() => {
     if (active) window.setTimeout(() => fitRef.current?.fit(), 0);
