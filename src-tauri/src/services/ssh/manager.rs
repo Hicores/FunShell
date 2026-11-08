@@ -2,6 +2,7 @@ use std::sync::Arc;
 
 use base64::{Engine, engine::general_purpose::STANDARD};
 use dashmap::DashMap;
+use futures_util::{Stream, StreamExt, stream};
 use russh::{ChannelMsg, Disconnect, client::Handle};
 use tauri::{AppHandle, Emitter};
 use tokio::{
@@ -401,31 +402,34 @@ async fn execute_with_handle_input(
         let _ = channel.eof().await;
     }
     drop(handle);
+    let messages = stream::unfold(&mut channel, |channel| async move {
+        channel.wait().await.map(|message| (message, channel))
+    });
+    let result = read_exec_output(messages).await;
+    if result.is_err() {
+        let _ = channel.close().await;
+    }
+    result
+}
+
+async fn read_exec_output(messages: impl Stream<Item = ChannelMsg>) -> AppResult<ExecResult> {
+    futures_util::pin_mut!(messages);
     let mut stdout = Vec::new();
     let mut stderr = Vec::new();
     let mut exit_status = None;
-    while let Some(message) = channel.wait().await {
+    while let Some(message) = messages.next().await {
         match message {
             ChannelMsg::Data { data } => {
-                if let Err(error) =
-                    append_exec_output(&mut stdout, stderr.len(), &data, MAX_EXEC_OUTPUT_BYTES)
-                {
-                    let _ = channel.close().await;
-                    return Err(error);
-                }
+                append_exec_output(&mut stdout, stderr.len(), &data, MAX_EXEC_OUTPUT_BYTES)?;
             }
             ChannelMsg::ExtendedData { data, .. } => {
-                if let Err(error) =
-                    append_exec_output(&mut stderr, stdout.len(), &data, MAX_EXEC_OUTPUT_BYTES)
-                {
-                    let _ = channel.close().await;
-                    return Err(error);
-                }
+                append_exec_output(&mut stderr, stdout.len(), &data, MAX_EXEC_OUTPUT_BYTES)?;
             }
             ChannelMsg::ExitStatus {
                 exit_status: status,
             } => exit_status = Some(status),
-            ChannelMsg::Eof | ChannelMsg::Close => break,
+            // EOF only ends the data stream; exit-status may arrive afterwards.
+            ChannelMsg::Close => break,
             _ => {}
         }
     }
@@ -641,7 +645,42 @@ fn decode_exec_output(output: Vec<u8>) -> String {
 mod tests {
     use std::sync::Arc;
 
-    use super::{append_exec_output, auxiliary_connection_count, unique_arcs};
+    use super::{append_exec_output, auxiliary_connection_count, read_exec_output, unique_arcs};
+    use futures_util::stream;
+    use russh::ChannelMsg;
+
+    #[tokio::test]
+    async fn captures_exec_status_after_eof_and_preserves_output() {
+        for status in [0, 1] {
+            let result = read_exec_output(stream::iter([
+                ChannelMsg::Data {
+                    data: b"output\n".to_vec().into(),
+                },
+                ChannelMsg::ExtendedData {
+                    data: b"diagnostic\n".to_vec().into(),
+                    ext: 1,
+                },
+                ChannelMsg::Eof,
+                ChannelMsg::ExitStatus {
+                    exit_status: status,
+                },
+                ChannelMsg::Close,
+            ]))
+            .await
+            .expect("exec result");
+            assert_eq!(result.stdout, "output\n");
+            assert_eq!(result.stderr, "diagnostic\n");
+            assert_eq!(result.exit_status, Some(status));
+        }
+    }
+
+    #[tokio::test]
+    async fn preserves_a_missing_exec_status_when_the_channel_closes() {
+        let result = read_exec_output(stream::iter([ChannelMsg::Eof, ChannelMsg::Close]))
+            .await
+            .expect("closed channel");
+        assert_eq!(result.exit_status, None);
+    }
 
     #[test]
     fn bounds_combined_exec_output_without_growing_the_buffer() {

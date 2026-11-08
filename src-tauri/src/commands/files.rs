@@ -17,8 +17,8 @@ use uuid::Uuid;
 
 use crate::{
     domain::{
-        RemoteFileEntry, RemoteFileKind, RemoteIdentities, RemoteIdentity, TextFileContent,
-        TransferProgressEvent,
+        ExecResult, RemoteFileEntry, RemoteFileKind, RemoteIdentities, RemoteIdentity,
+        TextFileContent, TransferProgressEvent,
     },
     error::{AppError, AppResult},
     services::ssh::{PipelinedSftpReader, client::map_sftp},
@@ -31,6 +31,7 @@ const DOWNLOAD_PIPELINE_DEPTH: usize = 32;
 const TRANSFER_PROGRESS_INTERVAL: Duration = Duration::from_millis(100);
 const USERS_MARKER: &str = "__FUNSHELL_USERS__";
 const GROUPS_MARKER: &str = "__FUNSHELL_GROUPS__";
+const DELETE_SUCCESS_MARKER: &str = "__FUNSHELL_DELETE_SUCCESS__";
 
 #[tauri::command]
 pub async fn list_remote_files(
@@ -437,18 +438,11 @@ pub async fn delete_remote_path(
     recursive: Option<bool>,
 ) -> AppResult<()> {
     if recursive.unwrap_or(false) {
-        let quoted = shell_quote(&path);
         let result = state
             .sessions
-            .execute_file(&session_id, &format!("rm -rf -- {quoted}"))
+            .execute_file(&session_id, &recursive_delete_command(&path))
             .await?;
-        if result.exit_status != Some(0) {
-            return Err(AppError::Message(format!(
-                "递归删除失败: {}",
-                result.stderr
-            )));
-        }
-        return Ok(());
+        return ensure_recursive_delete_succeeded(&result);
     }
     let sftp = state.sessions.sftp(&session_id).await?;
     if directory {
@@ -807,6 +801,28 @@ fn chown_command(owner: &str, group: &str, path: &str) -> String {
     )
 }
 
+fn recursive_delete_command(path: &str) -> String {
+    format!(
+        "rm -rf -- {} && printf '%s\\n' '{DELETE_SUCCESS_MARKER}'",
+        shell_quote(path)
+    )
+}
+
+fn ensure_recursive_delete_succeeded(result: &ExecResult) -> AppResult<()> {
+    if result
+        .stdout
+        .lines()
+        .any(|line| line == DELETE_SUCCESS_MARKER)
+        || result.exit_status == Some(0)
+    {
+        return Ok(());
+    }
+    Err(AppError::Message(format!(
+        "递归删除失败: {}",
+        remote_command_failure_detail(&result.stdout, &result.stderr, result.exit_status)
+    )))
+}
+
 fn remote_command_failure_detail(stdout: &str, stderr: &str, exit_status: Option<u32>) -> String {
     if !stderr.trim().is_empty() {
         stderr.trim().to_owned()
@@ -822,9 +838,11 @@ fn remote_command_failure_detail(stdout: &str, stderr: &str, exit_status: Option
 #[cfg(test)]
 mod tests {
     use super::{
-        DOWNLOAD_CHUNK_SIZE, chown_command, download_ranges, parse_owner_map,
-        parse_remote_identities, remote_command_failure_detail, shell_quote, transfer_progress_due,
+        DOWNLOAD_CHUNK_SIZE, chown_command, download_ranges, ensure_recursive_delete_succeeded,
+        parse_owner_map, parse_remote_identities, recursive_delete_command,
+        remote_command_failure_detail, shell_quote, transfer_progress_due,
     };
+    use crate::domain::ExecResult;
     use std::time::Duration;
 
     #[test]
@@ -839,6 +857,66 @@ mod tests {
             chown_command("deploy", "release", "/srv/my app"),
             "chown -- 'deploy:release' '/srv/my app'"
         );
+    }
+
+    #[test]
+    fn recursive_delete_only_emits_success_after_a_successful_quoted_rm() {
+        assert_eq!(
+            recursive_delete_command("/tmp/it's a folder"),
+            "rm -rf -- '/tmp/it'\\''s a folder' && printf '%s\\n' '__FUNSHELL_DELETE_SUCCESS__'"
+        );
+    }
+
+    #[test]
+    fn recursive_delete_accepts_success_without_an_ssh_exit_status() {
+        let result = ExecResult {
+            stdout: "__FUNSHELL_DELETE_SUCCESS__\n".into(),
+            stderr: String::new(),
+            exit_status: None,
+        };
+        assert!(ensure_recursive_delete_succeeded(&result).is_ok());
+        assert!(
+            ensure_recursive_delete_succeeded(&ExecResult {
+                stdout: String::new(),
+                exit_status: Some(0),
+                ..result
+            })
+            .is_ok()
+        );
+    }
+
+    #[test]
+    fn recursive_delete_preserves_failures_and_explains_missing_status() {
+        for (stdout, stderr, exit_status, expected) in [
+            (
+                "",
+                "rm: Permission denied\n",
+                Some(1),
+                "rm: Permission denied",
+            ),
+            (
+                "rm: Read-only file system\n",
+                "",
+                None,
+                "rm: Read-only file system",
+            ),
+            ("", "", Some(1), "远端命令退出码 1"),
+            ("", "", None, "服务器未返回退出状态或错误详情"),
+            (
+                "prefix__FUNSHELL_DELETE_SUCCESS__",
+                "",
+                None,
+                "递归删除失败",
+            ),
+        ] {
+            let error = ensure_recursive_delete_succeeded(&ExecResult {
+                stdout: stdout.into(),
+                stderr: stderr.into(),
+                exit_status,
+            })
+            .expect_err("unconfirmed or failed deletion");
+            assert!(error.to_string().contains(expected), "{error}");
+        }
     }
 
     #[test]
