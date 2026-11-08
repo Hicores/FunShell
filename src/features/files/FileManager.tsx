@@ -394,19 +394,19 @@ export function FileManager({ tab }: { tab: WorkspaceTab }) {
     catch (error) { notify(String(error)); }
   };
 
-  const savePermissions = async (mode: number, owner: string, group: string) => {
+  const savePermissions = async (mode: number, owner: string, group: string, recursive: boolean) => {
     if (!permissionFile) return;
     setSavingPermissions(true);
     try {
       const currentOwner = permissionFile.user ?? (permissionFile.userId != null ? String(permissionFile.userId) : "");
       const currentGroup = permissionFile.group ?? (permissionFile.groupId != null ? String(permissionFile.groupId) : "");
       if (owner !== currentOwner || group !== currentGroup) {
-        await api.chownRemotePath(tab.sessionId, permissionFile.path, owner, group);
+        await api.chownRemotePath(tab.sessionId, permissionFile.path, owner, group, recursive);
       }
-      await api.chmodRemotePath(tab.sessionId, permissionFile.path, mode);
+      await api.chmodRemotePath(tab.sessionId, permissionFile.path, mode, recursive);
       setPermissionFile(null);
       await refresh();
-      notify("文件权限和所有者已更新");
+      notify(recursive ? "目录及所有子目录和文件的权限已更新" : "文件权限和所有者已更新");
     } catch (error) {
       notify(String(error));
     } finally {
@@ -562,8 +562,8 @@ export function FileManager({ tab }: { tab: WorkspaceTab }) {
         identitiesLoading={identitiesLoading}
         identitiesError={identitiesError}
         onReloadIdentities={() => void loadRemoteIdentities(true)}
-        onClose={() => setPermissionFile(null)}
-        onSave={(mode, owner, group) => void savePermissions(mode, owner, group)}
+        onClose={() => { if (!savingPermissions) setPermissionFile(null); }}
+        onSave={(mode, owner, group, recursive) => void savePermissions(mode, owner, group, recursive)}
       />
     </div>
   );

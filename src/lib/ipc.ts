@@ -257,8 +257,8 @@ function mockCall(command: string, args?: Record<string, unknown>): unknown {
     }
     case "chown_remote_path": {
       const path = String(args?.path ?? "");
-      const entry = mockRemoteFiles.find((item) => item.path === path);
-      if (entry) {
+      const entries = mockRemoteFiles.filter((item) => item.path === path || (args?.recursive && item.path.startsWith(`${path.replace(/\/+$/, "")}/`)));
+      for (const entry of entries) {
         entry.user = String(args?.owner ?? entry.user ?? "");
         entry.group = String(args?.group ?? entry.group ?? "");
       }
@@ -266,8 +266,8 @@ function mockCall(command: string, args?: Record<string, unknown>): unknown {
     }
     case "chmod_remote_path": {
       const path = String(args?.path ?? "");
-      const entry = mockRemoteFiles.find((item) => item.path === path);
-      if (entry) entry.permissions = Number(args?.mode ?? entry.permissions ?? 0);
+      const entries = mockRemoteFiles.filter((item) => item.path === path || (args?.recursive && item.path.startsWith(`${path.replace(/\/+$/, "")}/`) && item.kind !== "symlink"));
+      for (const entry of entries) entry.permissions = Number(args?.mode ?? entry.permissions ?? 0);
       return null;
     }
     case "list_command_presets": return mockPresets;
@@ -361,8 +361,8 @@ export const api = {
   createRemoteDirectory: (sessionId: string, path: string) => call<void>("create_remote_directory", { sessionId, path }),
   renameRemotePath: (sessionId: string, from: string, to: string) => call<void>("rename_remote_path", { sessionId, from, to }),
   deleteRemotePath: (sessionId: string, path: string, directory: boolean, recursive = false) => call<void>("delete_remote_path", { sessionId, path, directory, recursive }),
-  chmodRemotePath: (sessionId: string, path: string, mode: number) => call<void>("chmod_remote_path", { sessionId, path, mode }),
-  chownRemotePath: (sessionId: string, path: string, owner: string, group: string) => call<void>("chown_remote_path", { sessionId, path, owner, group }),
+  chmodRemotePath: (sessionId: string, path: string, mode: number, recursive = false) => call<void>("chmod_remote_path", { sessionId, path, mode, recursive }),
+  chownRemotePath: (sessionId: string, path: string, owner: string, group: string, recursive = false) => call<void>("chown_remote_path", { sessionId, path, owner, group, recursive }),
   createRemoteArchive: (sessionId: string, sourcePath: string, archivePath: string) => call<string>("create_remote_archive", { sessionId, sourcePath, archivePath }),
   extractRemoteArchive: (sessionId: string, archivePath: string, destinationPath: string) => call<string>("extract_remote_archive", { sessionId, archivePath, destinationPath }),
   uploadRemoteFile: (sessionId: string, localPath: string, remotePath: string) => call<string>("upload_remote_file", { sessionId, localPath, remotePath }),

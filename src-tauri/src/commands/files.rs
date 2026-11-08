@@ -32,6 +32,7 @@ const TRANSFER_PROGRESS_INTERVAL: Duration = Duration::from_millis(100);
 const USERS_MARKER: &str = "__FUNSHELL_USERS__";
 const GROUPS_MARKER: &str = "__FUNSHELL_GROUPS__";
 const DELETE_SUCCESS_MARKER: &str = "__FUNSHELL_DELETE_SUCCESS__";
+const PERMISSION_SUCCESS_MARKER: &str = "__FUNSHELL_PERMISSION_SUCCESS__";
 
 #[tauri::command]
 pub async fn list_remote_files(
@@ -458,9 +459,15 @@ pub async fn chmod_remote_path(
     session_id: String,
     path: String,
     mode: u32,
+    recursive: Option<bool>,
 ) -> AppResult<()> {
     if mode > 0o7777 {
         return Err(AppError::Validation("权限值无效".into()));
+    }
+    if recursive.unwrap_or(false) {
+        let command = recursive_chmod_command(mode, &path);
+        let result = state.sessions.execute_file(&session_id, &command).await?;
+        return ensure_permission_command_succeeded("递归修改权限", &result);
     }
     let sftp = state.sessions.sftp(&session_id).await?;
     let mut attributes = FileAttributes::empty();
@@ -475,6 +482,7 @@ pub async fn chown_remote_path(
     path: String,
     owner: String,
     group: String,
+    recursive: Option<bool>,
 ) -> AppResult<()> {
     let owner = owner.trim();
     let group = group.trim();
@@ -483,15 +491,9 @@ pub async fn chown_remote_path(
             "所有者和用户组不能为空，且不能包含冒号".into(),
         ));
     }
-    let command = chown_command(owner, group, &path);
+    let command = chown_command(owner, group, &path, recursive.unwrap_or(false));
     let result = state.sessions.execute_file(&session_id, &command).await?;
-    if result.exit_status != Some(0) {
-        return Err(AppError::Message(format!(
-            "修改所有者失败: {}",
-            remote_command_failure_detail(&result.stdout, &result.stderr, result.exit_status)
-        )));
-    }
-    Ok(())
+    ensure_permission_command_succeeded("修改所有者", &result)
 }
 
 #[tauri::command]
@@ -793,12 +795,36 @@ fn shell_quote(value: &str) -> String {
     format!("'{}'", value.replace('\'', "'\\''"))
 }
 
-fn chown_command(owner: &str, group: &str, path: &str) -> String {
+fn chown_command(owner: &str, group: &str, path: &str, recursive: bool) -> String {
     format!(
-        "chown -- {} {}",
+        "chown {}-- {} {} && printf '%s\\n' '{PERMISSION_SUCCESS_MARKER}'",
+        if recursive { "-hR " } else { "" },
         shell_quote(&format!("{owner}:{group}")),
         shell_quote(path)
     )
+}
+
+fn recursive_chmod_command(mode: u32, path: &str) -> String {
+    // Five octal digits also clear directory setuid/setgid bits when unchecked.
+    format!(
+        "chmod -R -- {mode:05o} {} && printf '%s\\n' '{PERMISSION_SUCCESS_MARKER}'",
+        shell_quote(path)
+    )
+}
+
+fn ensure_permission_command_succeeded(action: &str, result: &ExecResult) -> AppResult<()> {
+    if result
+        .stdout
+        .lines()
+        .any(|line| line == PERMISSION_SUCCESS_MARKER)
+        || result.exit_status == Some(0)
+    {
+        return Ok(());
+    }
+    Err(AppError::Message(format!(
+        "{action}失败: {}",
+        remote_command_failure_detail(&result.stdout, &result.stderr, result.exit_status)
+    )))
 }
 
 fn recursive_delete_command(path: &str) -> String {
@@ -838,9 +864,10 @@ fn remote_command_failure_detail(stdout: &str, stderr: &str, exit_status: Option
 #[cfg(test)]
 mod tests {
     use super::{
-        DOWNLOAD_CHUNK_SIZE, chown_command, download_ranges, ensure_recursive_delete_succeeded,
-        parse_owner_map, parse_remote_identities, recursive_delete_command,
-        remote_command_failure_detail, shell_quote, transfer_progress_due,
+        DOWNLOAD_CHUNK_SIZE, chown_command, download_ranges, ensure_permission_command_succeeded,
+        ensure_recursive_delete_succeeded, parse_owner_map, parse_remote_identities,
+        recursive_chmod_command, recursive_delete_command, remote_command_failure_detail,
+        shell_quote, transfer_progress_due,
     };
     use crate::domain::ExecResult;
     use std::time::Duration;
@@ -854,8 +881,67 @@ mod tests {
     #[test]
     fn builds_a_quoted_chown_command() {
         assert_eq!(
-            chown_command("deploy", "release", "/srv/my app"),
-            "chown -- 'deploy:release' '/srv/my app'"
+            chown_command("deploy", "release", "/srv/my app", false),
+            "chown -- 'deploy:release' '/srv/my app' && printf '%s\\n' '__FUNSHELL_PERMISSION_SUCCESS__'"
+        );
+    }
+
+    #[test]
+    fn builds_recursive_permission_commands_with_quoted_paths_and_explicit_modes() {
+        assert_eq!(
+            recursive_chmod_command(0o775, "/srv/it's an app"),
+            "chmod -R -- 00775 '/srv/it'\\''s an app' && printf '%s\\n' '__FUNSHELL_PERMISSION_SUCCESS__'"
+        );
+        assert_eq!(
+            recursive_chmod_command(0o7777, "/srv/app"),
+            "chmod -R -- 07777 '/srv/app' && printf '%s\\n' '__FUNSHELL_PERMISSION_SUCCESS__'"
+        );
+        assert_eq!(
+            chown_command("deploy", "release", "/srv/it's an app", true),
+            "chown -hR -- 'deploy:release' '/srv/it'\\''s an app' && printf '%s\\n' '__FUNSHELL_PERMISSION_SUCCESS__'"
+        );
+    }
+
+    #[test]
+    fn accepts_confirmed_permission_changes_and_reports_real_failures() {
+        for (stdout, status) in [("__FUNSHELL_PERMISSION_SUCCESS__\n", None), ("", Some(0))] {
+            assert!(
+                ensure_permission_command_succeeded(
+                    "递归修改权限",
+                    &ExecResult {
+                        stdout: stdout.into(),
+                        stderr: String::new(),
+                        exit_status: status,
+                    }
+                )
+                .is_ok()
+            );
+        }
+        for (stderr, expected) in [
+            ("chmod: Permission denied\n", "chmod: Permission denied"),
+            ("", "远端命令退出码 1"),
+        ] {
+            let error = ensure_permission_command_succeeded(
+                "递归修改权限",
+                &ExecResult {
+                    stdout: String::new(),
+                    stderr: stderr.into(),
+                    exit_status: Some(1),
+                },
+            )
+            .expect_err("permission command failed");
+            assert!(error.to_string().contains(expected), "{error}");
+        }
+        assert!(
+            ensure_permission_command_succeeded(
+                "递归修改权限",
+                &ExecResult {
+                    stdout: String::new(),
+                    stderr: String::new(),
+                    exit_status: None,
+                }
+            )
+            .is_err()
         );
     }
 

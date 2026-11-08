@@ -105,6 +105,8 @@
 .permission-option input { width: 16px; height: 16px; flex: 0 0 16px; margin: 0; accent-color: var(--accent); }
 .permission-option span { display: flex; min-width: 0; align-items: baseline; gap: 5px; white-space: nowrap; }
 .permission-option small { color: var(--text-muted); font: 10px "Cascadia Mono", Consolas, monospace; }
+.permission-recursive { display: grid; gap: 5px; }
+.permission-recursive > small { color: var(--text-muted); font-size: 11px; line-height: 1.5; }
 .transfer-toggle { position: relative; }
 .transfer-toggle > span { display: grid; position: absolute; top: 1px; right: 1px; min-width: 13px; height: 13px; place-items: center; border-radius: 7px; padding: 0 3px; background: var(--badge-danger); color: white; font-size: 9px; line-height: 1; }
 .transfer-panel { display: grid; position: absolute; top: 38px; right: 6px; width: min(680px, calc(100% - 12px)); height: min(280px, calc(100% - 44px)); min-height: 120px; grid-template-rows: 36px minmax(0, 1fr); border: 1px solid var(--border-strong); background: var(--bg-surface); box-shadow: 0 7px 22px #17354442; z-index: 6; }

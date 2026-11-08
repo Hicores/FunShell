@@ -10,7 +10,7 @@ interface PermissionDialogProps {
   identitiesError: string | null;
   onReloadIdentities: () => void;
   onClose: () => void;
-  onSave: (mode: number, owner: string, group: string) => void;
+  onSave: (mode: number, owner: string, group: string, recursive: boolean) => void;
 }
 
 const permissionGroups = [
@@ -37,12 +37,14 @@ export function PermissionDialog({ file, saving, identities, identitiesLoading, 
   const [mode, setMode] = useState(0);
   const [owner, setOwner] = useState("");
   const [group, setGroup] = useState("");
+  const [recursive, setRecursive] = useState(false);
 
   useEffect(() => {
     if (file) {
       setMode((file.permissions ?? 0) & 0o7777);
       setOwner(file.user ?? (file.userId != null ? String(file.userId) : ""));
       setGroup(file.group ?? (file.groupId != null ? String(file.groupId) : ""));
+      setRecursive(false);
     }
   }, [file]);
 
@@ -86,8 +88,9 @@ export function PermissionDialog({ file, saving, identities, identitiesLoading, 
       open={file != null}
       title="修改文件权限"
       width={520}
+      closable={!saving}
       onClose={onClose}
-      footer={<><button type="button" onClick={onClose}>取消</button><button className="primary-button" type="button" disabled={saving || !owner.trim() || !group.trim()} onClick={() => onSave(mode, owner.trim(), group.trim())}>{saving ? "保存中..." : "确定"}</button></>}
+      footer={<><button type="button" disabled={saving} onClick={onClose}>取消</button><button className="primary-button" type="button" disabled={saving || !owner.trim() || !group.trim()} onClick={() => onSave(mode, owner.trim(), group.trim(), file?.kind === "directory" && recursive)}>{saving ? "保存中..." : "确定"}</button></>}
     >
       <div className="permission-dialog">
         <div className="permission-target">
@@ -116,6 +119,12 @@ export function PermissionDialog({ file, saving, identities, identitiesLoading, 
             </div>
           </fieldset>
         </div>
+        {file?.kind === "directory" && (
+          <div className="permission-recursive">
+            <label className="permission-option"><input type="checkbox" checked={recursive} disabled={saving} onChange={(event) => setRecursive(event.target.checked)} /><span>递归修改子目录和文件</span></label>
+            <small>所选权限将应用到此目录及所有子目录和文件；本次更改的所有者和用户组也会递归应用。</small>
+          </div>
+        )}
       </div>
     </Modal>
   );

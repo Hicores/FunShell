@@ -97,6 +97,7 @@ describe("FileManager", () => {
     expect(within(dialog).getByRole("checkbox", { name: "所有者 读取" })).toBeChecked();
     expect(within(dialog).getByRole("checkbox", { name: "组 写入" })).not.toBeChecked();
     expect(within(dialog).getByRole("checkbox", { name: "设置用户 ID (setuid)" })).not.toBeChecked();
+    expect(within(dialog).queryByRole("checkbox", { name: "递归修改子目录和文件" })).not.toBeInTheDocument();
 
     fireEvent.click(within(dialog).getByRole("checkbox", { name: "组 写入" }));
     fireEvent.click(within(dialog).getByRole("checkbox", { name: "粘滞位 (sticky)" }));
@@ -107,8 +108,8 @@ describe("FileManager", () => {
     expect(within(dialog).getByText("1775")).toBeInTheDocument();
     fireEvent.click(within(dialog).getByRole("button", { name: "确定" }));
 
-    await waitFor(() => expect(chown).toHaveBeenCalledWith(tab.sessionId, "/root/deploy.sh", "deploy", "release"));
-    expect(chmod).toHaveBeenCalledWith(tab.sessionId, "/root/deploy.sh", 0o1775);
+    await waitFor(() => expect(chown).toHaveBeenCalledWith(tab.sessionId, "/root/deploy.sh", "deploy", "release", false));
+    expect(chmod).toHaveBeenCalledWith(tab.sessionId, "/root/deploy.sh", 0o1775, false);
   });
 
   it("does not change ownership when only permission bits were edited", async () => {
@@ -127,8 +128,68 @@ describe("FileManager", () => {
     fireEvent.click(within(dialog).getByRole("checkbox", { name: "组 写入" }));
     fireEvent.click(within(dialog).getByRole("button", { name: "确定" }));
 
-    await waitFor(() => expect(chmod).toHaveBeenCalledWith(tab.sessionId, "/root/deploy.sh", 0o775));
+    await waitFor(() => expect(chmod).toHaveBeenCalledWith(tab.sessionId, "/root/deploy.sh", 0o775, false));
     expect(chown).not.toHaveBeenCalled();
+  });
+
+  it.each([false, true])("saves directory permissions with recursive=%s", async (recursive) => {
+    const chown = vi.spyOn(api, "chownRemotePath").mockResolvedValue(undefined);
+    const chmod = vi.spyOn(api, "chmodRemotePath").mockResolvedValue(undefined);
+    render(<FileManager tab={tab} />);
+    fireEvent.contextMenu(await within(screen.getByRole("table")).findByText("gateway"));
+    fireEvent.click(screen.getByRole("button", { name: "文件权限..." }));
+
+    const dialog = screen.getByRole("dialog", { name: "修改文件权限" });
+    const recursiveOption = within(dialog).getByRole("checkbox", { name: "递归修改子目录和文件" });
+    expect(recursiveOption).not.toBeChecked();
+    if (recursive) fireEvent.click(recursiveOption);
+    fireEvent.click(within(dialog).getByRole("checkbox", { name: "组 写入" }));
+    fireEvent.click(within(dialog).getByRole("button", { name: "确定" }));
+
+    await waitFor(() => expect(chmod).toHaveBeenCalledWith(tab.sessionId, "/root/gateway", 0o775, recursive));
+    expect(chown).not.toHaveBeenCalled();
+  });
+
+  it("applies changed ownership recursively and resets the option when reopened", async () => {
+    const chown = vi.spyOn(api, "chownRemotePath").mockResolvedValue(undefined);
+    const chmod = vi.spyOn(api, "chmodRemotePath").mockResolvedValue(undefined);
+    render(<FileManager tab={tab} />);
+    fireEvent.contextMenu(await within(screen.getByRole("table")).findByText("gateway"));
+    fireEvent.click(screen.getByRole("button", { name: "文件权限..." }));
+
+    const dialog = screen.getByRole("dialog", { name: "修改文件权限" });
+    fireEvent.click(within(dialog).getByRole("checkbox", { name: "递归修改子目录和文件" }));
+    fireEvent.change(within(dialog).getByRole("textbox", { name: "所有者" }), { target: { value: "deploy" } });
+    fireEvent.change(within(dialog).getByRole("textbox", { name: "用户组" }), { target: { value: "release" } });
+    fireEvent.click(within(dialog).getByRole("button", { name: "确定" }));
+
+    await waitFor(() => expect(chmod).toHaveBeenCalledWith(tab.sessionId, "/root/gateway", 0o755, true));
+    expect(chown).toHaveBeenCalledWith(tab.sessionId, "/root/gateway", "deploy", "release", true);
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "修改文件权限" })).not.toBeInTheDocument());
+
+    fireEvent.contextMenu(within(screen.getByRole("table")).getByText("gateway"));
+    fireEvent.click(screen.getByRole("button", { name: "文件权限..." }));
+    expect(screen.getByRole("checkbox", { name: "递归修改子目录和文件" })).not.toBeChecked();
+  });
+
+  it("keeps recursive permission errors editable after locking the pending operation", async () => {
+    let rejectSave: ((reason: Error) => void) | undefined;
+    vi.spyOn(api, "chmodRemotePath").mockImplementation(() => new Promise((_resolve, reject) => { rejectSave = reject; }));
+    render(<FileManager tab={tab} />);
+    fireEvent.contextMenu(await within(screen.getByRole("table")).findByText("gateway"));
+    fireEvent.click(screen.getByRole("button", { name: "文件权限..." }));
+    const dialog = screen.getByRole("dialog", { name: "修改文件权限" });
+    const recursiveOption = within(dialog).getByRole("checkbox", { name: "递归修改子目录和文件" });
+    fireEvent.click(recursiveOption);
+    fireEvent.click(within(dialog).getByRole("button", { name: "确定" }));
+
+    expect(recursiveOption).toBeDisabled();
+    expect(within(dialog).getByRole("button", { name: "取消" })).toBeDisabled();
+    expect(within(dialog).queryByRole("button", { name: "关闭" })).not.toBeInTheDocument();
+    rejectSave?.(new Error("Permission denied"));
+    await waitFor(() => expect(recursiveOption).toBeEnabled());
+    expect(recursiveOption).toBeChecked();
+    expect(within(dialog).getByRole("button", { name: "确定" })).toBeEnabled();
   });
 
   it("opens a remote file in the text editor on double click", async () => {
