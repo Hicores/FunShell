@@ -149,6 +149,7 @@ export function TerminalView({ tab, active }: TerminalViewProps) {
     }));
 
     return () => {
+      ++contextRequestRef.current;
       disposeOutput();
       observer.disconnect();
       input.dispose();
@@ -276,9 +277,15 @@ export function TerminalView({ tab, active }: TerminalViewProps) {
     window.dispatchEvent(new CustomEvent("funshell-command-executed", { detail: { sessionId: sessionIdRef.current } }));
   };
 
+  const closeTerminalContextMenu = () => {
+    ++contextRequestRef.current;
+    setContext(null);
+  };
+
   const openTerminalContextMenu = async (event: MouseEvent<HTMLDivElement>) => {
     event.preventDefault();
     event.stopPropagation();
+    const request = ++contextRequestRef.current;
     const terminal = terminalRef.current;
     if (!terminal) return;
     const selection = terminal.hasSelection() ? terminal.getSelection() : "";
@@ -286,7 +293,6 @@ export function TerminalView({ tab, active }: TerminalViewProps) {
       setContext({ x: event.clientX, y: event.clientY, action: "copy", text: selection });
       return;
     }
-    const request = ++contextRequestRef.current;
     let clipboard = "";
     try {
       clipboard = await navigator.clipboard.readText();
@@ -345,8 +351,8 @@ export function TerminalView({ tab, active }: TerminalViewProps) {
     <div className="terminal-view" style={terminalStyle}>
       <div ref={hostRef} className="xterm-host" onContextMenu={(event) => void openTerminalContextMenu(event)} />
       {context && (
-        <ContextMenu x={context.x} y={context.y} onClose={() => setContext(null)}>
-          <button type="button" onClick={() => void (context.action === "copy" ? copySelection() : pasteClipboard())}>{context.action === "copy" ? "复制文本" : "粘贴"}</button>
+        <ContextMenu x={context.x} y={context.y} onClose={closeTerminalContextMenu}>
+          <button type="button" onMouseDown={(event) => { if (event.button === 0) event.preventDefault(); }} onClick={() => void (context.action === "copy" ? copySelection() : pasteClipboard())}>{context.action === "copy" ? "复制文本" : "粘贴"}</button>
         </ContextMenu>
       )}
       <TerminalSettingsDialog

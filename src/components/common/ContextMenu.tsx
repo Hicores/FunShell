@@ -39,16 +39,24 @@ export function ContextMenu({ x, y, onClose, children }: ContextMenuProps) {
 
   useEffect(() => {
     const closeOnEscape = (event: KeyboardEvent) => { if (event.key === "Escape") onClose(); };
+    const closeOnScroll = (event: Event) => {
+      const target = event.target;
+      // Internal scrolling does not move the menu's anchor. In particular,
+      // xterm's hidden textarea can scroll while focus/selection is changing.
+      if (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement) return;
+      if (target instanceof Node && menuRef.current?.contains(target)) return;
+      onClose();
+    };
     window.addEventListener("click", onClose);
     window.addEventListener("blur", onClose);
     window.addEventListener("resize", onClose);
-    window.addEventListener("scroll", onClose, true);
+    window.addEventListener("scroll", closeOnScroll, true);
     window.addEventListener("keydown", closeOnEscape);
     return () => {
       window.removeEventListener("click", onClose);
       window.removeEventListener("blur", onClose);
       window.removeEventListener("resize", onClose);
-      window.removeEventListener("scroll", onClose, true);
+      window.removeEventListener("scroll", closeOnScroll, true);
       window.removeEventListener("keydown", closeOnEscape);
     };
   }, [onClose]);

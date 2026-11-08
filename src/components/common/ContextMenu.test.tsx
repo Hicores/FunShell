@@ -17,4 +17,15 @@ describe("ContextMenu", () => {
     fireEvent.click(screen.getByRole("button", { name: "刷新" }));
     expect(close).toHaveBeenCalledOnce();
   });
+
+  it("ignores internal input and menu scrolling but closes when the surrounding view scrolls", () => {
+    const close = vi.fn();
+    render(<><textarea aria-label="Terminal input" /><div data-testid="surrounding-view" /><ContextMenu x={10} y={10} onClose={close}><button type="button">复制文本</button></ContextMenu></>);
+    fireEvent.scroll(screen.getByRole("textbox", { name: "Terminal input" }));
+    fireEvent.scroll(screen.getByRole("menu"));
+    fireEvent.scroll(screen.getByRole("button", { name: "复制文本" }));
+    expect(close).not.toHaveBeenCalled();
+    fireEvent.scroll(screen.getByTestId("surrounding-view"));
+    expect(close).toHaveBeenCalledOnce();
+  });
 });
