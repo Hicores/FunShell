@@ -1,0 +1,211 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#f7f3e9">
+  <title>熊的平衡术 · SVG 动画</title>
+  <style>
+    :root { color-scheme: light; font-family: "Segoe UI", "Microsoft YaHei", sans-serif; color: #293c35; background: #f7f3e9; }
+    * { box-sizing: border-box; }
+    body { margin: 0; min-height: 100svh; display: grid; place-items: center; padding: 38px 24px; }
+    main { width: min(1040px, 100%); }
+    header { display: flex; align-items: center; justify-content: space-between; gap: 24px; padding: 0 22px 22px; border-bottom: 1px solid #293c3526; }
+    .eyebrow { margin: 0 0 9px; font-size: 10px; font-weight: 700; letter-spacing: .25em; }
+    h1 { margin: 0; font-family: Georgia, "STSong", "SimSun", serif; font-size: clamp(28px, 4vw, 42px); font-weight: 500; letter-spacing: .08em; }
+    .edition { font-size: 11px; letter-spacing: .12em; text-align: right; line-height: 1.9; color: #758078; }
+    .stage { position: relative; }
+    svg { display: block; width: 100%; height: auto; overflow: hidden; }
+    .caption { position: absolute; left: 24px; top: 30px; font-size: 12px; color: #788278; line-height: 1.9; letter-spacing: .08em; }
+    footer { display: flex; justify-content: space-between; align-items: center; gap: 20px; padding: 22px; border-top: 1px solid #293c3526; }
+    .note { margin: 0; font-size: 12px; color: #758078; letter-spacing: .06em; }
+    .controls { display: flex; align-items: center; gap: 20px; }
+    button { display: flex; align-items: center; justify-content: center; gap: 9px; min-width: 104px; padding: 11px 16px; border: 0; border-radius: 30px; background: #2f5145; color: #fffdf5; font: inherit; font-size: 12px; cursor: pointer; }
+    button:hover { background: #203d32; }
+    button:focus-visible, input:focus-visible { outline: 3px solid #c78439; outline-offset: 5px; }
+    .icon { font-size: 12px; width: 12px; text-align: center; }
+    label { display: flex; align-items: center; gap: 10px; font-size: 12px; white-space: nowrap; }
+    input { width: 90px; accent-color: #2f5145; cursor: pointer; }
+    output { width: 30px; font-variant-numeric: tabular-nums; color: #758078; }
+    @media (max-width: 600px) {
+      body { padding: 26px 12px; }
+      header { padding: 0 12px 20px; }
+      .edition { font-size: 9px; }
+      .caption { top: 14px; left: 12px; font-size: 10px; }
+      footer { padding: 20px 12px; flex-direction: column; }
+      .controls { width: 100%; justify-content: space-between; gap: 10px; }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <header>
+      <div><p class="eyebrow">THE LITTLE FOREST CIRCUS</p><h1>熊的平衡术</h1></div>
+      <div class="edition">森林马戏团<br>NO. 01 / 独轮车练习</div>
+    </header>
+    <section class="stage" aria-label="黑熊骑独轮车的二维动画">
+      <div class="caption">慢一点，也没关系。<br>每一圈，都是小小的前进。</div>
+      <svg id="scene" viewBox="0 0 960 600" role="img" aria-labelledby="scene-title scene-description">
+        <title id="scene-title">黑熊的独轮车练习</title>
+        <desc id="scene-description">戴着橙色围巾的小黑熊张开双臂，在森林小径上踩动绿色独轮车。车轮旋转，双腿交替踩踏，身体轻轻摇摆，草地缓缓后移。</desc>
+        <defs>
+          <radialGradient id="halo"><stop stop-color="#e5eadb"/><stop offset="1" stop-color="#e9eddf"/></radialGradient>
+          <linearGradient id="fur" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#343b3d"/><stop offset="1" stop-color="#20272a"/></linearGradient>
+          <pattern id="trail" width="180" height="36" patternUnits="userSpaceOnUse"><path d="M15 18h23m74 0h9" stroke="#b5b6a3" stroke-width="2" stroke-linecap="round"/></pattern>
+          <g id="sprig" fill="none" stroke="#819986" stroke-width="2" stroke-linecap="round"><path d="M0 0q-2-14-11-20M0 0q0-22 9-29M0 0q10-13 18-13"/></g>
+          <clipPath id="ground-clip"><rect x="110" y="520" width="740" height="55" rx="20"/></clipPath>
+        </defs>
+
+        <!-- All artwork is inline SVG; the file works without a network connection. -->
+        <circle cx="492" cy="290" r="216" fill="url(#halo)"/>
+        <circle cx="654" cy="137" r="35" fill="#e9c786" opacity=".72"/>
+        <g fill="none" stroke="#9bac99" stroke-width="1.5" opacity=".65">
+          <path d="M306 202l8-5 8 5m-5-23 6-4 6 4M677 254l9-5 9 5"/>
+          <path d="M266 325v10m-5-5h10M710 367v10m-5-5h10"/>
+        </g>
+        <g fill="#cbd6c4">
+          <path d="M216 510V336l-40 80h24l-35 65h38v29z"/>
+          <path d="M746 511V298l-45 102h26l-34 73h39v38z"/>
+        </g>
+        <g fill="#dbe2ce"><path d="M251 514V394l-30 64h19l-22 40h25v16z"/><path d="M787 515V377l-31 66h18l-25 52h30v20z"/></g>
+        <path d="M112 528Q480 518 850 528" fill="none" stroke="#b8c0aa" stroke-width="2" stroke-linecap="round"/>
+        <g clip-path="url(#ground-clip)"><rect id="moving-trail" x="-70" y="527" width="1100" height="36" fill="url(#trail)"/></g>
+        <g opacity=".85"><use href="#sprig" x="233" y="524"/><use href="#sprig" x="747" y="525"/><use href="#sprig" x="699" y="536" transform="rotate(12 699 536)"/></g>
+        <g fill="#d5a451"><circle cx="226" cy="503" r="3"/><circle cx="756" cy="501" r="3"/></g>
+        <ellipse id="shadow" cx="490" cy="531" rx="91" ry="9" fill="#7a8875" opacity=".16"/>
+
+        <g id="rider">
+          <!-- The rear leg and pedal sit behind the wheel and frame. -->
+          <path id="back-leg" fill="none" stroke="#20272a" stroke-width="29" stroke-linecap="round" stroke-linejoin="round"/>
+          <g id="back-pedal"><rect x="-21" y="1" width="42" height="8" rx="4" fill="#3d544e"/><path d="M-14-2h26" stroke="#20272a" stroke-width="20" stroke-linecap="round"/></g>
+
+          <circle cx="490" cy="441" r="85" fill="#f7f3e9" stroke="#293235" stroke-width="13"/>
+          <circle cx="490" cy="441" r="76" fill="#e5eadb" stroke="#a9b9ac" stroke-width="3"/>
+          <g id="spokes" stroke="#8d9f95" stroke-width="2">
+            <path d="M490 365v152m-76-76h152M436.26 387.26l107.48 107.48m-107.48 0 107.48-107.48M460.92 370.78l58.16 140.44m-99.3-41.14 140.44-58.16m-99.3 99.3 58.16-140.44m-99.3 41.14 140.44 58.16"/>
+            <path d="M478 365h24" stroke="#e1b96f" stroke-width="5" stroke-linecap="round"/>
+          </g>
+          <path d="M481 326v45q-36 30-36 70m45-113v113" fill="none" stroke="#426f5e" stroke-width="13" stroke-linecap="round"/>
+          <path d="M490 335v104" fill="none" stroke="#91b6a1" stroke-width="4"/>
+          <circle cx="490" cy="441" r="12" fill="#c0cdbb" stroke="#426f5e" stroke-width="5"/>
+          <path id="crank" stroke="#c4c9b5" stroke-width="7" stroke-linecap="round"/>
+          <path d="M461 321q28 9 56-1" fill="none" stroke="#233c34" stroke-width="16" stroke-linecap="round"/>
+
+          <path id="front-leg" fill="none" stroke="#30383a" stroke-width="32" stroke-linecap="round" stroke-linejoin="round"/>
+          <g id="front-pedal"><rect x="-22" y="7" width="44" height="8" rx="4" fill="#426f5e"/><path d="M-14 0h27" stroke="#30383a" stroke-width="21" stroke-linecap="round"/><path d="M7 1h7" stroke="#7d8580" stroke-width="2" stroke-linecap="round"/></g>
+
+          <g id="bear-body">
+            <ellipse cx="433" cy="288" rx="19" ry="18" fill="#242c2e"/>
+            <!-- Outstretched arms make the balancing motion easy to read. -->
+            <g id="back-arm"><path d="M456 237Q419 253 382 225" fill="none" stroke="#252d30" stroke-width="28" stroke-linecap="round"/><ellipse cx="378" cy="223" rx="19" ry="14" transform="rotate(20 378 223)" fill="#252d30"/></g>
+            <path d="M451 208Q479 194 510 218Q537 249 531 287Q529 322 492 326Q447 326 439 300Q431 270 441 241Z" fill="url(#fur)"/>
+            <ellipse cx="495" cy="274" rx="25" ry="31" fill="#3b4443" opacity=".7"/>
+            <path d="M472 234q18 16 34 0l-15 7z" fill="#dfd8bf" opacity=".8"/>
+            <g id="front-arm"><path d="M516 239Q549 266 583 245" fill="none" stroke="#343c3e" stroke-width="29" stroke-linecap="round"/><ellipse cx="589" cy="241" rx="20" ry="15" transform="rotate(-25 589 241)" fill="#343c3e"/><path d="m598 235 3 4m-10-1 3 5" stroke="#68716b" stroke-width="2" stroke-linecap="round"/></g>
+
+            <g id="scarf-tail"><path d="M454 216Q414 230 392 207l4 21q32 20 70 0" fill="#c97942"/><path d="m398 224 0 8m6-5 0 8m6-6 0 8" stroke="#c97942" stroke-width="3"/></g>
+            <g id="head">
+              <circle cx="437" cy="132" r="24" fill="#252d30"/><circle cx="437" cy="132" r="13" fill="#62635b"/>
+              <circle cx="522" cy="130" r="23" fill="#252d30"/><circle cx="522" cy="130" r="12" fill="#62635b"/>
+              <path d="M424 166Q423 124 474 120Q520 117 541 154Q560 185 538 210Q522 229 481 228Q437 226 426 203Q419 188 424 166Z" fill="url(#fur)"/>
+              <path d="M434 159q7-18 22-22" fill="none" stroke="#4c5553" stroke-width="4" stroke-linecap="round"/>
+              <ellipse cx="518" cy="193" rx="29" ry="23" fill="#c5b99b"/>
+              <ellipse cx="532" cy="183" rx="12" ry="8" transform="rotate(-8 532 183)" fill="#20292b"/>
+              <path d="M531 190v7q-6 7-14 2" fill="none" stroke="#39413d" stroke-width="2.5" stroke-linecap="round"/>
+              <g id="eye"><ellipse cx="501" cy="164" rx="4.5" ry="6" fill="#111c1e"/><circle cx="502" cy="162" r="1.5" fill="#fff9e8"/></g>
+              <path d="M494 151q5-4 10-1" fill="none" stroke="#626d65" stroke-width="2.5" stroke-linecap="round"/>
+              <ellipse cx="485" cy="190" rx="10" ry="6" fill="#ab7d63" opacity=".42"/>
+            </g>
+            <path d="M446 214q36 15 70 1l-3 14q-35 14-67-1z" fill="#d78b4d"/>
+            <path d="M451 222q27 10 52 3" fill="none" stroke="#e8ac6c" stroke-width="3" stroke-linecap="round"/>
+            <path d="M510 216q15 0 12 14-13 8-18-2z" fill="#bc713e"/>
+          </g>
+        </g>
+        <g fill="#879581" font-family="Georgia, serif" font-size="12" letter-spacing="3"><text x="801" y="577">↗ KEEP ROLLING</text></g>
+      </svg>
+    </section>
+    <footer>
+      <p class="note">一只黑熊，一只轮子，一点点勇气。</p>
+      <div class="controls">
+        <button id="toggle" type="button" aria-label="暂停动画"><span class="icon" aria-hidden="true">Ⅱ</span><span id="toggle-label">暂停动画</span></button>
+        <label for="speed">骑行速度 <input id="speed" type="range" min="0.5" max="2" step="0.25" value="1"><output id="speed-value" for="speed">1×</output></label>
+      </div>
+    </footer>
+  </main>
+  <script>
+    (() => {
+      const byId = (id) => document.getElementById(id);
+      const parts = Object.fromEntries(['rider', 'bear-body', 'back-arm', 'front-arm', 'scarf-tail', 'eye', 'spokes', 'crank', 'back-leg', 'front-leg', 'back-pedal', 'front-pedal', 'moving-trail', 'shadow'].map(id => [id, byId(id)]));
+      const toggle = byId('toggle');
+      const speed = byId('speed');
+      const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
+      let playing = !reducedMotion.matches;
+      let elapsed = 0;
+      let previousTime = null;
+      let frameId = null;
+
+      // Solve both leg joints so that the paws stay attached to the pedals.
+      function legPath(hipX, hipY, footX, footY, bend) {
+        const dx = footX - hipX, dy = footY - hipY;
+        const distance = Math.hypot(dx, dy);
+        const upper = 82, lower = 88;
+        const along = (upper * upper - lower * lower + distance * distance) / (2 * distance);
+        const across = Math.sqrt(Math.max(0, upper * upper - along * along));
+        const kneeX = hipX + along * dx / distance + bend * across * dy / distance;
+        const kneeY = hipY + along * dy / distance - bend * across * dx / distance;
+        return `M${hipX} ${hipY}L${kneeX} ${kneeY}L${footX} ${footY}`;
+      }
+
+      function draw() {
+        const phase = elapsed * Math.PI * 2 / 1.8;
+        const degrees = phase * 180 / Math.PI;
+        const footX = 490 + Math.cos(phase) * 30;
+        const footY = 441 + Math.sin(phase) * 30;
+        const rearX = 980 - footX, rearY = 882 - footY;
+        parts['front-leg'].setAttribute('d', legPath(499, 307, footX, footY, 1));
+        parts['back-leg'].setAttribute('d', legPath(473, 307, rearX, rearY, -1));
+        parts['front-pedal'].setAttribute('transform', `translate(${footX} ${footY})`);
+        parts['back-pedal'].setAttribute('transform', `translate(${rearX} ${rearY})`);
+        parts.crank.setAttribute('d', `M${rearX} ${rearY}L${footX} ${footY}`);
+        parts.spokes.setAttribute('transform', `rotate(${degrees} 490 441)`);
+        parts.rider.setAttribute('transform', `rotate(${Math.sin(phase) * 1.2} 490 526)`);
+        parts['bear-body'].setAttribute('transform', `translate(0 ${Math.cos(phase * 2) * 1.8})`);
+        parts['front-arm'].setAttribute('transform', `rotate(${Math.sin(phase + 0.4) * 4} 516 239)`);
+        parts['back-arm'].setAttribute('transform', `rotate(${Math.sin(phase + 1) * 4} 456 237)`);
+        parts['scarf-tail'].setAttribute('transform', `rotate(${Math.sin(phase * 2) * 5} 458 220)`);
+        const blink = elapsed % 4.6;
+        const eyeScale = blink > 4.35 ? Math.max(0.06, Math.abs(blink - 4.475) / 0.125) : 1;
+        parts.eye.setAttribute('transform', `translate(0 ${164 * (1 - eyeScale)}) scale(1 ${eyeScale})`);
+        parts['moving-trail'].setAttribute('transform', `translate(${-((elapsed * 85 * Math.PI * 2 / 1.8) % 180)} 0)`);
+        parts.shadow.setAttribute('rx', 91 + Math.cos(phase * 2) * 3);
+      }
+
+      function frame(time) {
+        if (!playing || document.hidden) { frameId = null; previousTime = null; return; }
+        if (previousTime !== null) elapsed += Math.min((time - previousTime) / 1000, 0.05) * Number(speed.value);
+        previousTime = time;
+        draw();
+        frameId = requestAnimationFrame(frame);
+      }
+
+      function syncPlayback() {
+        toggle.querySelector('.icon').textContent = playing ? 'Ⅱ' : '▶';
+        const label = playing ? '暂停动画' : '播放动画';
+        byId('toggle-label').textContent = label;
+        toggle.setAttribute('aria-label', label);
+        if (frameId !== null) cancelAnimationFrame(frameId);
+        frameId = null;
+        previousTime = null;
+        if (playing && !document.hidden) frameId = requestAnimationFrame(frame);
+      }
+
+      toggle.addEventListener('click', () => { playing = !playing; syncPlayback(); });
+      speed.addEventListener('input', () => { byId('speed-value').textContent = `${Number(speed.value)}×`; });
+      reducedMotion.addEventListener('change', () => { playing = !reducedMotion.matches; syncPlayback(); });
+      document.addEventListener('visibilitychange', syncPlayback);
+      draw();
+      syncPlayback();
+    })();
+  </script>
+</body>
+</html>
