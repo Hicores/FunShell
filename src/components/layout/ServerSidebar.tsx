@@ -157,7 +157,7 @@ export function ServerSidebar() {
         </div>
         {visibleProcesses.map((process) => (
           <div className="process-mini-row" key={process.pid}>
-            <span>{formatBytes(process.memoryBytes, 0)}</span><span>{process.cpuPercent.toFixed(1)}</span><strong>{process.name}</strong>
+            <span>{formatBytes(process.memoryBytes)}</span><span>{process.cpuPercent.toFixed(1)}</span><strong>{process.name}</strong>
           </div>
         ))}
         {!snapshot && <div className="mini-empty">连接后显示进程摘要</div>}

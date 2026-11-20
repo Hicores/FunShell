@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { api } from "../../lib/ipc";
 import { mockConnections, mockSnapshot } from "../../lib/mock";
@@ -62,7 +62,9 @@ describe("ServerSidebar", () => {
     render(<ServerSidebar />);
 
     expect(await screen.findByText("24 ms")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "打开进程管理" }));
+    const processSummary = screen.getByRole("button", { name: "打开进程管理" });
+    expect(within(processSummary).getByText("563.6 MB")).toBeInTheDocument();
+    fireEvent.click(processSummary);
     expect(useAppStore.getState().tabs.some((tab) => tab.kind === "processes" && tab.sessionId === terminal.sessionId)).toBe(true);
   });
 
