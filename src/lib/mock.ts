@@ -71,6 +71,7 @@ export const mockSnapshot: ServerSnapshot = {
     { name: "eth0", receivedBytes: 2_900_000_000_000, transmittedBytes: 1_100_000_000_000, receiveBps: 1_420_000, transmitBps: 136_000 },
     { name: "tun0", receivedBytes: 1_800_000_000, transmittedBytes: 2_100_000_000, receiveBps: 62_000, transmitBps: 31_000 },
   ],
+  defaultNetworkInterface: "eth0",
   filesystems,
   topProcesses: processes,
 };

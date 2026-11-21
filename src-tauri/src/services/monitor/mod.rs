@@ -13,6 +13,8 @@ echo __NET_A__; cat /proc/net/dev 2>/dev/null
 sleep 0.2
 echo __CPU_B__; head -n 1 /proc/stat 2>/dev/null
 echo __NET_B__; cat /proc/net/dev 2>/dev/null
+echo __ROUTE4__; awk '$2 == "00000000" && $8 == "00000000"' /proc/net/route 2>/dev/null
+echo __ROUTE6__; awk '$2 == "00" && $4 == "00"' /proc/net/ipv6_route 2>/dev/null
 echo __MEM__; cat /proc/meminfo 2>/dev/null
 echo __DF__; df -P -B1 2>/dev/null || df -P -k 2>/dev/null
 echo __PROC__

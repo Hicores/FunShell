@@ -28,6 +28,7 @@ pub fn parse_snapshot(output: &str) -> ServerSnapshot {
         });
     let memory = parse_memory(sections.get("MEM"));
     let interfaces = parse_network(sections.get("NET_A"), sections.get("NET_B"));
+    let default_network_interface = parse_default_network_interface(&sections, &interfaces);
     let filesystems = parse_filesystems(sections.get("DF"));
     let mut top_processes = sections
         .get("PROC")
@@ -44,6 +45,7 @@ pub fn parse_snapshot(output: &str) -> ServerSnapshot {
         swap_total: memory.2,
         swap_used: memory.3,
         interfaces,
+        default_network_interface,
         filesystems,
         top_processes,
     }
@@ -368,6 +370,46 @@ fn parse_network(
     output
 }
 
+fn parse_default_network_interface(
+    sections: &HashMap<String, Vec<String>>,
+    interfaces: &[NetworkInterface],
+) -> Option<String> {
+    const RTF_UP: u32 = 0x0001;
+    const RTF_REJECT: u32 = 0x0200;
+    let usable = |name: &str, flags: &str| {
+        name != "lo"
+            && u32::from_str_radix(flags, 16)
+                .is_ok_and(|flags| flags & (RTF_UP | RTF_REJECT) == RTF_UP)
+            && interfaces.iter().any(|interface| interface.name == name)
+    };
+    let ipv4 = sections
+        .get("ROUTE4")
+        .into_iter()
+        .flatten()
+        .filter_map(|line| {
+            let fields = line.split_whitespace().collect::<Vec<_>>();
+            let [name, "00000000", _, flags, _, _, metric, "00000000", ..] = fields.as_slice()
+            else {
+                return None;
+            };
+            usable(name, flags).then_some((*name, metric.parse::<u32>().ok()?))
+        });
+    let ipv6 = sections
+        .get("ROUTE6")
+        .into_iter()
+        .flatten()
+        .filter_map(|line| {
+            let fields = line.split_whitespace().collect::<Vec<_>>();
+            let [_, "00", _, "00", _, metric, _, _, flags, name] = fields.as_slice() else {
+                return None;
+            };
+            usable(name, flags).then_some((*name, u32::from_str_radix(metric, 16).ok()?))
+        });
+    ipv4.min_by_key(|(_, metric)| *metric)
+        .or_else(|| ipv6.min_by_key(|(_, metric)| *metric))
+        .map(|(name, _)| name.to_owned())
+}
+
 fn parse_filesystems(lines: Option<&Vec<String>>) -> Vec<FilesystemInfo> {
     lines
         .into_iter()
@@ -558,7 +600,45 @@ mod tests {
         assert_eq!(snapshot.cpu_percent, 18.4);
         assert_eq!(snapshot.memory_used, 600 * 1024);
         assert_eq!(snapshot.interfaces[0].receive_bps, 1000);
+        assert_eq!(snapshot.default_network_interface, None);
         assert_eq!(snapshot.top_processes[0].pid, 1);
+    }
+
+    #[test]
+    fn selects_the_usable_ipv4_default_route_with_the_lowest_metric() {
+        let output = "__NET_B__
+docker0: 0 0 0 0 0 0 0 0 0
+ens18: 0 0 0 0 0 0 0 0 0
+ens19: 0 0 0 0 0 0 0 0 0
+__ROUTE4__
+docker0 00000000 00000000 0201 0 0 0 00000000 0 0 0
+missing 00000000 0100000A 0003 0 0 1 00000000 0 0 0
+ens19 00000000 0100000A 0003 0 0 200 00000000 0 0 0
+ens18 00000000 0100000A 0003 0 0 100 00000000 0 0 0
+__ROUTE6__
+00000000000000000000000000000000 00 00000000000000000000000000000000 00 fe800000000000000000000000000001 00000001 00000000 00000000 00000003 ens19";
+        assert_eq!(
+            parse_snapshot(output).default_network_interface.as_deref(),
+            Some("ens18")
+        );
+    }
+
+    #[test]
+    fn selects_an_ipv6_default_route_when_ipv4_has_no_default() {
+        let output = "__NET_B__
+lo: 0 0 0 0 0 0 0 0 0
+enp0s3: 0 0 0 0 0 0 0 0 0
+enp0s4: 0 0 0 0 0 0 0 0 0
+__ROUTE4__
+enp0s3 00000000 00000000 0001 0 0 0 00000080 0 0 0
+__ROUTE6__
+00000000000000000000000000000000 00 00000000000000000000000000000000 00 00000000000000000000000000000000 ffffffff 00000000 00000000 00200200 lo
+00000000000000000000000000000000 00 00000000000000000000000000000000 00 fe800000000000000000000000000001 00000400 00000000 00000000 00000003 enp0s3
+00000000000000000000000000000000 00 00000000000000000000000000000000 00 fe800000000000000000000000000001 000000ff 00000000 00000000 00000003 enp0s4";
+        assert_eq!(
+            parse_snapshot(output).default_network_interface.as_deref(),
+            Some("enp0s4")
+        );
     }
 
     #[test]

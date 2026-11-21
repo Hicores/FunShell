@@ -13,6 +13,7 @@ pub struct ServerSnapshot {
     pub swap_total: u64,
     pub swap_used: u64,
     pub interfaces: Vec<NetworkInterface>,
+    pub default_network_interface: Option<String>,
     pub filesystems: Vec<FilesystemInfo>,
     pub top_processes: Vec<ProcessInfo>,
 }

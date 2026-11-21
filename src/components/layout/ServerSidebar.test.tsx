@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { api } from "../../lib/ipc";
 import { mockConnections, mockSnapshot } from "../../lib/mock";
@@ -49,6 +49,32 @@ describe("ServerSidebar", () => {
     expect(screen.getByRole("img", { name: /网卡实际速率直方图/ })).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "打开网络监听" }));
     expect(useAppStore.getState().tabs.some((tab) => tab.kind === "network" && tab.sessionId === terminal.sessionId)).toBe(true);
+  });
+
+  it("defaults to the route interface and remembers each terminal's selection when switching tabs", async () => {
+    const first: WorkspaceTab = { id: "route-first", sessionId: "route-first-session", connectionId: mockConnections[0].id, title: "Gateway", kind: "terminal", state: "connected" };
+    const second: WorkspaceTab = { id: "route-second", sessionId: "route-second-session", connectionId: mockConnections[1].id, title: "Database", kind: "terminal", state: "connected" };
+    const snapshots = {
+      [first.sessionId]: {
+        ...mockSnapshot,
+        defaultNetworkInterface: "ens18",
+        interfaces: [mockSnapshot.interfaces[0], { ...mockSnapshot.interfaces[0], name: "ens18" }, mockSnapshot.interfaces[1]],
+      },
+      [second.sessionId]: mockSnapshot,
+    };
+    vi.spyOn(api, "snapshot").mockImplementation(async (sessionId) => snapshots[sessionId]);
+    useAppStore.setState({ connections: mockConnections, tabs: [first, second], activeTabId: first.id, snapshots });
+    render(<ServerSidebar />);
+
+    const select = screen.getByRole("combobox", { name: "网卡" });
+    await waitFor(() => expect(select).toHaveValue("ens18"));
+    fireEvent.change(select, { target: { value: "tun0" } });
+    expect(select).toHaveValue("tun0");
+
+    act(() => useAppStore.getState().setActiveTab(second.id));
+    expect(select).toHaveValue("eth0");
+    act(() => useAppStore.getState().setActiveTab(first.id));
+    expect(select).toHaveValue("tun0");
   });
 
   it("opens process management with one click and shows measured latency", async () => {

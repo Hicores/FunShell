@@ -31,12 +31,16 @@ export function ServerSidebar() {
   const sessionConnected = sessionTab?.state === "connected";
   const connection = connections.find((item) => item.id === sessionTab?.connectionId);
   const snapshot = sessionConnected ? snapshots[sessionTab.sessionId] : undefined;
-  const [networkName, setNetworkName] = useState("eth0");
+  const [selectedNetworkNames, setSelectedNetworkNames] = useState<Record<string, string>>({});
   const [networkHistory, setNetworkHistory] = useState<Record<string, NetworkRateSample[]>>({});
   const [latencies, setLatencies] = useState<Record<string, number>>({});
   const [revealedHosts, setRevealedHosts] = useState<Record<string, boolean>>({});
   const [processSortKey, setProcessSortKey] = useState<SidebarProcessSortKey>("cpuPercent");
-  const selectedNetwork = snapshot?.interfaces.find((item) => item.name === networkName) ?? snapshot?.interfaces[0];
+  const selectedNetworkName = sessionTab ? selectedNetworkNames[sessionTab.id] : undefined;
+  const selectedNetwork = snapshot?.interfaces.find((item) => item.name === selectedNetworkName)
+    ?? snapshot?.interfaces.find((item) => item.name === snapshot.defaultNetworkInterface)
+    ?? snapshot?.interfaces.find((item) => item.name !== "lo")
+    ?? snapshot?.interfaces[0];
   const networkHistoryKey = sessionTab && selectedNetwork ? `${sessionTab.sessionId}:${selectedNetwork.name}` : "";
   const latency = sessionTab ? latencies[sessionTab.sessionId] : undefined;
   const hostRevealed = connection ? revealedHosts[connection.id] === true : false;
@@ -46,7 +50,13 @@ export function ServerSidebar() {
   const connectedSessionKey = connectedSessionIds.join("|");
 
   useEffect(() => {
-    const liveSessionIds = new Set(tabs.filter((tab) => tab.kind === "terminal").map((tab) => tab.sessionId));
+    const terminalTabs = tabs.filter((tab) => tab.kind === "terminal");
+    const liveTabIds = new Set(terminalTabs.map((tab) => tab.id));
+    const liveSessionIds = new Set(terminalTabs.map((tab) => tab.sessionId));
+    setSelectedNetworkNames((current) => {
+      if (!Object.keys(current).some((tabId) => !liveTabIds.has(tabId))) return current;
+      return Object.fromEntries(Object.entries(current).filter(([tabId]) => liveTabIds.has(tabId)));
+    });
     setNetworkHistory((current) => {
       if (!Object.keys(current).some((key) => !liveSessionIds.has(key.split(":", 1)[0]))) return current;
       return Object.fromEntries(Object.entries(current).filter(([key]) => liveSessionIds.has(key.split(":", 1)[0])));
@@ -176,8 +186,19 @@ export function ServerSidebar() {
           <span className="upload">↑ {formatRate(selectedNetwork?.transmitBps ?? 0)}</span>
           <span className="download">↓ {formatRate(selectedNetwork?.receiveBps ?? 0)}</span>
           <label>
-            <select value={selectedNetwork?.name ?? networkName} onClick={(event) => event.stopPropagation()} onChange={(event) => setNetworkName(event.target.value)}>
-              {(snapshot?.interfaces ?? [{ name: "eth0" }]).map((item) => <option key={item.name}>{item.name}</option>)}
+            <select
+              aria-label="网卡"
+              value={selectedNetwork?.name ?? ""}
+              disabled={!selectedNetwork}
+              onClick={(event) => event.stopPropagation()}
+              onKeyDown={(event) => event.stopPropagation()}
+              onChange={(event) => {
+                if (!sessionTab) return;
+                const name = event.target.value;
+                setSelectedNetworkNames((current) => ({ ...current, [sessionTab.id]: name }));
+              }}
+            >
+              {selectedNetwork ? snapshot?.interfaces.map((item) => <option key={item.name}>{item.name}</option>) : <option value="">-</option>}
             </select><ChevronDown size={13} />
           </label>
         </div>

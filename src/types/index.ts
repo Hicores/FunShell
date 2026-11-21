@@ -158,6 +158,7 @@ export interface ServerSnapshot {
   swapTotal: number;
   swapUsed: number;
   interfaces: NetworkInterface[];
+  defaultNetworkInterface: string | null;
   filesystems: FilesystemInfo[];
   topProcesses: ProcessInfo[];
 }
