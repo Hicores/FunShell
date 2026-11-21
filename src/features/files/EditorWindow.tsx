@@ -7,9 +7,10 @@ import { applyTheme } from "../../lib/theme";
 interface EditorWindowProps {
   sessionId: string;
   path: string;
+  serverName?: string;
 }
 
-export function EditorWindow({ sessionId, path }: EditorWindowProps) {
+export function EditorWindow({ sessionId, path, serverName }: EditorWindowProps) {
   const [content, setContent] = useState("");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -67,11 +68,18 @@ export function EditorWindow({ sessionId, path }: EditorWindowProps) {
     }
   };
 
-  const title = path.split("/").at(-1) || path;
+  const fileName = path.split("/").at(-1) || path;
+  const title = serverName ? `${serverName} · ${fileName}` : fileName;
   return (
     <main className="editor-window-shell">
       <header className="editor-window-header">
-        <div className="editor-window-heading"><FileText size={18} /><div><strong>{title}</strong><span title={path}>{path}</span></div></div>
+        <div className="editor-window-heading">
+          <FileText size={18} />
+          <div>
+            <strong title={title}>{title}</strong>
+            <span title={path}>{path}</span>
+          </div>
+        </div>
         <div className="editor-window-actions">
           <button type="button" className="editor-window-save" title={dirty ? "保存远程文件" : "没有待保存的修改"} disabled={loading || saving || !dirty} onClick={() => void save()}><Save size={15} />{saving ? "保存中..." : "保存"}</button>
           <button type="button" className="editor-window-close" onClick={() => void close()}><X size={16} />关闭</button>

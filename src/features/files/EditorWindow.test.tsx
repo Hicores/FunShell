@@ -7,8 +7,10 @@ describe("EditorWindow", () => {
   it("closes immediately when there are no unsaved changes", async () => {
     vi.spyOn(api, "readRemoteText").mockResolvedValue({ path: "/root/app.conf", content: "port=22\n", size: 8 });
     const close = vi.spyOn(window, "close").mockImplementation(() => undefined);
-    render(<EditorWindow sessionId="session-1" path="/root/app.conf" />);
+    render(<EditorWindow sessionId="session-1" path="/root/app.conf" serverName="边缘网关" />);
 
+    expect(screen.getByText("边缘网关 · app.conf")).toBeInTheDocument();
+    expect(screen.getByText("/root/app.conf")).toBeInTheDocument();
     await screen.findByRole("textbox");
     fireEvent.click(screen.getByRole("button", { name: "关闭" }));
 

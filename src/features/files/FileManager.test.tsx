@@ -205,7 +205,7 @@ describe("FileManager", () => {
 
     await waitFor(() => expect(readText).toHaveBeenCalledWith("session-1", "/root/deploy.sh"));
     expect(openRemote).not.toHaveBeenCalled();
-    const editor = screen.getByRole("dialog", { name: "远程编辑 - /root/deploy.sh" });
+    const editor = screen.getByRole("dialog", { name: "边缘网关 · 远程编辑 - /root/deploy.sh" });
     expect(editor).toBeInTheDocument();
     expect(within(editor).getByRole("textbox")).toHaveValue("#!/bin/sh\necho deploy\n");
   });
@@ -216,13 +216,13 @@ describe("FileManager", () => {
     render(<FileManager tab={tab} />);
 
     fireEvent.doubleClick(await screen.findByText("deploy.sh"));
-    const loadingDialog = await screen.findByRole("dialog", { name: "正在打开 - /root/deploy.sh" });
+    const loadingDialog = await screen.findByRole("dialog", { name: "边缘网关 · 正在打开 - /root/deploy.sh" });
     expect(loadingDialog).toBeInTheDocument();
     expect(screen.getByRole("status")).toHaveTextContent("正在读取 deploy.sh...");
     expect(within(loadingDialog).queryByRole("textbox")).not.toBeInTheDocument();
 
     resolveRead?.({ path: "/root/deploy.sh", content: "echo deploy\n", size: 12 });
-    expect(await screen.findByRole("dialog", { name: "远程编辑 - /root/deploy.sh" })).toBeInTheDocument();
+    expect(await screen.findByRole("dialog", { name: "边缘网关 · 远程编辑 - /root/deploy.sh" })).toBeInTheDocument();
   });
 
   it("keeps multiple remote files open in independent editor panes", async () => {
@@ -230,12 +230,12 @@ describe("FileManager", () => {
     render(<FileManager tab={tab} />);
 
     fireEvent.doubleClick(await screen.findByText("deploy.sh"));
-    const firstEditor = await screen.findByRole("dialog", { name: "远程编辑 - /root/deploy.sh" });
+    const firstEditor = await screen.findByRole("dialog", { name: "边缘网关 · 远程编辑 - /root/deploy.sh" });
     fireEvent.click(within(firstEditor).getByRole("button", { name: "打开文件" }));
     const picker = await screen.findByRole("dialog", { name: "打开远程文件" });
     fireEvent.click(within(picker).getByRole("button", { name: /^\.bash_history/ }));
 
-    const workspace = await screen.findByRole("dialog", { name: "远程编辑 (2 个文件)" });
+    const workspace = await screen.findByRole("dialog", { name: "边缘网关 · 远程编辑 (2 个文件)" });
     await waitFor(() => expect(readText).toHaveBeenCalledWith(tab.sessionId, "/root/.bash_history"));
     const editors = within(workspace).getAllByRole("textbox");
     expect(editors).toHaveLength(2);

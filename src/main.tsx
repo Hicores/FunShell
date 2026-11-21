@@ -11,9 +11,12 @@ const params = new URLSearchParams(window.location.search);
 const editorWindow = params.get("window") === "editor";
 const editorSessionId = params.get("sessionId");
 const editorPath = params.get("path");
+const editorServerName = params.get("serverName") ?? undefined;
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
-    {editorWindow && editorSessionId && editorPath ? <EditorWindow sessionId={editorSessionId} path={editorPath} /> : <App />}
+    {editorWindow && editorSessionId && editorPath ? (
+      <EditorWindow sessionId={editorSessionId} path={editorPath} serverName={editorServerName} />
+    ) : <App />}
   </StrictMode>,
 );

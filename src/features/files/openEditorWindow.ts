@@ -12,6 +12,7 @@ export async function openRemoteEditorWindow(
   sessionId: string,
   path: string,
   name: string,
+  serverName: string,
   onError: (message: string) => void,
 ) {
   if (!isTauri()) return false;
@@ -24,13 +25,13 @@ export async function openRemoteEditorWindow(
   }
 
   const label = `editor-${Date.now()}-${editorSequence++}`;
-  const params = new URLSearchParams({ window: "editor", sessionId, path });
+  const params = new URLSearchParams({ window: "editor", sessionId, path, serverName });
   const url = new URL(window.location.href);
   url.search = params.toString();
   url.hash = "";
   const editor = new WebviewWindow(label, {
     url: url.toString(),
-    title: `文本编辑 - ${name}`,
+    title: `${serverName} · ${name} · 文本编辑`,
     width: 980,
     height: 760,
     minWidth: 560,

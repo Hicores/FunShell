@@ -84,6 +84,9 @@ export function FileManager({ tab }: { tab: WorkspaceTab }) {
   const editorRequestSequenceRef = useRef(0);
   const identityRequestRef = useRef(0);
   const editor = editorDocuments.find((document) => document.path === activeEditorPath) ?? editorDocuments[0] ?? null;
+  const editorTitle = editorDocuments.length > 1
+    ? `远程编辑 (${editorDocuments.length} 个文件)`
+    : editor ? `远程编辑 - ${editor.path}` : `正在打开 - ${editorLoadingPaths[0] ?? ""}`;
 
   const loadRemoteIdentities = useCallback(async (force = false) => {
     if (!force && identitiesSessionId === tab.sessionId && remoteIdentities) return;
@@ -185,7 +188,7 @@ export function FileManager({ tab }: { tab: WorkspaceTab }) {
   const editEntry = async (file: RemoteFileEntry) => {
     if (isTauri()) {
       setContext(null);
-      await openRemoteEditorWindow(tab.sessionId, file.path, file.name, notify);
+      await openRemoteEditorWindow(tab.sessionId, file.path, file.name, tab.title, notify);
       return;
     }
     if (editorDocuments.some((document) => document.path === file.path)) {
@@ -502,7 +505,7 @@ export function FileManager({ tab }: { tab: WorkspaceTab }) {
       />
       <Modal
         open={editorOpen && (editorDocuments.length > 0 || editorLoadingPaths.length > 0)}
-        title={editorDocuments.length > 1 ? `远程编辑 (${editorDocuments.length} 个文件)` : editor ? `远程编辑 - ${editor.path}` : `正在打开 - ${editorLoadingPaths[0] ?? ""}`}
+        title={`${tab.title} · ${editorTitle}`}
         width={editorDocuments.length > 1 ? 1120 : 900}
         onClose={closeEditorWorkspace}
         footer={<><button type="button" onClick={closeEditorWorkspace}>关闭</button><button className="primary-button" type="button" disabled={!editorDocuments.some((document) => document.dirty)} onClick={() => void saveAllEditors()}>全部保存</button></>}
